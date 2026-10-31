@@ -1,5 +1,13 @@
 import { Sequelize } from 'sequelize';
 import { env } from '../lib/env';
+import { User } from './user.model';
+import { Session } from './session.model';
+import { AuthOtp } from './auth-otp.model';
+import { AuthToken } from './auth-token.model';
+import { UserRecoveryCode } from './user-recovery-code.model';
+import { UserPasskey } from './user-passkey.model';
+import { AuthLockout } from './auth-lockout.model';
+import { AuditLog } from './audit-log.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -19,8 +27,27 @@ export const sequelize = new Sequelize(
   },
 );
 
+const models = { User, Session, AuthOtp, AuthToken, UserRecoveryCode, UserPasskey, AuthLockout, AuditLog };
+for (const m of Object.values(models)) m.initModel(sequelize);
+
+// Module 02 associations (section 7). Associations to File and Society are added by modules 01 and 05.
+User.hasMany(Session, { foreignKey: 'userId' });
+User.hasMany(AuthOtp, { foreignKey: 'userId' });
+User.hasMany(AuthToken, { foreignKey: 'userId' });
+User.hasMany(UserRecoveryCode, { foreignKey: 'userId' });
+User.hasMany(UserPasskey, { foreignKey: 'userId' });
+Session.belongsTo(User, { foreignKey: 'userId' });
+AuthOtp.belongsTo(User, { foreignKey: 'userId' });
+AuthOtp.belongsTo(Session, { foreignKey: 'sessionId' });
+AuthToken.belongsTo(User, { foreignKey: 'userId' });
+AuthToken.belongsTo(Session, { foreignKey: 'sessionId' });
+UserRecoveryCode.belongsTo(User, { foreignKey: 'userId' });
+UserPasskey.belongsTo(User, { foreignKey: 'userId' });
+AuthLockout.belongsTo(User, { foreignKey: 'userId' });
+
 /** All models, filled in as modules add them. */
-export const db = { sequelize };
+export const db = { sequelize, ...models };
+export { User, Session, AuthOtp, AuthToken, UserRecoveryCode, UserPasskey, AuthLockout, AuditLog };
 
 export async function closeDb(): Promise<void> {
   await sequelize.close();

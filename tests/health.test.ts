@@ -20,10 +20,10 @@ describe('health', () => {
     expect(res.body.data).toEqual({ db: 'ok' });
   });
 
-  it('unknown route gives the 404 envelope with code and request id', async () => {
+  it('a route that does not exist and is not public asks for a session first (module 02)', async () => {
     const res = await request(app).get('/api/v1/nope');
-    expect(res.status).toBe(404);
-    expect(res.body).toMatchObject({ success: false, code: 'NOT_FOUND' });
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ success: false, code: 'UNAUTHENTICATED' });
     expect(res.body.requestId).toBe(res.headers['x-request-id']);
   });
 });

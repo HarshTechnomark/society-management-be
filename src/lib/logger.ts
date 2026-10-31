@@ -1,7 +1,8 @@
 import pino, { type Logger } from 'pino';
 
-/** Keys whose values are never written to logs (BR-01-3). */
-export const REDACT_KEY = /password|otp|token|secret|cookie|authorization|aadhaar|pan/i;
+/** Keys whose values are never written to logs (BR-01-3; module 02 adds recoveryCodes, credential and code). */
+export const REDACT_KEY =
+  /password|otp|token|secret|cookie|authorization|aadhaar|pan|recoveryCodes|credential|^code$/i;
 
 export const maskPhone = (s: string): string => {
   const d = s.replace(/\D/g, '');

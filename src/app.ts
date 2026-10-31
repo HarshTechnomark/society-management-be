@@ -6,9 +6,16 @@ import { env } from './lib/env';
 import { requestId } from './middlewares/requestId.middleware';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { healthRoutes } from './modules/health/health.routes';
+import { appContext } from './middlewares/appContext.middleware';
+import { csrfMiddleware } from './middlewares/csrf.middleware';
+import { authMiddleware } from './middlewares/auth.middleware';
+import { authRoutes, meSecurityRoutes } from './modules/auth/auth.routes';
+import { noStore } from './modules/auth/auth.controller';
+import { devRoutes } from './modules/dev/dev.routes';
+import './modules/auth/auth.templates';
 
 /**
- * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > routes > error handler.
+ * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > appContext > csrf > auth > routes > error handler.
  * Later modules add rate limiting (01 later), authentication (02), society and permission checks (03) and
  * entitlement checks (04) in the places marked below.
  */
@@ -22,12 +29,19 @@ export function createApp(): Express {
   app.use(cors({ origin: env().appOrigins, credentials: true }));
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
-  // rate limiting goes here
-  // authentication goes here (module 02)
 
   const api = express.Router();
+  // app from Origin, CSRF and Origin check, then authentication (module 02). Public routes are listed in
+  // modules/auth/public.routes.ts; every other route needs a valid session.
+  api.use(['/auth', '/me/security'], noStore); // sign-in and security responses are never cached (module 02 section 13)
+  api.use(appContext);
+  api.use(csrfMiddleware);
+  api.use(authMiddleware);
   api.use('/health', healthRoutes);
-  // each module mounts its routes here: api.use('/auth', authRoutes), ...
+  if (env().NODE_ENV !== 'production') api.use('/dev', devRoutes);
+  api.use('/auth', authRoutes);
+  api.use('/me/security', meSecurityRoutes);
+  // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 
   app.use(notFoundHandler);
