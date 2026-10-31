@@ -10,6 +10,7 @@ import { appContext } from './middlewares/appContext.middleware';
 import { csrfMiddleware } from './middlewares/csrf.middleware';
 import { authMiddleware } from './middlewares/auth.middleware';
 import { authRoutes, meSecurityRoutes } from './modules/auth/auth.routes';
+import { noStore } from './modules/auth/auth.controller';
 import { devRoutes } from './modules/dev/dev.routes';
 import './modules/auth/auth.templates';
 
@@ -32,6 +33,7 @@ export function createApp(): Express {
   const api = express.Router();
   // app from Origin, CSRF and Origin check, then authentication (module 02). Public routes are listed in
   // modules/auth/public.routes.ts; every other route needs a valid session.
+  api.use(['/auth', '/me/security'], noStore); // sign-in and security responses are never cached (module 02 section 13)
   api.use(appContext);
   api.use(csrfMiddleware);
   api.use(authMiddleware);

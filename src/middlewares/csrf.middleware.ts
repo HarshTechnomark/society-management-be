@@ -17,7 +17,9 @@ const fail = (message: string) => new AppError(403, 'CSRF_FAILED', message);
  * a forged page could ride on, so it passes here and is refused by `authMiddleware` with 401.
  */
 export const csrfMiddleware: RequestHandler = (req, _res, next) => {
-  if (!UNSAFE.has(req.method) || req.path.startsWith('/webhooks/')) return next();
+  // /dev/* exists only outside production (fake inbox for tools and tests) and carries no session
+  if (!UNSAFE.has(req.method) || req.path.startsWith('/webhooks/') || req.path.startsWith('/dev/'))
+    return next();
   const origin = originOf(req.get('origin')) ?? originOf(req.get('referer'));
   if (!origin || !env().appOrigins.includes(origin)) return next(fail('Request origin is not allowed'));
   if (isPublicRoute(req.method, req.path)) return next();
