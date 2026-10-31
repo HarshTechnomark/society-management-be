@@ -1,0 +1,35 @@
+name: CI
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: societyapp_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/societyapp_test
+      LOG_LEVEL: silent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run migrate
+      - run: npm run migrate:undo:all && npm run migrate
+      - run: npm test
+      - run: npm run build

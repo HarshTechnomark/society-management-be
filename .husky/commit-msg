@@ -1,0 +1,7 @@
+#!/bin/sh
+# Conventional Commits: type(scope): subject
+pattern='^(feat|fix|chore|refactor|docs|test|perf|build|ci|revert)(\([a-z0-9-]+\))?!?: .{1,72}$'
+if ! head -1 "$1" | grep -Eq "$pattern"; then
+  echo "Commit message must look like: feat(payments): add refund approval"
+  exit 1
+fi
