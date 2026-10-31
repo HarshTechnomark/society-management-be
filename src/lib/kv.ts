@@ -23,11 +23,18 @@ export interface KvStore {
   listPush(key: string, value: string, max: number): Promise<void>;
   listAll(key: string): Promise<string[]>;
   listClear(key: string): Promise<void>;
+  /** Plain cache (module 03 permission cache). A missing or expired key returns null. */
+  cacheGet(key: string): Promise<string | null>;
+  cacheSet(key: string, value: string, ttlSeconds: number): Promise<void>;
+  cacheDel(...keys: string[]): Promise<void>;
+  /** Deletes every key that starts with the prefix (SCAN on Redis). */
+  cacheDelPrefix(prefix: string): Promise<void>;
 }
 
 export class MemoryKv implements KvStore {
   private windows = new Map<string, number[]>();
   private lists = new Map<string, string[]>();
+  private cache = new Map<string, { value: string; expiresAt: number }>();
 
   async slidingWindowHit(key: string, windowMs: number, limit: number): Promise<HitResult> {
     const t = nowMs();
@@ -59,6 +66,25 @@ export class MemoryKv implements KvStore {
   }
   async listClear(key: string): Promise<void> {
     this.lists.delete(key);
+  }
+
+  async cacheGet(key: string): Promise<string | null> {
+    const e = this.cache.get(key);
+    if (!e) return null;
+    if (e.expiresAt <= nowMs()) {
+      this.cache.delete(key);
+      return null;
+    }
+    return e.value;
+  }
+  async cacheSet(key: string, value: string, ttlSeconds: number): Promise<void> {
+    this.cache.set(key, { value, expiresAt: nowMs() + ttlSeconds * 1000 });
+  }
+  async cacheDel(...keys: string[]): Promise<void> {
+    for (const k of keys) this.cache.delete(k);
+  }
+  async cacheDelPrefix(prefix: string): Promise<void> {
+    for (const k of [...this.cache.keys()]) if (k.startsWith(prefix)) this.cache.delete(k);
   }
 }
 
@@ -114,6 +140,24 @@ export class RedisKv implements KvStore {
   }
   async listClear(key: string): Promise<void> {
     await this.redis.del(`list:${key}`);
+  }
+
+  async cacheGet(key: string): Promise<string | null> {
+    return this.redis.get(`cache:${key}`);
+  }
+  async cacheSet(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.redis.set(`cache:${key}`, value, 'EX', ttlSeconds);
+  }
+  async cacheDel(...keys: string[]): Promise<void> {
+    if (keys.length) await this.redis.del(...keys.map(k => `cache:${k}`));
+  }
+  async cacheDelPrefix(prefix: string): Promise<void> {
+    let cursor = '0';
+    do {
+      const [next, keys] = await this.redis.scan(cursor, 'MATCH', `cache:${prefix}*`, 'COUNT', 500);
+      cursor = next;
+      if (keys.length) await this.redis.del(...keys);
+    } while (cursor !== '0');
   }
 }
 

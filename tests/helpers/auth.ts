@@ -7,6 +7,8 @@ import { configureMemoryQueue, resetQueueState } from '../../src/lib/queue';
 import { setRealtimeSink, type RealtimeEvent } from '../../src/lib/realtime';
 import { resetRateLimits } from '../../src/middlewares/rateLimit.middleware';
 import { setAuthPorts } from '../../src/modules/auth/auth.ports';
+import { setAccessPorts } from '../../src/modules/access-control/access-control.ports';
+import { flushAcl } from '../../src/modules/access-control/access-control.cache';
 import { setMinResponseMs } from '../../src/modules/auth/auth.util';
 import {
   encryptSecret,
@@ -44,6 +46,7 @@ export async function resetAll(): Promise<void> {
   configureMemoryQueue({ backoffMs: 0 });
   resetQueueState();
   setAuthPorts();
+  setAccessPorts();
   events.length = 0;
   setRealtimeSink({
     emit: e => events.push(e),
@@ -52,6 +55,14 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    'idempotency_keys',
+    'member_grants',
+    'society_members',
+    'invitations',
+    'role_permissions',
+    'roles',
+    'societies',
+    'organizations',
     'auth_lockouts',
     'user_recovery_codes',
     'user_passkeys',
@@ -65,6 +76,7 @@ export async function resetAll(): Promise<void> {
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 1');
   resetSystemUserCache();
   await resetRateLimits();
+  await flushAcl();
   await clearInbox();
 }
 
@@ -74,6 +86,16 @@ export interface TestUser {
   email: string | null;
   totpSecret: string | null;
   recoveryCodes: string[];
+}
+
+/** Module 03 added the foreign key users.platformRoleId -> roles.id: older tests need real platform role rows for the ids they use. */
+export async function ensurePlatformRoles(ids: number[]): Promise<void> {
+  for (const id of ids)
+    await sequelize.query(
+      `INSERT IGNORE INTO roles (id, societyId, scope, \`key\`, name, isSystem, requiresMfa, consumesSeat, version, createdAt, updatedAt)
+       VALUES (:id, NULL, 'platform', :key, :name, 1, 1, 0, 1, NOW(3), NOW(3))`,
+      { replacements: { id, key: `test_platform_${id}`, name: `Test platform ${id}` } },
+    );
 }
 
 let counter = 0;
@@ -94,6 +116,7 @@ export async function makeUser(
   const email = o.email === undefined ? `user${counter}@example.in` : o.email;
   const secret = o.mfa ? newTotpSecret() : null;
   const t = now();
+  if (o.platformRoleId) await ensurePlatformRoles([o.platformRoleId]);
   const u = await User.create({
     mobile,
     email,

@@ -30,10 +30,12 @@ export interface MembershipView {
   societyName: string;
   city: string | null;
   societyStatus: string;
-  memberId: number;
+  /** `null` for a pending invitation (BR-03-30). */
+  memberId: number | null;
+  invitationId?: number;
   roleKey: string;
   roleName: string;
-  roleScope: 'society' | 'gate' | 'work' | 'platform';
+  roleScope: 'society' | 'gate' | 'work' | 'platform' | 'resident';
   status: string;
 }
 

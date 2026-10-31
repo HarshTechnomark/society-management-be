@@ -33,6 +33,7 @@ import {
   get,
   inboxFor,
   makeUser,
+  ensurePlatformRoles,
   otpSignIn,
   post,
   resetAll,
@@ -230,6 +231,7 @@ describe('users service (8.30)', () => {
   });
 
   it('T02-54 setPlatformRole(null) revokes PLATFORM sessions only and writes no auth audit row; a role change keeps sessions', async () => {
+    await ensurePlatformRoles([1, 5, 6]);
     const u = await makeUser({ platformRoleId: 1 });
     await mkSession(u.id, { clientApp: 'PLATFORM', activeSocietyId: null, mfaVerified: true });
     await mkSession(u.id, { clientApp: 'PLATFORM', activeSocietyId: null, mfaVerified: true });

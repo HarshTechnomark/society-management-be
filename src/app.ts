@@ -12,7 +12,10 @@ import { authMiddleware } from './middlewares/auth.middleware';
 import { authRoutes, meSecurityRoutes } from './modules/auth/auth.routes';
 import { noStore } from './modules/auth/auth.controller';
 import { devRoutes } from './modules/dev/dev.routes';
+import { accessControlRoutes } from './modules/access-control/access-control.routes';
+import { authArea, publicRoute } from './middlewares/permission.middleware';
 import './modules/auth/auth.templates';
+import './modules/access-control/access-control.templates';
 
 /**
  * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > appContext > csrf > auth > routes > error handler.
@@ -37,10 +40,12 @@ export function createApp(): Express {
   api.use(appContext);
   api.use(csrfMiddleware);
   api.use(authMiddleware);
-  api.use('/health', healthRoutes);
-  if (env().NODE_ENV !== 'production') api.use('/dev', devRoutes);
-  api.use('/auth', authRoutes);
-  api.use('/me/security', meSecurityRoutes);
+  api.use('/health', publicRoute(), healthRoutes);
+  if (env().NODE_ENV !== 'production') api.use('/dev', publicRoute(), devRoutes);
+  api.use('/auth', authArea(), authRoutes);
+  api.use('/me/security', authArea(), meSecurityRoutes);
+  // module 03: roles, members, invitations, grants, household and platform team (every route carries a marker)
+  api.use(accessControlRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

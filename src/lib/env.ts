@@ -24,6 +24,8 @@ const schema = z.object({
   WEBAUTHN_RP_ID: z.string().min(1),
   WEBAUTHN_RP_NAME: z.string().min(1),
   PASSWORD_BREACH_CHECK: z.enum(['local', 'hibp']).default('local'),
+  // module 03 (roles and permissions)
+  PLATFORM_TEAM_EMAIL_DOMAIN: z.string().min(3).default('societyapp.in'),
   COOKIE_SECURE: z
     .enum(['true', 'false'])
     .default('true')

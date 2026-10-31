@@ -173,8 +173,8 @@ export const users = {
     return (systemUserId = u.id!);
   },
 
-  async getUserSummary(userId: number) {
-    const u = await User.findByPk(userId);
+  async getUserSummary(userId: number, tx?: Transaction) {
+    const u = await User.findByPk(userId, { transaction: tx });
     if (!u) throw new NotFoundError('NOT_FOUND', 'User not found');
     return {
       id: u.id!,
