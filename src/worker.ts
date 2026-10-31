@@ -5,12 +5,14 @@ import { closeRedis } from './lib/kv';
 import { startWorkers, stopWorkers } from './lib/queue';
 import { closeDb, sequelize } from './models';
 import { registerAuthJobs } from './modules/auth/auth.jobs';
+import { registerAccessControl } from './modules/access-control/access-control.public';
 
 /** BullMQ worker process (separate from the API). Each module registers its processors here. */
 async function main(): Promise<void> {
   env();
   await sequelize.authenticate();
   registerAuthJobs();
+  registerAccessControl();
   await startWorkers();
   logger.info('society-worker started');
   const shutdown = async () => {

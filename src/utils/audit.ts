@@ -25,7 +25,7 @@ export async function audit(ctx: Ctx, input: AuditInput, tx?: Transaction): Prom
   const actor = input.actor ?? {
     userId: ctx.user?.id ?? null,
     name: ctx.user ? (ctx.user.name ?? 'User') : 'System',
-    role: ctx.user ? 'user' : 'system',
+    role: ctx.user ? (ctx.actorRoleKey ?? 'user') : 'system',
   };
   await AuditLog.create(
     {
@@ -33,7 +33,7 @@ export async function audit(ctx: Ctx, input: AuditInput, tx?: Transaction): Prom
       actorUserId: actor.userId,
       actorName: actor.name.slice(0, 120),
       actorRole: actor.role.slice(0, 40),
-      supportGrantId: input.supportGrantId ?? ctx.session?.supportGrantId ?? null,
+      supportGrantId: input.supportGrantId ?? ctx.supportGrant?.id ?? ctx.session?.supportGrantId ?? null,
       action: input.action,
       entityType: input.entityType,
       entityId: String(input.entityId).slice(0, 60),

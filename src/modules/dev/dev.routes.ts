@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { clearInbox, listInbox } from '../../lib/inbox';
+import { placeholderExports } from '../access-control/access-control.ports';
+import { AppError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
 
@@ -25,3 +27,12 @@ devRoutes.delete(
     ok(res, null, 'Inbox cleared');
   }),
 );
+
+/** Placeholder download for exports until the module 01 file service exists (module 03 members export). */
+devRoutes.get('/exports/:id', (req, res, next) => {
+  const f = placeholderExports.get(Number(req.params.id));
+  if (!f || f.expiresAt < new Date()) return next(new AppError(404, 'NOT_FOUND', 'Export not found'));
+  res.setHeader('Content-Type', f.contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${f.name}"`);
+  res.send(f.content);
+});

@@ -27,6 +27,9 @@ export const PUBLIC_ROUTES: Rule[] = [
   { method: 'POST', path: '/auth/mfa/enroll/confirm' },
   { method: 'POST', path: '/auth/email/verify' },
   { method: 'POST', path: '/auth/support-handoff/redeem' },
+  { method: 'GET', path: /^\/dev\/exports\/\d+$/ },
+  { method: 'GET', path: /^\/public\/invitations\/[^/]+$/ },
+  { method: 'POST', path: /^\/public\/invitations\/[^/]+\/decline$/ },
   { method: 'POST', path: /^\/webhooks\// },
 ];
 

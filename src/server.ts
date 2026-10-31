@@ -4,6 +4,7 @@ import { env } from './lib/env';
 import { logger } from './lib/logger';
 import { closeDb, sequelize } from './models';
 import { registerAuthJobs } from './modules/auth/auth.jobs';
+import { registerAccessControl } from './modules/access-control/access-control.public';
 import { startWorkers, stopWorkers, usesRedis } from './lib/queue';
 import { closeRedis } from './lib/kv';
 
@@ -14,6 +15,7 @@ async function main(): Promise<void> {
 
   // Without Redis the jobs run in this process; with Redis `npm run start:worker` runs them.
   registerAuthJobs();
+  registerAccessControl();
   if (!usesRedis()) await startWorkers();
 
   const server = createApp().listen(e.PORT, () =>

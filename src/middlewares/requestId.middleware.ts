@@ -19,6 +19,10 @@ export const requestId: RequestHandler = (req, res, next) => {
     requestId,
     ip: req.ip ?? req.socket.remoteAddress ?? '',
     userAgent: String(req.get('user-agent') ?? '').slice(0, 255),
+    permissions: new Set(),
+    platformPermissions: new Set(),
+    unitIds: [],
+    unitLinks: [],
   };
   res.setHeader('X-Request-Id', requestId);
   res.locals.log = childLogger({ requestId });

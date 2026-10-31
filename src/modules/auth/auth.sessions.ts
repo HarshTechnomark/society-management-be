@@ -32,7 +32,7 @@ const SCOPES: Record<ClientApp, string[]> = {
   ADMIN: ['society'],
   GATE: ['gate'],
   WORK: ['work'],
-  RESIDENT: ['society', 'gate', 'work'],
+  RESIDENT: ['resident', 'society', 'gate', 'work'],
 };
 export const membershipFitsApp = (m: MembershipView, app: ClientApp): boolean =>
   SCOPES[app].includes(m.roleScope);
