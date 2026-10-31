@@ -303,7 +303,7 @@ async function maybeSetupToken(
   tx: Transaction,
 ): Promise<string | null> {
   if (role.scope !== 'society' && role.scope !== 'platform') return null;
-  const s = await users.getUserSummary(userId);
+  const s = await users.getUserSummary(userId, tx);
   if (s.status !== 'INVITED' || !s.email) return null;
   const r = await auth.issueAccountSetupToken(
     ctx,
@@ -603,7 +603,7 @@ export async function acceptInvitation(
     const app = APP_FOR_SCOPE[role.scope] ?? 'ADMIN';
     let memberId: number | null = null;
     let societyId: number | null = null;
-    const summary = await users.getUserSummary(userId);
+    const summary = await users.getUserSummary(userId, tx);
     let revoked = false;
 
     if (inv.societyId === null) {

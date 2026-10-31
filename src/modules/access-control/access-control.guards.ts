@@ -19,24 +19,25 @@ export async function lockChairmen(societyId: number, tx: Transaction): Promise<
 }
 
 export async function countActiveChairmen(societyId: number, tx: Transaction): Promise<number> {
-  const [r] = await sequelize.query<{ n: number }>(`SELECT COUNT(*) AS n ${CHAIRMAN_ROWS}`, {
+  // a locking read sees the latest committed rows (a plain read would use the transaction's older snapshot)
+  const rows = await sequelize.query<{ id: number }>(`SELECT m.id ${CHAIRMAN_ROWS} FOR UPDATE OF m`, {
     replacements: { societyId },
     type: QueryTypes.SELECT,
     transaction: tx,
   });
-  return Number(r!.n);
+  return rows.length;
 }
 
 export async function countRoleManagers(societyId: number, tx: Transaction): Promise<number> {
-  const [r] = await sequelize.query<{ n: number }>(
-    `SELECT COUNT(DISTINCT m.id) AS n
+  const rows = await sequelize.query<{ id: number }>(
+    `SELECT DISTINCT m.id
        FROM society_members m
        JOIN role_permissions rp ON rp.roleId = m.roleId
        JOIN permissions p ON p.id = rp.permissionId AND p.\`key\` = 'settings.roles.edit'
-      WHERE m.societyId = :societyId AND m.status = 'ACTIVE'`,
+      WHERE m.societyId = :societyId AND m.status = 'ACTIVE' FOR UPDATE OF m`,
     { replacements: { societyId }, type: QueryTypes.SELECT, transaction: tx },
   );
-  return Number(r!.n);
+  return rows.length;
 }
 
 const lastChairman = () =>

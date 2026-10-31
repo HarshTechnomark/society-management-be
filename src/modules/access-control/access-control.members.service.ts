@@ -974,7 +974,7 @@ async function mfaTarget(ctx: Ctx, memberId: number, tx: Transaction, checkHold:
 export async function resetMemberMfa(ctx: Ctx, memberId: number, reason: string): Promise<void> {
   await sequelize.transaction(async tx => {
     const m = await mfaTarget(ctx, memberId, tx, true);
-    const summary = await users.getUserSummary(m.userId);
+    const summary = await users.getUserSummary(m.userId, tx);
     if (!summary.mfaEnabled) throw invalidState('This person has no two-step sign-in to reset');
     await auth.resetMfa(ctx, m.userId, reason, tx);
     await audit(
@@ -1025,7 +1025,7 @@ export async function resetMemberMfaAsPlatform(
   await sequelize.transaction(async tx => {
     const m = await lockMember(memberId, tx, societyId);
     if (m.status === 'ENDED') throw invalidState('This membership has ended');
-    const summary = await users.getUserSummary(m.userId);
+    const summary = await users.getUserSummary(m.userId, tx);
     if (!summary.mfaEnabled) throw invalidState('This person has no two-step sign-in to reset');
     await auth.resetMfa(ctx, m.userId, reason, tx);
     await audit(

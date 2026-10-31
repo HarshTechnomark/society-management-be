@@ -92,8 +92,8 @@ const base = (
   updatedAt: (r.updatedAt ?? now()).toISOString(),
 });
 
-export async function roleDetail(r: Role, locked: boolean): Promise<RoleDetail> {
-  const keys = await roleKeysTx(r.id!);
+export async function roleDetail(r: Role, locked: boolean, tx?: Transaction): Promise<RoleDetail> {
+  const keys = await roleKeysTx(r.id!, tx);
   const counts = await usage(r.societyId, [r.id!]);
   return {
     ...base(r, counts, keys.length, locked),
@@ -290,7 +290,7 @@ export async function createRole(ctx: Ctx, input: CreateRoleInput): Promise<Role
       },
       tx,
     );
-    return roleDetail(role, !!ctx.membership && !ctx.supportGrant);
+    return roleDetail(role, !!ctx.membership && !ctx.supportGrant, tx);
   });
 }
 
@@ -308,7 +308,7 @@ export interface UpdateRoleInput {
 export async function revokeForMfaPolicy(ctx: Ctx, userIds: number[], tx: Transaction): Promise<number[]> {
   const revoked: number[] = [];
   for (const id of userIds) {
-    const s = await users.getUserSummary(id);
+    const s = await users.getUserSummary(id, tx);
     if (s.mfaEnabled) continue;
     await sessions.revokeUserSessions(ctx, id, { reason: 'MFA_POLICY_CHANGED' }, tx);
     revoked.push(id);
@@ -418,7 +418,7 @@ export async function updateRoleCore(
     const mfaChanged = mfa !== hadMfa;
 
     if (!metaChanged && !keysChanged && !mfaChanged) {
-      return roleDetail(role, !platform);
+      return roleDetail(role, !platform, tx);
     }
 
     role.name = metaAfter.name;
@@ -486,7 +486,7 @@ export async function updateRoleCore(
       emitAccessChanged(tx, societyId, userIds, 'ROLE_PERMISSIONS_CHANGED');
       await notifyChairmen(tx, societyId, role);
     }
-    return roleDetail(role, !platform);
+    return roleDetail(role, !platform, tx);
   });
 }
 
@@ -548,7 +548,7 @@ export async function resetRole(
     invalidateRoleKeys(tx, role.id!);
     emitAccessChanged(tx, societyId, userIds, 'ROLE_PERMISSIONS_CHANGED');
     await notifyChairmen(tx, societyId, role);
-    return roleDetail(role, true);
+    return roleDetail(role, true, tx);
   });
 }
 
