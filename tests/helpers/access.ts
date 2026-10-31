@@ -9,7 +9,18 @@ import {
 } from '../../src/modules/access-control/access-control.public';
 import { setAccessPorts, usageLimitExceeded } from '../../src/modules/access-control/access-control.ports';
 import { systemCtx } from '../../src/types/context';
-import { call, fullSignIn, makeUser, resetAll, type CallOpts, type Cookies, type TestUser } from './auth';
+import {
+  PASSWORD,
+  call,
+  cookiesFrom,
+  fullSignIn,
+  makeUser,
+  resetAll,
+  totpNow,
+  type CallOpts,
+  type Cookies,
+  type TestUser,
+} from './auth';
 
 /** Fresh database state plus the permission catalogue, platform roles and the real `authAccess` port. */
 export async function resetAccess(): Promise<void> {
@@ -132,3 +143,37 @@ export const fakeEntitlements = (limits: { 'limit.custom_roles'?: number; 'limit
 };
 
 export { now };
+
+/** A platform user with a platform role (by key) and MFA, signed in to the platform app with password and TOTP. */
+export async function platformUser(
+  roleKey: 'super_admin' | 'platform_support',
+  o: { email?: string; name?: string } = {},
+): Promise<TestUser & { email: string }> {
+  const role = await roleOf(null, roleKey);
+  const email = o.email ?? `${roleKey}-${Math.floor(Math.random() * 1e6)}@societyapp.in`;
+  const u = await makeUser({ email, name: o.name ?? roleKey, mfa: true, platformRoleId: role.id! });
+  return { ...u, email };
+}
+
+export async function platformLogin(u: TestUser & { email: string }): Promise<Cookies> {
+  const key = `platform:${u.id}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const r = await call(
+    'post',
+    '/auth/password/login',
+    { email: u.email, password: PASSWORD },
+    { app: 'PLATFORM' },
+  );
+  if (r.body.data?.status !== 'MFA_REQUIRED') throw new Error(`platform login ${JSON.stringify(r.body)}`);
+  const v = await call(
+    'post',
+    '/auth/mfa/verify',
+    { challengeToken: r.body.data.challengeToken, method: 'TOTP', code: totpNow(u.totpSecret!) },
+    { app: 'PLATFORM', cookies: cookiesFrom(r) },
+  );
+  if (v.status !== 200) throw new Error(`platform mfa ${JSON.stringify(v.body)}`);
+  const cookies = cookiesFrom(v, cookiesFrom(r));
+  cache.set(key, cookies);
+  return cookies;
+}

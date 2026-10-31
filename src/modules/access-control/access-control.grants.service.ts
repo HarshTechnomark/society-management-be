@@ -28,18 +28,24 @@ export interface GrantView {
 export const grantInEffect = (g: Pick<MemberGrant, 'status' | 'startsAt' | 'endsAt'>, at = now()): boolean =>
   g.status === 'ACTIVE' && g.startsAt <= at && (g.endsAt === null || at < g.endsAt);
 
-export async function grantViews(memberId: number, status: 'ACTIVE' | 'EXPIRED' | 'REVOKED' | 'ALL' = 'ALL') {
+export async function grantViews(
+  memberId: number,
+  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED' | 'ALL' = 'ALL',
+  tx?: Transaction,
+) {
   const rows = await MemberGrant.findAll({
     where: { memberId, ...(status === 'ALL' ? {} : { status }) },
     include: [{ model: Permission, attributes: ['key', 'label'], required: true }],
     order: [['id', 'DESC']],
     limit: 100,
+    transaction: tx,
   });
   const names = new Map(
     (
       await User.findAll({
         where: { id: { [Op.in]: [...new Set(rows.map(r => r.grantedBy))] } },
         attributes: ['id', 'name'],
+        transaction: tx,
       })
     ).map(u => [u.id!, u.name]),
   );
@@ -159,7 +165,7 @@ export async function createGrant(ctx: Ctx, memberId: number, input: CreateGrant
     invalidateMemberKey(tx, societyId, m.userId);
     notifyAfterCommit(tx, 'access.grant_added', [{ userId: m.userId }], { permission: perm.label });
     emitAccessChanged(tx, societyId, [m.userId], 'GRANT_CHANGED');
-    return (await grantViews(m.id!, 'ALL')).find(g => g.id === grant.id)!;
+    return (await grantViews(m.id!, 'ALL', tx)).find(g => g.id === grant.id)!;
   });
 }
 

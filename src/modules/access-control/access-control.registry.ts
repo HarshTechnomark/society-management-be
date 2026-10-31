@@ -47,11 +47,16 @@ function mountPrefix(layer: any): string {
 }
 
 function walk(stack: any[], prefix: string, inherited: AccessTag[], out: RouteMeta[]): void {
-  const here: AccessTag[] = [...inherited];
+  // tags of middleware mounted for the whole stack (`router.use(mw)`), and of middleware mounted on one path
+  const global: AccessTag[] = [...inherited];
+  const scoped: { mount: string; tag: AccessTag }[] = [];
   for (const layer of stack) {
     if (layer.route) {
       const route = layer.route;
-      const tags = [...here, ...route.stack.map((l: any) => tagOf(l.handle)).filter(Boolean)] as AccessTag[];
+      const tags = [
+        ...global,
+        ...route.stack.map((l: any) => tagOf(l.handle)).filter(Boolean),
+      ] as AccessTag[];
       for (const method of Object.keys(route.methods)) {
         if (method === '_all') continue;
         const kinds = tags.map(t => t.kind).filter((k): k is NonNullable<AccessTag['kind']> => Boolean(k));
@@ -76,10 +81,19 @@ function walk(stack: any[], prefix: string, inherited: AccessTag[], out: RouteMe
         });
       }
     } else if (layer.name === 'router' && layer.handle?.stack) {
-      walk(layer.handle.stack, prefix + mountPrefix(layer), here, out);
+      const mount = mountPrefix(layer);
+      walk(
+        layer.handle.stack,
+        prefix + mount,
+        [...global, ...scoped.filter(x => x.mount === mount).map(x => x.tag)],
+        out,
+      );
     } else {
       const t = tagOf(layer.handle);
-      if (t) here.push(t);
+      if (!t) continue;
+      const mount = mountPrefix(layer);
+      if (mount === '') global.push(t);
+      else scoped.push({ mount, tag: t });
     }
   }
 }
@@ -91,6 +105,24 @@ export function listRoutes(app: Express): RouteMeta[] {
   for (const layer of root) {
     if (layer.name === 'router' && layer.handle?.stack && mountPrefix(layer) === '/api/v1')
       walk(layer.handle.stack, '', [], out);
+  }
+  return out;
+}
+
+/**
+ * Routes that break the deny-by-default rule (section 13): no marker, a society route without a permission, or a platform
+ * route without a platform permission. Routes listed as public (`public.routes.ts`) need no marker.
+ */
+export function routeProblems(
+  routes: RouteMeta[],
+  isPublic: (method: string, path: string) => boolean,
+): string[] {
+  const out: string[] = [];
+  for (const r of routes) {
+    const id = `${r.method} ${r.path}`;
+    if (r.kind === 'unmarked' && !isPublic(r.method, r.path)) out.push(`${id}: no marker`);
+    if ((r.kind === 'society' || r.kind === 'platform') && r.permissions.length === 0)
+      out.push(`${id}: ${r.kind} route without a permission`);
   }
   return out;
 }
