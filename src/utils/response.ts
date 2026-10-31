@@ -19,3 +19,13 @@ export function created<T>(res: Response, data: T, message = 'Created'): Respons
 export function noContent(res: Response): Response {
   return res.status(204).end();
 }
+
+/** List responses add the pagination block (CODING_STANDARDS section 3). */
+export function okList<T>(
+  res: Response,
+  data: T[],
+  pagination: { page: number; limit: number; total: number; totalPages: number },
+  message = 'OK',
+): Response {
+  return res.status(200).json({ success: true, data, message, pagination });
+}
