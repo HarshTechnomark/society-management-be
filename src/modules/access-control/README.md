@@ -26,7 +26,7 @@ Spec: `Society_Management_Build_Modules/Markdown_for_AI/03_Roles_and_Permissions
 
 | Port                                                                          | Owner                   | Placeholder behaviour                                                        |
 | ----------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
-| `entitlements.consumeLimit / releaseLimit / getLimit / planKeyFor`            | module 04               | no limits; plan key `STANDARD`                                               |
+| `entitlements.consumeLimit / releaseLimit / getLimit / planKeyFor`            | module 04 (done)        | replaced by `registerSubscriptions()`; tests of 02/03 keep the placeholder   |
 | `support.getActiveGrant`                                                      | module 05               | returns null                                                                 |
 | `residents.getActiveUnitLinks / onResidentInvitationAccepted / getUnitLabels` | modules 08, 09          | no links                                                                     |
 | `approvals.onMemberEnded`                                                     | module 14               | no-op                                                                        |

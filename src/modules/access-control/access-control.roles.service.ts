@@ -256,7 +256,10 @@ export async function createRole(ctx: Ctx, input: CreateRoleInput): Promise<Role
     if (scope === 'society') assertCanGrant(ctx, valid);
     await assertNameFree(societyId, input.name, null, tx);
     const key = await uniqueKey(societyId, input.name, tx);
-    await accessPorts().entitlements.consumeLimit(ctx, 'limit.custom_roles', 1, { transaction: tx });
+    await accessPorts().entitlements.consumeLimit(ctx, 'limit.custom_roles', 1, {
+      transaction: tx,
+      societyId,
+    });
     const privileged = hasPrivilegedKey(valid);
     const consumesSeat =
       scope === 'society' && !(basedOn && (COMMITTEE_ROLE_KEYS as readonly string[]).includes(basedOn.key));
@@ -593,7 +596,10 @@ export async function deleteRole(
     role.version += 1;
     await role.save({ transaction: tx });
     await role.destroy({ transaction: tx });
-    await accessPorts().entitlements.releaseLimit(ctx, 'limit.custom_roles', 1, { transaction: tx });
+    await accessPorts().entitlements.releaseLimit(ctx, 'limit.custom_roles', 1, {
+      transaction: tx,
+      societyId,
+    });
     await audit(
       ctx,
       {
