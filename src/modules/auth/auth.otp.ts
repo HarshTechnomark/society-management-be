@@ -264,6 +264,7 @@ export async function verifyOtp(
     });
     if (isError(v)) return v;
     const ch = v.challenge;
+    if (ch.purpose === 'LOGIN') assertMethod(app, 'otp');
     if (ch.purpose === 'SIGNUP') {
       if (app !== 'ADMIN')
         return { error: new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Sign-up is not available here') };

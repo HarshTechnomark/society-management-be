@@ -290,6 +290,20 @@ describe('app rules', () => {
     expect(b.body.code).toBe('LOGIN_METHOD_NOT_ALLOWED');
   });
 
+  it('a LOGIN challenge cannot be verified on the platform host (password only there)', async () => {
+    const u = await makeUser();
+    const s = await sendOtp(u.mobile, { app: 'RESIDENT' });
+    const code = await lastOtp(u.mobile);
+    const r = await post(
+      '/auth/otp/verify',
+      { challengeId: s.body.data.challengeId, code },
+      { app: 'PLATFORM' },
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('LOGIN_METHOD_NOT_ALLOWED');
+    expect(await Session.count()).toBe(0);
+  });
+
   it('an unknown or missing Origin is CSRF_FAILED', async () => {
     expect((await sendOtp('9820011111', { origin: 'https://evil.example' })).body.code).toBe('CSRF_FAILED');
     expect((await sendOtp('9820011111', { origin: null })).body.code).toBe('CSRF_FAILED');
