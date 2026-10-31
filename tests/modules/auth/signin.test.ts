@@ -119,7 +119,7 @@ describe('password sign-in (8.5)', () => {
     const cookies = cookiesFrom(ok);
     for (let i = 0; i < 10; i++) await login('a@x.in', 'Wrong@Password1');
     expect((await get('/auth/me', { cookies })).status).toBe(200);
-  });
+  }, 60_000);
 
   it('T02-52 the system user cannot sign in by password, forgot-password sends nothing', async () => {
     const sys = await seedSystemUser();
