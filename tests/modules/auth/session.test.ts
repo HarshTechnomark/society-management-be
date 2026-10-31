@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuditLog, Session, closeDb } from '../../../src/models';
+import { AuditLog, Session, User, closeDb } from '../../../src/models';
 import { advance, nowMs, setNow } from '../../../src/lib/clock';
 import { setAuthPorts } from '../../../src/modules/auth/auth.ports';
 import { csrfTokenFor } from '../../../src/modules/auth/auth.crypto';
@@ -145,7 +145,7 @@ describe('refresh rotation (8.11, BR-02-32, BR-02-33)', () => {
 
   it('a disabled user cannot refresh', async () => {
     const { u, cookies } = await signIn();
-    await (await import('../../../src/models')).User.update({ status: 'DISABLED' }, { where: { id: u.id } });
+    await User.update({ status: 'DISABLED' }, { where: { id: u.id } });
     const r = await refresh(cookies);
     expect(r.body.code).toBe('SESSION_REVOKED');
   });
