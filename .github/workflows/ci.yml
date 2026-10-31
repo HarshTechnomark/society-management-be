@@ -23,15 +23,13 @@ jobs:
       LOG_LEVEL: silent
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm format:check
-      - run: pnpm migrate
-      - run: pnpm migrate:undo:all && pnpm migrate
-      - run: pnpm test
-      - run: pnpm build
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run migrate
+      - run: npm run migrate:undo:all && npm run migrate
+      - run: npm test
+      - run: npm run build

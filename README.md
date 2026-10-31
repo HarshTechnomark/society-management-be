@@ -6,21 +6,21 @@ Module 01 (project foundation) provides the structure only. Each feature is adde
 ## Start
 
 ```bash
-pnpm install
+npm install
 cp .env.example .env            # then edit DATABASE_URL
-pnpm migrate                    # runs the Sequelize migrations
-pnpm dev                        # http://localhost:4000/api/v1/health
+npm run migrate                    # runs the Sequelize migrations
+npm run dev                        # http://localhost:4000/api/v1/health
 ```
 
 ## Scripts
 
-| Command                                                        | What it does                                   |
-| -------------------------------------------------------------- | ---------------------------------------------- |
-| `pnpm dev`                                                     | start the API with reload                      |
-| `pnpm build` / `pnpm start`                                    | compile to `dist/` and run it                  |
-| `pnpm typecheck` / `pnpm lint` / `pnpm format`                 | checks                                         |
-| `pnpm test`                                                    | Vitest, uses `.env.test` (a separate database) |
-| `pnpm migrate` / `pnpm migrate:undo` / `pnpm migrate:undo:all` | database migrations                            |
+| Command                                                                 | What it does                                   |
+| ----------------------------------------------------------------------- | ---------------------------------------------- |
+| `npm run dev`                                                           | start the API with reload                      |
+| `npm run build` / `npm start`                                           | compile to `dist/` and run it                  |
+| `npm run typecheck` / `lint` / `format`                                 | checks                                         |
+| `npm test`                                                              | Vitest, uses `.env.test` (a separate database) |
+| `npm run migrate` / `npm run migrate:undo` / `npm run migrate:undo:all` | database migrations                            |
 
 ## Layout
 
