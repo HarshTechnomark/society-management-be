@@ -11,6 +11,23 @@ const schema = z.object({
   APP_ORIGINS: z.string().default('http://localhost:3000'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
   APP_VERSION: z.string().default('0.1.0'),
+  // module 01 (adapters, queue, rate limit): Redis is optional; without it the in-process memory implementations are used
+  REDIS_URL: z.string().url().optional(),
+  PROVIDERS_MODE: z.enum(['real', 'fake']).default('fake'),
+  // module 02 (authentication)
+  JWT_ACCESS_SECRET: z.string().min(32),
+  JWT_REFRESH_PEPPER: z.string().min(32),
+  AUTH_TOKEN_PEPPER: z.string().min(32),
+  TOTP_ENCRYPTION_KEY: z
+    .string()
+    .refine(v => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes in base64'),
+  WEBAUTHN_RP_ID: z.string().min(1),
+  WEBAUTHN_RP_NAME: z.string().min(1),
+  PASSWORD_BREACH_CHECK: z.enum(['local', 'hibp']).default('local'),
+  COOKIE_SECURE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform(v => v === 'true'),
 });
 
 export type Env = z.infer<typeof schema> & { appOrigins: string[] };
@@ -31,6 +48,13 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
     } catch {
       throw new Error(`Invalid environment:\n  APP_ORIGINS: "${o}" is not a URL`);
     }
+  }
+  if (!r.data.COOKIE_SECURE && r.data.NODE_ENV !== 'development')
+    throw new Error('Invalid environment:\n  COOKIE_SECURE: false is allowed only when NODE_ENV=development');
+  if (r.data.NODE_ENV === 'production') {
+    if (r.data.PROVIDERS_MODE === 'fake')
+      throw new Error('Invalid environment:\n  PROVIDERS_MODE: fake is forbidden in production');
+    if (!r.data.REDIS_URL) throw new Error('Invalid environment:\n  REDIS_URL: required in production');
   }
   return { ...r.data, appOrigins };
 }
