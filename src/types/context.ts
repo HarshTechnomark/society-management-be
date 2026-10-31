@@ -7,6 +7,8 @@ export interface RequestContext {
   userAgent: string;
   /** App resolved from the Origin header (BR-02-43); undefined when the Origin is missing or unknown. */
   clientApp?: ClientApp;
+  /** Origin header value (scheme and host) when it is an allowed app origin. */
+  origin?: string;
   /** Raw `sa_device` cookie value when the browser sent one. */
   deviceId?: string;
   user?: {
@@ -34,6 +36,6 @@ export interface RequestContext {
 
 /** The part of the context services need when no request exists (jobs, scripts). */
 export type Ctx = Pick<RequestContext, 'requestId' | 'ip' | 'userAgent'> &
-  Partial<Pick<RequestContext, 'clientApp' | 'deviceId' | 'user' | 'session' | 'supportGrant'>>;
+  Partial<Pick<RequestContext, 'clientApp' | 'origin' | 'deviceId' | 'user' | 'session' | 'supportGrant'>>;
 
 export const systemCtx = (requestId = 'job'): Ctx => ({ requestId, ip: '', userAgent: '' });

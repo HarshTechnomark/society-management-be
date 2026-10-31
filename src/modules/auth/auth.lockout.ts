@@ -64,85 +64,83 @@ const isDeadlock = (e: unknown): boolean => {
 };
 
 /**
- * Records one failure in its own transaction, so a rejected sign-in still leaves a trace (BR-02-28, section 9.2).
+ * Records one failure (BR-02-28). Pass the caller's transaction `tx` when it already holds rows of its own (the caller
+ * then commits and throws afterwards, so the count and audit row stay). Without `tx` it runs in its own transaction.
  * The row is re-read FOR UPDATE, so parallel wrong attempts cannot exceed the threshold without locking.
  */
 export async function recordFailure(
   scope: LockoutScope,
   subject: string,
-  opts: { userId?: number | null; ctx?: Ctx } = {},
+  opts: { userId?: number | null; ctx?: Ctx; tx?: Transaction } = {},
 ): Promise<FailureResult> {
   const p = LOCKOUT_POLICY[scope];
   const hash = subjectKey(scope, subject);
+  const run = async (t: Transaction): Promise<FailureResult> => {
+    const t0 = now();
+    await sequelize.query(
+      `INSERT INTO auth_lockouts (scope, subjectHash, userId, failedCount, windowStartedAt, lastFailedAt, lockCount, createdAt, updatedAt)
+       VALUES (:scope, :hash, :userId, 0, :t0, :t0, 0, :t0, :t0) ON DUPLICATE KEY UPDATE id = id`,
+      { replacements: { scope, hash, userId: opts.userId ?? null, t0 }, transaction: t },
+    );
+    const row = (await AuthLockout.findOne({
+      where: { scope, subjectHash: hash },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    }))!;
+    if (row.lockedUntil && row.lockedUntil > t0) {
+      return {
+        alreadyLocked: true,
+        newlyLocked: false,
+        attemptsLeft: 0,
+        retryAfterSeconds: Math.ceil((row.lockedUntil.getTime() - t0.getTime()) / 1000),
+      };
+    }
+    const windowOver = t0.getTime() - row.windowStartedAt.getTime() > p.windowMs || row.lockedUntil !== null;
+    if (windowOver || row.failedCount === 0) {
+      row.failedCount = 0;
+      row.windowStartedAt = t0;
+      row.lockedUntil = null;
+    }
+    row.failedCount += 1;
+    row.lastFailedAt = t0;
+    if (opts.userId && !row.userId) row.userId = opts.userId;
+    let newlyLocked = false;
+    if (row.failedCount >= p.threshold) {
+      row.lockedUntil = addMs(t0, p.lockMs);
+      row.lockCount += 1;
+      newlyLocked = true;
+    }
+    await row.save({ transaction: t });
+    if (newlyLocked && row.userId) {
+      const userId = row.userId;
+      await audit(
+        opts.ctx ?? systemCtx(),
+        {
+          action: 'auth.lockout.started',
+          entityType: 'user',
+          entityId: userId,
+          after: { scope, retryAfterSeconds: Math.round(p.lockMs / 1000) },
+          actor: { userId, name: 'User', role: 'user' },
+        },
+        t,
+      );
+      // OTP locks send nothing: an attacker must not be able to make us text the victim (BR-02-29)
+      if (scope !== 'OTP')
+        t.afterCommit(() => {
+          void notify('auth.account_locked', [{ userId }], { scope, minutes: Math.round(p.lockMs / 60000) });
+        });
+    }
+    return {
+      alreadyLocked: false,
+      newlyLocked,
+      attemptsLeft: Math.max(0, p.threshold - row.failedCount),
+      retryAfterSeconds: newlyLocked ? Math.round(p.lockMs / 1000) : 0,
+    };
+  };
+  if (opts.tx) return run(opts.tx);
   for (let attempt = 0; ; attempt++) {
     try {
-      let notifyUser = false;
-      const result = await sequelize.transaction(async t => {
-        const t0 = now();
-        await sequelize.query(
-          `INSERT INTO auth_lockouts (scope, subjectHash, userId, failedCount, windowStartedAt, lastFailedAt, lockCount, createdAt, updatedAt)
-           VALUES (:scope, :hash, :userId, 0, :t0, :t0, 0, :t0, :t0) ON DUPLICATE KEY UPDATE id = id`,
-          { replacements: { scope, hash, userId: opts.userId ?? null, t0 }, transaction: t },
-        );
-        const row = (await AuthLockout.findOne({
-          where: { scope, subjectHash: hash },
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        }))!;
-        if (row.lockedUntil && row.lockedUntil > t0) {
-          return {
-            alreadyLocked: true,
-            newlyLocked: false,
-            attemptsLeft: 0,
-            retryAfterSeconds: Math.ceil((row.lockedUntil.getTime() - t0.getTime()) / 1000),
-          };
-        }
-        const windowOver =
-          t0.getTime() - row.windowStartedAt.getTime() > p.windowMs || row.lockedUntil !== null;
-        if (windowOver || row.failedCount === 0) {
-          row.failedCount = 0;
-          row.windowStartedAt = t0;
-          row.lockedUntil = null;
-        }
-        row.failedCount += 1;
-        row.lastFailedAt = t0;
-        if (opts.userId && !row.userId) row.userId = opts.userId;
-        let newlyLocked = false;
-        if (row.failedCount >= p.threshold) {
-          row.lockedUntil = addMs(t0, p.lockMs);
-          row.lockCount += 1;
-          newlyLocked = true;
-        }
-        await row.save({ transaction: t });
-        if (newlyLocked) {
-          if (row.userId) {
-            await audit(
-              opts.ctx ?? systemCtx(),
-              {
-                action: 'auth.lockout.started',
-                entityType: 'user',
-                entityId: row.userId,
-                after: { scope, retryAfterSeconds: Math.round(p.lockMs / 1000) },
-                actor: { userId: row.userId, name: 'User', role: 'user' },
-              },
-              t,
-            );
-          }
-          notifyUser = scope !== 'OTP' && Boolean(row.userId);
-        }
-        return {
-          alreadyLocked: false,
-          newlyLocked,
-          attemptsLeft: Math.max(0, p.threshold - row.failedCount),
-          retryAfterSeconds: newlyLocked ? Math.round(p.lockMs / 1000) : 0,
-        };
-      });
-      if (result.newlyLocked && notifyUser && opts.userId)
-        void notify('auth.account_locked', [{ userId: opts.userId }], {
-          scope,
-          minutes: Math.round(p.lockMs / 60000),
-        });
-      return result;
+      return await sequelize.transaction(run);
     } catch (err) {
       if (isDeadlock(err) && attempt < 5) continue;
       logger.error({ err, scope }, 'failed to record lockout failure');

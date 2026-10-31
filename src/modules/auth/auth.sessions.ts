@@ -74,10 +74,11 @@ export function resolveActiveSociety(
 
 // ------------------------------------------------------------------ views
 export async function buildUserView(u: User): Promise<AuthUserView> {
-  const [passkeyCount, recoveryCodesRemaining, mfaMandatory] = await Promise.all([
+  const [passkeyCount, recoveryCodesRemaining, mfaMandatory, passwordSet] = await Promise.all([
     UserPasskey.count({ where: { userId: u.id } }),
     UserRecoveryCode.count({ where: { userId: u.id, usedAt: null } }),
     userRequiresMfa(u),
+    hasPassword(u.id!),
   ]);
   return {
     id: u.id!,
@@ -88,7 +89,7 @@ export async function buildUserView(u: User): Promise<AuthUserView> {
     photoFileId: u.photoFileId,
     locale: u.locale,
     status: u.status,
-    hasPassword: u.passwordHash !== null || false,
+    hasPassword: passwordSet,
     mfaEnabled: u.mfaEnabledAt !== null,
     mfaMandatory,
     passkeyCount,
@@ -114,7 +115,6 @@ export async function buildMe(user: User, s: Session): Promise<AuthMe> {
     : (await ports().authAccess.listMemberships(user.id!)).filter(m => membershipFitsApp(m, app));
   const fitActiveSocieties = new Set(all.filter(m => m.status === 'ACTIVE').map(m => m.societyId));
   const view = await buildUserView(user);
-  view.hasPassword = await hasPassword(user.id!);
   const societyId = s.activeSocietyId;
   const [permissions, platformPermissions, features, grant, stepUpMinutes] = await Promise.all([
     societyId && !support ? ports().authAccess.getPermissions(user.id!, societyId) : Promise.resolve([]),

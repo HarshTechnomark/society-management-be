@@ -1,6 +1,7 @@
 import type { Transaction } from 'sequelize';
 import { User } from '../../models';
-import { NotFoundError } from '../../utils/errors';
+import type { Ctx } from '../../types/context';
+import { NotFoundError, UnprocessableError } from '../../utils/errors';
 import type { ClientApp, MembershipView } from './auth.types';
 
 /**
@@ -25,6 +26,11 @@ export interface AuthPorts {
     getPlatformPermissions(userId: number): Promise<string[]>;
     deletionBlockers(userId: number): Promise<string[]>;
     onUserAnonymised(userId: number, t: Transaction): Promise<void>;
+  };
+  /** Module 01 files service: link and unlink a profile photo (`files.service.link(ctx, [id], 'user', userId, 'USER_PHOTO')`) */
+  files: {
+    linkUserPhoto(ctx: Ctx, fileId: number, userId: number, tx: Transaction): Promise<void>;
+    unlinkUserPhoto(ctx: Ctx, fileId: number, tx: Transaction): Promise<void>;
   };
   /** Module 04 */
   entitlements: { getFeatures(societyId: number): Promise<string[]> };
@@ -71,6 +77,15 @@ export const defaultPorts: AuthPorts = {
     deletionBlockers: async userId =>
       (await User.findByPk(userId))?.platformRoleId ? ['PLATFORM_USER'] : [],
     onUserAnonymised: noop,
+  },
+  files: {
+    linkUserPhoto: async () => {
+      throw new UnprocessableError(
+        'FILE_NOT_LINKABLE',
+        'Profile photos are not available until the files service is built',
+      );
+    },
+    unlinkUserPhoto: noop,
   },
   entitlements: { getFeatures: async () => [] },
   supportAccess: {
