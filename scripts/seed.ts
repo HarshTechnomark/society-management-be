@@ -4,6 +4,13 @@ import { seedSystemUser } from '../seeders/system-user';
 import { seedDemoUsers, DEMO_PASSWORD } from '../seeders/demo-users';
 import { seedDemoSocieties } from '../seeders/demo-societies';
 import { seedAccessControl } from '../seeders/access-control';
+import {
+  reconcileDemoUsage,
+  seedDemoSubscriptions,
+  seedSubscriptionCatalogue,
+} from '../seeders/subscriptions';
+import { registerAccessControl } from '../src/modules/access-control/access-control.public';
+import { registerSubscriptions } from '../src/modules/subscriptions/subscriptions.public';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -12,6 +19,13 @@ async function main(): Promise<void> {
   await sequelize.authenticate();
   const sys = await seedSystemUser();
   out(`system-user: ${sys.created ? 'created' : 'already exists'} (id ${sys.id})`);
+  // module 04: real entitlement ports, so seats and custom roles are counted while members are seeded
+  registerAccessControl();
+  registerSubscriptions();
+  const cat = await seedSubscriptionCatalogue();
+  out(
+    `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
+  );
   if (process.env.NODE_ENV === 'production') {
     out('demo-users: skipped in production');
     const a = await seedAccessControl({ demo: false });
@@ -26,6 +40,10 @@ async function main(): Promise<void> {
       out(`  setup link ${email}: /setup?token=${token}`);
     const so = await seedDemoSocieties();
     out(`demo-societies: created ${so.created.length}, skipped ${so.skipped.length}`);
+    const ds = await seedDemoSubscriptions();
+    out(
+      `demo-subscriptions: created ${ds.created.join(', ') || 'none'}, skipped ${ds.skipped.length}, flags ${ds.flags}`,
+    );
     const a = await seedAccessControl({ demo: true });
     out(
       `access-control: catalogue ${a.catalogueAdded} new keys, roles created ${a.rolesCreated}, platform roles set ${a.platformAssigned.length}, members ${a.members.length}`,
@@ -34,6 +52,7 @@ async function main(): Promise<void> {
       out(`  invitation ${name}: ${l.inviteLink}`);
       if (l.setupLink) out(`  setup link ${name}: ${l.setupLink}`);
     }
+    out(`usage-reconcile: ${await reconcileDemoUsage()} counters set`);
   }
   await closeDb();
 }
