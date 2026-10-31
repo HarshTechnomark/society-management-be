@@ -111,7 +111,7 @@ export async function login(
 
 export const idem = (): Record<string, string> => ({ 'Idempotency-Key': randomUUID() });
 
-type M = 'get' | 'post' | 'patch' | 'delete';
+type M = 'get' | 'post' | 'patch' | 'put' | 'delete';
 /** Authenticated call with the cookies of a signed-in user. */
 export const as =
   (cookies: Cookies, app: CallOpts['app'] = 'ADMIN') =>
