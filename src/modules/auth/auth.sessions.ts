@@ -73,12 +73,12 @@ export function resolveActiveSociety(
 }
 
 // ------------------------------------------------------------------ views
-export async function buildUserView(u: User): Promise<AuthUserView> {
+export async function buildUserView(u: User, tx?: Transaction): Promise<AuthUserView> {
   const [passkeyCount, recoveryCodesRemaining, mfaMandatory, passwordSet] = await Promise.all([
-    UserPasskey.count({ where: { userId: u.id } }),
-    UserRecoveryCode.count({ where: { userId: u.id, usedAt: null } }),
+    UserPasskey.count({ where: { userId: u.id }, transaction: tx }),
+    UserRecoveryCode.count({ where: { userId: u.id, usedAt: null }, transaction: tx }),
     userRequiresMfa(u),
-    hasPassword(u.id!),
+    hasPassword(u.id!, tx),
   ]);
   return {
     id: u.id!,
@@ -101,20 +101,23 @@ export async function buildUserView(u: User): Promise<AuthUserView> {
 }
 
 /** `hasPassword` needs the secret column, which the default scope hides. */
-async function hasPassword(userId: number): Promise<boolean> {
-  const u = await User.scope('withSecrets').findByPk(userId, { attributes: ['id', 'passwordHash'] });
+async function hasPassword(userId: number, tx?: Transaction): Promise<boolean> {
+  const u = await User.scope('withSecrets').findByPk(userId, {
+    attributes: ['id', 'passwordHash'],
+    transaction: tx,
+  });
   return Boolean(u?.passwordHash);
 }
 
 /** The object returned by `GET /auth/me` and inside every SIGNED_IN result (section 8.13). */
-export async function buildMe(user: User, s: Session): Promise<AuthMe> {
+export async function buildMe(user: User, s: Session, tx?: Transaction): Promise<AuthMe> {
   const app = s.clientApp;
   const support = s.supportGrantId !== null;
   const all = support
     ? []
     : (await ports().authAccess.listMemberships(user.id!)).filter(m => membershipFitsApp(m, app));
   const fitActiveSocieties = new Set(all.filter(m => m.status === 'ACTIVE').map(m => m.societyId));
-  const view = await buildUserView(user);
+  const view = await buildUserView(user, tx);
   const societyId = s.activeSocietyId;
   const [permissions, platformPermissions, features, grant, stepUpMinutes] = await Promise.all([
     societyId && !support ? ports().authAccess.getPermissions(user.id!, societyId) : Promise.resolve([]),
@@ -262,7 +265,7 @@ export async function createSession(
   if (earlier > 0 && seenDevice === 0)
     safeAfterCommit(tx, () => notify('auth.new_device_login', [{ userId: user.id! }], { deviceLabel }));
 
-  const me = await buildMe(user, row);
+  const me = await buildMe(user, row, tx);
   return {
     sessionId: row.id!,
     me,

@@ -81,7 +81,7 @@ export async function patchMe(
       );
       safeAfterCommit(tx, () => emitToUser(u.id!, 'auth.profile.updated', { version: u.version }));
     }
-    return buildUserView(u);
+    return buildUserView(u, tx);
   });
 }
 

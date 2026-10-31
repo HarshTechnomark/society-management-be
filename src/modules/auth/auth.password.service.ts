@@ -1,6 +1,7 @@
 import { Op, type Transaction } from 'sequelize';
 import { AuthToken, User, sequelize } from '../../models';
 import { addDays, now } from '../../lib/clock';
+import { kv } from '../../lib/kv';
 import { notify } from '../../lib/notify';
 import { AppError, ConflictError, ForbiddenError, ValidationError } from '../../utils/errors';
 import { audit } from '../../utils/audit';
@@ -112,7 +113,11 @@ async function setPasswordViaLink(
     } else {
       await audit(ctx, { action: 'auth.password.set', entityType: 'user', entityId: user.id!, actor }, tx);
     }
-    safeAfterCommit(tx, () => notify('auth.password_changed', [{ userId: user.id! }], {}));
+    safeAfterCommit(tx, async () => {
+      if (purpose === 'PASSWORD_RESET' && user.email)
+        await kv().slidingWindowReset(`login-email:${user.email}`);
+      await notify('auth.password_changed', [{ userId: user.id! }], {});
+    });
   });
 }
 

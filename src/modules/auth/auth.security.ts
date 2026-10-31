@@ -432,7 +432,7 @@ export async function confirmMobileChange(
     await ports().residentsHooks.onUserMobileChanged(u.id!, old, newMobile, tx);
     safeAfterCommit(tx, () => notify('auth.mobile_changed', [{ mobile: old }], {}));
     profileUpdated(tx, u.id!, u.version);
-    return buildUserView(u);
+    return buildUserView(u, tx);
   });
 }
 

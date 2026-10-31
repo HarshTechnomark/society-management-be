@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { env } from '../lib/env';
 import { AppError } from '../utils/errors';
-import { isPublicRoute } from '../modules/auth/public.routes';
+import { isPublicRoute, isRefreshRoute } from '../modules/auth/public.routes';
 import { csrfTokenFor, safeEqual } from '../modules/auth/auth.crypto';
 import { sessionIdFromRefresh } from '../modules/auth/auth.sessions';
 import { COOKIES, verifyAccessToken } from '../modules/auth/auth.tokens';
@@ -26,12 +26,13 @@ export const csrfMiddleware: RequestHandler = (req, _res, next) => {
   const refresh = req.cookies?.[COOKIES.refresh] as string | undefined;
   if (!access && !refresh) return next();
 
-  let sid: number | null = null;
-  if (access) {
-    const c = verifyAccessToken(access, undefined, { ignoreExpiration: true });
-    if (c) sid = Number(c.sid);
-  }
-  if (sid === null) sid = sessionIdFromRefresh(refresh);
+  const fromAccess = access ? verifyAccessToken(access, undefined, { ignoreExpiration: true }) : null;
+  const accessSid = fromAccess ? Number(fromAccess.sid) : null;
+  const refreshSid = sessionIdFromRefresh(refresh);
+  // two cookies naming different sessions never belong together; the refresh route trusts only its own cookie
+  if (accessSid !== null && refreshSid !== null && accessSid !== refreshSid)
+    return next(fail('CSRF token is missing or wrong'));
+  const sid = isRefreshRoute(req.method, req.path) ? refreshSid : (accessSid ?? refreshSid);
   const header = req.get('x-csrf-token');
   const cookie = req.cookies?.[COOKIES.csrf] as string | undefined;
   if (!sid || !header || !cookie || !safeEqual(header, cookie) || !safeEqual(header, csrfTokenFor(sid)))
