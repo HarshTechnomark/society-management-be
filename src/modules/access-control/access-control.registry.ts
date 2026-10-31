@@ -13,6 +13,10 @@ export interface AccessTag {
   idempotent?: boolean;
   allowWhenClosed?: boolean;
   allowWhenSuspended?: boolean;
+  /** Society route open to any active member (no permission key), e.g. `GET /subscription/entitlements`. */
+  memberOnly?: boolean;
+  /** Module 04 `requireFeature` keys on the route. */
+  features?: string[];
 }
 
 const TAG = Symbol.for('societyapp.access');
@@ -33,6 +37,8 @@ export interface RouteMeta {
   idempotent: boolean;
   allowWhenClosed: boolean;
   allowWhenSuspended: boolean;
+  memberOnly: boolean;
+  features: string[];
 }
 
 function mountPrefix(layer: any): string {
@@ -78,6 +84,8 @@ function walk(stack: any[], prefix: string, inherited: AccessTag[], out: RouteMe
           idempotent: tags.some(t => t.idempotent),
           allowWhenClosed: tags.some(t => t.allowWhenClosed),
           allowWhenSuspended: tags.some(t => t.allowWhenSuspended),
+          memberOnly: tags.some(t => t.memberOnly),
+          features: [...new Set(tags.flatMap(t => t.features ?? []))],
         });
       }
     } else if (layer.name === 'router' && layer.handle?.stack) {
@@ -121,7 +129,7 @@ export function routeProblems(
   for (const r of routes) {
     const id = `${r.method} ${r.path}`;
     if (r.kind === 'unmarked' && !isPublic(r.method, r.path)) out.push(`${id}: no marker`);
-    if ((r.kind === 'society' || r.kind === 'platform') && r.permissions.length === 0)
+    if ((r.kind === 'society' || r.kind === 'platform') && r.permissions.length === 0 && !r.memberOnly)
       out.push(`${id}: ${r.kind} route without a permission`);
   }
   return out;

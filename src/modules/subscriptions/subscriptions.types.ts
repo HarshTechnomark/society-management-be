@@ -39,6 +39,9 @@ export interface ResolvedEntitlements {
   planVersionId: number | null;
   status: SubscriptionStatus | null;
   billingAnchorDay: number;
+  timezone: string;
+  /** Current usage month start (`YYYY-MM-DD`, BR-04-20). */
+  usageMonth: string;
   features: Record<string, ResolvedFeature>;
   limits: Record<string, ResolvedLimit>;
   /** Feature keys that stay readable until `readOnlyUntil` (BR-04-18). */

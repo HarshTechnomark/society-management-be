@@ -124,3 +124,28 @@ export function planLimitValue(
   if (base === null) return null;
   return perFlats ? Math.max(base, Math.ceil(flats / perFlats)) : base;
 }
+
+/** The instant a society-local calendar day starts (for `endsAt` of usage months and cache expiry). */
+export function zonedDayStart(date: string, timezone = 'Asia/Kolkata'): Date {
+  const guess = new Date(`${date}T00:00:00.000Z`);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(guess);
+  const get = (t: string): number => Number(parts.find(p => p.type === t)!.value);
+  const asUtc = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour'),
+    get('minute'),
+    get('second'),
+  );
+  return new Date(guess.getTime() - (asUtc - guess.getTime()));
+}
