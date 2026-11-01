@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditLog, AuthOtp, AuthToken, Session, User, closeDb } from '../../../src/models';
-import { advance, setNow } from '../../../src/lib/clock';
+import { advance, now, setNow } from '../../../src/lib/clock';
 import { listInbox } from '../../../src/lib/inbox';
 import { setMinResponseMs } from '../../../src/modules/auth/auth.util';
 import { setAuthPorts } from '../../../src/modules/auth/auth.ports';
@@ -384,7 +384,7 @@ describe('public sign-up OTP (BR-02-53)', () => {
     const t = (await AuthToken.findOne({ where: { purpose: 'SIGNUP' } }))!;
     expect(t.tokenHash).toMatch(/^[0-9a-f]{64}$/);
     expect(t.tokenHash).not.toContain(v.body.data.signupToken);
-    expect(t.expiresAt.getTime() - Date.now()).toBeGreaterThan(0);
+    expect(t.expiresAt.getTime() - now().getTime()).toBeGreaterThan(0);
     expect(t.expiresAt.toISOString()).toBe('2026-11-01T04:45:00.000Z');
     expect(t.payload).toMatchObject({ mobile: '9123456789', clientApp: 'ADMIN' });
     expect(t.userId).toBeNull();

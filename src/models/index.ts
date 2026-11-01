@@ -27,6 +27,10 @@ import { EntitlementOverride } from './entitlement-override.model';
 import { FeatureFlag } from './feature-flag.model';
 import { FeatureFlagOverride } from './feature-flag-override.model';
 import { UsageCounter } from './usage-counter.model';
+import { SocietyLifecycleEvent } from './society-lifecycle-event.model';
+import { SupportAccessGrant } from './support-access-grant.model';
+import { SocietyNote } from './society-note.model';
+import { DataExport } from './data-export.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -74,6 +78,10 @@ const models = {
   FeatureFlag,
   FeatureFlagOverride,
   UsageCounter,
+  SocietyLifecycleEvent,
+  SupportAccessGrant,
+  SocietyNote,
+  DataExport,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -145,6 +153,20 @@ FeatureFlagOverride.belongsTo(FeatureFlag, { foreignKey: 'flagId' });
 FeatureFlagOverride.belongsTo(Society, { foreignKey: 'societyId' });
 UsageCounter.belongsTo(Society, { foreignKey: 'societyId' });
 
+// Module 05 associations (section 7)
+Society.hasMany(SocietyLifecycleEvent, { as: 'lifecycleEvents', foreignKey: 'societyId' });
+SocietyLifecycleEvent.belongsTo(Society, { foreignKey: 'societyId' });
+SocietyLifecycleEvent.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' });
+Society.belongsTo(User, { as: 'creator', foreignKey: 'creatorUserId' });
+SupportAccessGrant.belongsTo(Society, { foreignKey: 'societyId' });
+SupportAccessGrant.belongsTo(User, { as: 'requester', foreignKey: 'platformUserId' });
+SupportAccessGrant.belongsTo(User, { as: 'decidedBy', foreignKey: 'decidedByUserId' });
+SupportAccessGrant.belongsTo(User, { as: 'endedBy', foreignKey: 'endedByUserId' });
+SocietyNote.belongsTo(Society, { foreignKey: 'societyId' });
+SocietyNote.belongsTo(User, { as: 'author', foreignKey: 'createdBy' });
+DataExport.belongsTo(Society, { foreignKey: 'societyId' });
+DataExport.belongsTo(User, { as: 'requestedBy', foreignKey: 'requestedByUserId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -175,6 +197,10 @@ export {
   FeatureFlag,
   FeatureFlagOverride,
   UsageCounter,
+  SocietyLifecycleEvent,
+  SupportAccessGrant,
+  SocietyNote,
+  DataExport,
 };
 
 export async function closeDb(): Promise<void> {

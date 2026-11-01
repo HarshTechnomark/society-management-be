@@ -26,19 +26,40 @@ function canonical(v: unknown): string {
  * still running is `409 REQUEST_IN_PROGRESS`. Failed requests free the key so the client can retry.
  * Place it after `validate` and after step-up, so a request that is refused for those reasons does not use up the key.
  */
-export const idempotency = (): RequestHandler =>
+export interface IdempotencyOptions {
+  /**
+   * Public routes (no user): returns the scope of the key, e.g. the mobile of a sign-up token (module 05 8.1). The key is
+   * stored under user id 0 as a UUID derived from SHA-256(scope, key), so two callers never share a key. Returning null
+   * skips idempotency and lets the route refuse the request itself.
+   */
+  publicScope?: (req: import('express').Request) => Promise<string | null>;
+}
+
+const scopedKey = (scope: string, key: string): string => {
+  const h = createHash('sha256').update(`${scope}:${key.toLowerCase()}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+};
+
+export const idempotency = (opts: IdempotencyOptions = {}): RequestHandler =>
   tag(
     async (req, res, next) => {
       try {
-        const userId = req.ctx.user?.id;
-        if (!userId) return next(new AppError(401, 'UNAUTHENTICATED', 'Sign in to continue'));
-        const key = req.get('idempotency-key');
-        if (!key || !UUID.test(key))
+        const key0 = req.get('idempotency-key');
+        if (!key0 || !UUID.test(key0))
           return next(
             new ValidationError([
               { field: 'Idempotency-Key', message: 'A UUID Idempotency-Key header is required' },
             ]),
           );
+        let userId = req.ctx.user?.id;
+        let key = key0;
+        if (!userId && opts.publicScope) {
+          const scope = await opts.publicScope(req);
+          if (!scope) return next();
+          userId = 0;
+          key = scopedKey(scope, key0);
+        }
+        if (userId === undefined) return next(new AppError(401, 'UNAUTHENTICATED', 'Sign in to continue'));
         const hash = createHash('sha256')
           .update(`${req.method}${req.originalUrl.split('?')[0]}${canonical(req.body)}`)
           .digest('hex');

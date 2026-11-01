@@ -1,4 +1,5 @@
 import { Society } from '../src/models';
+import { addDays, now } from '../src/lib/clock';
 
 /**
  * Module 01 `demo-societies`: only the society rows (module 08 adds towers and flats, module 05 the lifecycle columns).
@@ -66,6 +67,9 @@ export async function seedDemoSocieties(): Promise<{ created: string[]; skipped:
       pincode: d.pincode,
       addressLine1: d.addressLine1,
       status: d.status,
+      // module 05 CHECK constraints: a TRIAL society has a trial end (the module 05 seed sets the demo values)
+      trialEndsAt: d.status === 'TRIAL' ? addDays(now(), 14) : null,
+      activatedAt: d.status === 'ACTIVE' ? now() : null,
     } as never);
     created.push(d.slug);
   }

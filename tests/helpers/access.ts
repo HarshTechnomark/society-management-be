@@ -29,6 +29,20 @@ export async function resetAccess(): Promise<void> {
   await syncCatalogue();
 }
 
+/** Columns the module 05 CHECK constraints require for a status (trial end, suspension cause, closure time). */
+export function lifecycleColumns(status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CLOSED' | 'PAST_DUE') {
+  const t = now();
+  return {
+    status,
+    trialEndsAt: status === 'TRIAL' ? new Date(t.getTime() + 14 * 86_400_000) : null,
+    suspendedAt: status === 'SUSPENDED' ? t : null,
+    suspensionCause: status === 'SUSPENDED' ? 'MANUAL' : null,
+    closedAt: status === 'CLOSED' ? t : null,
+    closureReason: status === 'CLOSED' ? 'OTHER' : null,
+    activatedAt: status === 'ACTIVE' || status === 'PAST_DUE' ? t : null,
+  };
+}
+
 let slugCounter = 0;
 export async function makeSociety(
   name = 'Sky Heights CHS',
@@ -42,7 +56,7 @@ export async function makeSociety(
     state: 'Maharashtra',
     pincode: '411045',
     addressLine1: 'Baner Road',
-    status: o.status ?? 'ACTIVE',
+    ...lifecycleColumns(o.status ?? 'ACTIVE'),
   } as never);
   await sequelize.transaction(tx => provisionSocietyRoles(s.id!, tx));
   return s;
