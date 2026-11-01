@@ -1,4 +1,4 @@
-import { Sequelize } from 'sequelize';
+import { Op, Sequelize } from 'sequelize';
 import { env } from '../lib/env';
 import { User } from './user.model';
 import { Session } from './session.model';
@@ -17,6 +17,16 @@ import { SocietyMember } from './society-member.model';
 import { MemberGrant } from './member-grant.model';
 import { Invitation } from './invitation.model';
 import { IdempotencyKey } from './idempotency-key.model';
+import { Plan } from './plan.model';
+import { PlanVersion } from './plan-version.model';
+import { PlanEntitlement } from './plan-entitlement.model';
+import { Addon } from './addon.model';
+import { Subscription } from './subscription.model';
+import { SubscriptionAddon } from './subscription-addon.model';
+import { EntitlementOverride } from './entitlement-override.model';
+import { FeatureFlag } from './feature-flag.model';
+import { FeatureFlagOverride } from './feature-flag-override.model';
+import { UsageCounter } from './usage-counter.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -54,6 +64,16 @@ const models = {
   MemberGrant,
   Invitation,
   IdempotencyKey,
+  Plan,
+  PlanVersion,
+  PlanEntitlement,
+  Addon,
+  Subscription,
+  SubscriptionAddon,
+  EntitlementOverride,
+  FeatureFlag,
+  FeatureFlagOverride,
+  UsageCounter,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -96,6 +116,35 @@ Invitation.belongsTo(Role, { foreignKey: 'roleId' });
 Invitation.belongsTo(User, { as: 'inviter', foreignKey: 'invitedBy', constraints: false });
 User.belongsTo(Role, { as: 'platformRole', foreignKey: 'platformRoleId', constraints: false });
 
+// Module 04 associations (section 7)
+Plan.hasMany(PlanVersion, { foreignKey: 'planId' });
+Plan.belongsTo(PlanVersion, { as: 'currentVersion', foreignKey: 'currentVersionId', constraints: false });
+PlanVersion.belongsTo(Plan, { foreignKey: 'planId' });
+PlanVersion.hasMany(PlanEntitlement, { foreignKey: 'planVersionId' });
+PlanEntitlement.belongsTo(PlanVersion, { foreignKey: 'planVersionId' });
+Addon.hasMany(SubscriptionAddon, { foreignKey: 'addonId' });
+Subscription.belongsTo(Society, { foreignKey: 'societyId' });
+Subscription.belongsTo(Plan, { foreignKey: 'planId' });
+Subscription.belongsTo(PlanVersion, { as: 'planVersion', foreignKey: 'planVersionId' });
+Subscription.belongsTo(PlanVersion, { as: 'pendingPlanVersion', foreignKey: 'pendingPlanVersionId' });
+Subscription.belongsTo(PlanVersion, {
+  as: 'downgradedFromPlanVersion',
+  foreignKey: 'downgradedFromPlanVersionId',
+});
+Subscription.hasMany(SubscriptionAddon, { foreignKey: 'subscriptionId' });
+SubscriptionAddon.belongsTo(Subscription, { foreignKey: 'subscriptionId' });
+SubscriptionAddon.belongsTo(Addon, { foreignKey: 'addonId' });
+Society.hasOne(Subscription, {
+  as: 'liveSubscription',
+  foreignKey: 'societyId',
+  scope: { status: { [Op.ne]: 'CANCELLED' } },
+});
+EntitlementOverride.belongsTo(Society, { foreignKey: 'societyId' });
+FeatureFlag.hasMany(FeatureFlagOverride, { foreignKey: 'flagId' });
+FeatureFlagOverride.belongsTo(FeatureFlag, { foreignKey: 'flagId' });
+FeatureFlagOverride.belongsTo(Society, { foreignKey: 'societyId' });
+UsageCounter.belongsTo(Society, { foreignKey: 'societyId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -116,6 +165,16 @@ export {
   MemberGrant,
   Invitation,
   IdempotencyKey,
+  Plan,
+  PlanVersion,
+  PlanEntitlement,
+  Addon,
+  Subscription,
+  SubscriptionAddon,
+  EntitlementOverride,
+  FeatureFlag,
+  FeatureFlagOverride,
+  UsageCounter,
 };
 
 export async function closeDb(): Promise<void> {

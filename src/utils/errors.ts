@@ -2,6 +2,8 @@
 export interface FieldError {
   field: string;
   message: string;
+  /** Extra detail some codes carry (module 04 402 bodies: `currentPlan`, `availableIn`, `limit`, `used`, ...). */
+  [detail: string]: unknown;
 }
 
 export class AppError extends Error {
@@ -28,8 +30,8 @@ export class UnauthorizedError extends AppError {
   }
 }
 export class PaymentRequiredError extends AppError {
-  constructor(code = 'USAGE_LIMIT_EXCEEDED', message = 'Plan limit reached') {
-    super(402, code, message);
+  constructor(code = 'USAGE_LIMIT_EXCEEDED', message = 'Plan limit reached', errors?: FieldError[]) {
+    super(402, code, message, errors);
   }
 }
 export class ForbiddenError extends AppError {

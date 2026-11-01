@@ -5,6 +5,8 @@ import { logger } from './lib/logger';
 import { closeDb, sequelize } from './models';
 import { registerAuthJobs } from './modules/auth/auth.jobs';
 import { registerAccessControl } from './modules/access-control/access-control.public';
+import { registerSubscriptions } from './modules/subscriptions/subscriptions.public';
+import { assertCatalogueComplete } from './modules/subscriptions/subscriptions.seed';
 import { startWorkers, stopWorkers, usesRedis } from './lib/queue';
 import { closeRedis } from './lib/kv';
 
@@ -16,6 +18,8 @@ async function main(): Promise<void> {
   // Without Redis the jobs run in this process; with Redis `npm run start:worker` runs them.
   registerAuthJobs();
   registerAccessControl();
+  registerSubscriptions();
+  await assertCatalogueComplete(); // every catalogue key has a row in every plan version (module 04)
   if (!usesRedis()) await startWorkers();
 
   const server = createApp().listen(e.PORT, () =>

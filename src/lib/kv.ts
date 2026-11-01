@@ -29,12 +29,17 @@ export interface KvStore {
   cacheDel(...keys: string[]): Promise<void>;
   /** Deletes every key that starts with the prefix (SCAN on Redis). */
   cacheDelPrefix(prefix: string): Promise<void>;
+  /** Integer counter without expiry (module 04 cache generations `ent:gen:<id>`, `ff:gen`). Missing reads as 0. */
+  counterGet(key: string): Promise<number>;
+  /** Atomic `INCR`; returns the new value. */
+  counterIncr(key: string): Promise<number>;
 }
 
 export class MemoryKv implements KvStore {
   private windows = new Map<string, number[]>();
   private lists = new Map<string, string[]>();
   private cache = new Map<string, { value: string; expiresAt: number }>();
+  private counters = new Map<string, number>();
 
   async slidingWindowHit(key: string, windowMs: number, limit: number): Promise<HitResult> {
     const t = nowMs();
@@ -85,6 +90,14 @@ export class MemoryKv implements KvStore {
   }
   async cacheDelPrefix(prefix: string): Promise<void> {
     for (const k of [...this.cache.keys()]) if (k.startsWith(prefix)) this.cache.delete(k);
+  }
+  async counterGet(key: string): Promise<number> {
+    return this.counters.get(key) ?? 0;
+  }
+  async counterIncr(key: string): Promise<number> {
+    const n = (this.counters.get(key) ?? 0) + 1;
+    this.counters.set(key, n);
+    return n;
   }
 }
 
@@ -158,6 +171,12 @@ export class RedisKv implements KvStore {
       cursor = next;
       if (keys.length) await this.redis.del(...keys);
     } while (cursor !== '0');
+  }
+  async counterGet(key: string): Promise<number> {
+    return Number((await this.redis.get(`ctr:${key}`)) ?? 0);
+  }
+  async counterIncr(key: string): Promise<number> {
+    return this.redis.incr(`ctr:${key}`);
   }
 }
 

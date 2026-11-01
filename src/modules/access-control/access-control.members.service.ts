@@ -48,11 +48,23 @@ const holdsSeat = (status: string, role: Pick<Role, 'consumesSeat'>): boolean =>
   (status === 'ACTIVE' || status === 'SUSPENDED') && role.consumesSeat;
 
 /** BR-03-33: consume or release one admin seat when a member starts or stops holding one. */
-async function moveSeat(ctx: Ctx, from: boolean, to: boolean, tx: Transaction): Promise<void> {
+async function moveSeat(
+  ctx: Ctx,
+  societyId: number,
+  from: boolean,
+  to: boolean,
+  tx: Transaction,
+): Promise<void> {
   if (!from && to)
-    await accessPorts().entitlements.consumeLimit(ctx, 'limit.admin_seats', 1, { transaction: tx });
+    await accessPorts().entitlements.consumeLimit(ctx, 'limit.admin_seats', 1, {
+      transaction: tx,
+      societyId,
+    });
   if (from && !to)
-    await accessPorts().entitlements.releaseLimit(ctx, 'limit.admin_seats', 1, { transaction: tx });
+    await accessPorts().entitlements.releaseLimit(ctx, 'limit.admin_seats', 1, {
+      transaction: tx,
+      societyId,
+    });
 }
 
 // ------------------------------------------------------------------ views
@@ -362,7 +374,7 @@ async function changeRoleCore(
   const newKeys = await roleKeysTx(newRole.id!, tx);
   if (!committee && newRole.scope === 'society') assertCanGrant(ctx, newKeys);
 
-  await moveSeat(ctx, holdsSeat(m.status, oldRole), holdsSeat(m.status, newRole), tx);
+  await moveSeat(ctx, m.societyId, holdsSeat(m.status, oldRole), holdsSeat(m.status, newRole), tx);
   const beforeKey = oldRole.key;
   m.roleId = newRole.id!;
   m.version += 1;
@@ -596,7 +608,7 @@ async function endCore(
 ): Promise<void> {
   const wasActive = m.status === 'ACTIVE';
   const keys = wasActive ? await roleKeysTx(m.roleId, tx) : [];
-  await moveSeat(ctx, holdsSeat(m.status, m.Role), false, tx);
+  await moveSeat(ctx, m.societyId, holdsSeat(m.status, m.Role), false, tx);
   const before = { status: m.status };
   m.status = 'ENDED';
   m.endedAt = now();
@@ -786,7 +798,7 @@ async function createOrReviveMember(
   let member: SocietyMember;
   if (existing && existing.status !== 'ENDED')
     throw new AppError(409, 'ALREADY_MEMBER', 'This person is already a member');
-  await moveSeat(ctx, false, holdsSeat('ACTIVE', input.role), tx);
+  await moveSeat(ctx, input.societyId, false, holdsSeat('ACTIVE', input.role), tx);
   if (existing) {
     existing.roleId = input.role.id!;
     existing.status = 'ACTIVE';

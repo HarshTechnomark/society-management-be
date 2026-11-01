@@ -14,6 +14,7 @@ import { noStore } from './modules/auth/auth.controller';
 import { devRoutes } from './modules/dev/dev.routes';
 import { accessControlRoutes } from './modules/access-control/access-control.routes';
 import { authArea, publicRoute } from './middlewares/permission.middleware';
+import { subscriptionsRoutes } from './modules/subscriptions/subscriptions.routes';
 import './modules/auth/auth.templates';
 import './modules/access-control/access-control.templates';
 
@@ -46,6 +47,8 @@ export function createApp(): Express {
   api.use('/me/security', authArea(), meSecurityRoutes);
   // module 03: roles, members, invitations, grants, household and platform team (every route carries a marker)
   api.use(accessControlRoutes);
+  // module 04: plans, subscriptions, entitlements and feature flags
+  api.use(subscriptionsRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

@@ -51,3 +51,16 @@ export const authenticatedOnly = (): RequestHandler =>
 
 /** Tags a whole mounted area (for example `/auth`) as authenticated-or-public-by-list without checking anything itself. */
 export const authArea = (): RequestHandler => tag((_req, _res, next) => next(), { kind: 'auth' });
+
+/**
+ * Marks a society route open to every ACTIVE member (or support grant) without a permission key. `societyMiddleware`
+ * already refused non-members; this only records the intent for the route registry (module 04 `GET /subscription/entitlements`).
+ */
+export const anyActiveMember = (): RequestHandler =>
+  tag(
+    (req, _res, next) =>
+      req.ctx.membership || req.ctx.supportGrant
+        ? next()
+        : next(new ForbiddenError('NOT_A_MEMBER', 'You are not a member of this society')),
+    { memberOnly: true },
+  );

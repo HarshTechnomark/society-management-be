@@ -12,8 +12,19 @@ import type { ActiveSupportGrant, LimitKey, UnitLink } from './access-control.ty
 export interface AccessPorts {
   /** Module 04. `consumeLimit` throws `402 USAGE_LIMIT_EXCEEDED`. */
   entitlements: {
-    consumeLimit(ctx: Ctx, key: LimitKey, amount: number, opts: { transaction: Transaction }): Promise<void>;
-    releaseLimit(ctx: Ctx, key: LimitKey, amount: number, opts: { transaction: Transaction }): Promise<void>;
+    /** `societyId` is required when `ctx.society` is not set (system contexts). */
+    consumeLimit(
+      ctx: Ctx,
+      key: LimitKey,
+      amount: number,
+      opts: { transaction: Transaction; societyId?: number },
+    ): Promise<void>;
+    releaseLimit(
+      ctx: Ctx,
+      key: LimitKey,
+      amount: number,
+      opts: { transaction: Transaction; societyId?: number },
+    ): Promise<void>;
     /** `limit` null means unlimited; `used` is the current consumption. */
     getLimit(societyId: number, key: LimitKey): Promise<{ limit: number | null; used: number }>;
     planKeyFor(societyId: number): Promise<string>;

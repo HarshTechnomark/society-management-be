@@ -55,6 +55,11 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    'usage_counters',
+    'feature_flag_overrides',
+    'entitlement_overrides',
+    'subscription_addons',
+    'subscriptions',
     'idempotency_keys',
     'member_grants',
     'society_members',
@@ -170,7 +175,7 @@ export const cookieHeader = (c: Cookies): string =>
     .map(([k, v]) => `${k}=${v}`)
     .join('; ');
 
-type Method = 'get' | 'post' | 'patch' | 'delete';
+type Method = 'get' | 'post' | 'patch' | 'put' | 'delete';
 export interface CallOpts {
   app?: App;
   cookies?: Cookies;

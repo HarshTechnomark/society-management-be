@@ -39,7 +39,9 @@ describe('route registry (T03-43, section 13)', () => {
     expect(routes.length).toBeGreaterThan(80);
     expect(routeProblems(routes, isPublicRoute)).toEqual([]);
     expect(routes.filter(r => r.kind === 'society').length).toBeGreaterThan(20);
-    expect(routes.filter(r => r.kind === 'platform').length).toBe(15);
+    // module 03's own platform routes; module 04 adds plans, add-ons, subscriptions and flags
+    const m04 = /^\/platform\/(plans|plan-versions|entitlement-catalogue|addons|subscriptions|feature-flags)/;
+    expect(routes.filter(r => r.kind === 'platform' && !m04.test(r.path)).length).toBe(15);
   });
 
   it('detects an unmarked route and a society route without a permission', () => {
@@ -120,7 +122,7 @@ describe('permission matrix (T03-35)', () => {
     const member = await join(society, user, 'committee_member');
     await member.update({ roleId: (await Role.findOne({ where: { key: 'custom_minimal' } }))!.id! });
     const call = as(await login(user));
-    const society_routes = routes.filter(r => r.kind === 'society');
+    const society_routes = routes.filter(r => r.kind === 'society' && !r.memberOnly);
     const failures: string[] = [];
     for (const r of society_routes) {
       const res = await call(
@@ -136,6 +138,9 @@ describe('permission matrix (T03-35)', () => {
     }
     expect(failures).toEqual([]);
     expect(society_routes.length).toBeGreaterThan(20);
+    // routes open to every active member (module 04 `GET /subscription/entitlements`) answer this member
+    for (const r of routes.filter(x => x.kind === 'society' && x.memberOnly))
+      expect((await call(r.method.toLowerCase() as 'get', concrete(r.path))).status, r.path).toBe(200);
   });
 
   it('a platform user whose role lacks the permission gets 403 on every platform route; a society user gets PLATFORM_ACCESS_REQUIRED', async () => {
