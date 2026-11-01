@@ -31,6 +31,12 @@ import { SocietyLifecycleEvent } from './society-lifecycle-event.model';
 import { SupportAccessGrant } from './support-access-grant.model';
 import { SocietyNote } from './society-note.model';
 import { DataExport } from './data-export.model';
+import { NumberSequence } from './number-sequence.model';
+import { PlatformInvoice } from './platform-invoice.model';
+import { PlatformInvoiceLine } from './platform-invoice-line.model';
+import { PlatformPayment } from './platform-payment.model';
+import { PlatformCredit } from './platform-credit.model';
+import { DunningEvent } from './dunning-event.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -82,6 +88,12 @@ const models = {
   SupportAccessGrant,
   SocietyNote,
   DataExport,
+  NumberSequence,
+  PlatformInvoice,
+  PlatformInvoiceLine,
+  PlatformPayment,
+  PlatformCredit,
+  DunningEvent,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -167,6 +179,27 @@ SocietyNote.belongsTo(User, { as: 'author', foreignKey: 'createdBy' });
 DataExport.belongsTo(Society, { foreignKey: 'societyId' });
 DataExport.belongsTo(User, { as: 'requestedBy', foreignKey: 'requestedByUserId' });
 
+// Module 06 associations (section 7). `belongsTo(File, { as: 'pdf' })` waits for the module 01 files table.
+Society.hasMany(PlatformInvoice, { foreignKey: 'societyId' });
+PlatformInvoice.belongsTo(Society, { foreignKey: 'societyId' });
+PlatformInvoice.belongsTo(Subscription, { foreignKey: 'subscriptionId' });
+PlatformInvoice.hasMany(PlatformInvoiceLine, { as: 'lines', foreignKey: 'invoiceId' });
+PlatformInvoice.hasMany(PlatformInvoice, { as: 'creditNotes', foreignKey: 'originalInvoiceId' });
+PlatformInvoice.belongsTo(PlatformInvoice, { as: 'originalInvoice', foreignKey: 'originalInvoiceId' });
+PlatformInvoice.hasMany(PlatformPayment, { as: 'payments', foreignKey: 'invoiceId' });
+PlatformInvoice.hasMany(DunningEvent, { as: 'dunningEvents', foreignKey: 'invoiceId' });
+PlatformInvoiceLine.belongsTo(PlatformInvoice, { as: 'invoice', foreignKey: 'invoiceId' });
+PlatformInvoiceLine.belongsTo(PlanVersion, { as: 'planVersion', foreignKey: 'planVersionId' });
+PlatformPayment.belongsTo(Society, { foreignKey: 'societyId' });
+PlatformPayment.belongsTo(PlatformInvoice, { as: 'invoice', foreignKey: 'invoiceId' });
+PlatformPayment.belongsTo(PlatformPayment, { as: 'sourcePayment', foreignKey: 'sourcePaymentId' });
+PlatformPayment.hasMany(PlatformPayment, { as: 'refunds', foreignKey: 'sourcePaymentId' });
+PlatformCredit.belongsTo(Society, { foreignKey: 'societyId' });
+PlatformCredit.belongsTo(PlatformInvoice, { as: 'invoice', foreignKey: 'invoiceId' });
+PlatformCredit.belongsTo(PlatformPayment, { as: 'payment', foreignKey: 'paymentId' });
+DunningEvent.belongsTo(Society, { foreignKey: 'societyId' });
+DunningEvent.belongsTo(PlatformInvoice, { as: 'invoice', foreignKey: 'invoiceId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -201,6 +234,12 @@ export {
   SupportAccessGrant,
   SocietyNote,
   DataExport,
+  NumberSequence,
+  PlatformInvoice,
+  PlatformInvoiceLine,
+  PlatformPayment,
+  PlatformCredit,
+  DunningEvent,
 };
 
 export async function closeDb(): Promise<void> {

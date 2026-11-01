@@ -55,6 +55,12 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    'dunning_events',
+    'platform_credits',
+    'platform_payments',
+    'platform_invoice_lines',
+    'platform_invoices',
+    'number_sequences',
     'data_exports',
     'society_notes',
     'support_access_grants',
