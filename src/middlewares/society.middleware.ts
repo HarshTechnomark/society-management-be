@@ -85,7 +85,7 @@ export const societyMiddleware = (opts: SocietyOptions = {}): RequestHandler =>
             societyId,
             userId,
             method: req.method,
-            route: `${req.baseUrl}${req.route?.path ?? ''}`,
+            route: `${req.baseUrl}${req.route?.path ?? ''}`.replace(/^\/api\/v1/, ''),
             statusCode: res.statusCode,
           }),
         );
