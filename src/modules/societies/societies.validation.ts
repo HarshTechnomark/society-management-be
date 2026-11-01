@@ -85,15 +85,15 @@ const societyFields = {
 };
 
 const listFilters = {
-  q: text(2, 100, 'Search'),
+  q: text(2, 100, 'Search').optional(),
   status: many(z.enum(SOCIETY_STATUSES)),
-  planKey,
-  state,
-  city: text(2, 80, 'City'),
-  organizationId: id,
-  healthBand: z.enum(HEALTH_BANDS),
-  createdVia: z.enum(['ASSISTED', 'SELF_SERVE']),
-  trialEndingWithinDays: z.coerce.number().int().min(1).max(30),
+  planKey: planKey.optional(),
+  state: state.optional(),
+  city: text(2, 80, 'City').optional(),
+  organizationId: id.optional(),
+  healthBand: z.enum(HEALTH_BANDS).optional(),
+  createdVia: z.enum(['ASSISTED', 'SELF_SERVE']).optional(),
+  trialEndingWithinDays: z.coerce.number().int().min(1).max(30).optional(),
   sortBy: z
     .enum([
       'name',
