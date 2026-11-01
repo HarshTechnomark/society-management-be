@@ -604,9 +604,12 @@ describe('accept (8.17)', () => {
     expect(r.body.code).toBe('MEMBERSHIP_LIMIT_REACHED');
     expect((await Invitation.findByPk(invitationId))!.status).toBe('PENDING');
     await SocietyMember.destroy({ where: { userId: user.id } });
-    await sequelize.query('UPDATE societies SET status = "CLOSED" WHERE id = :id', {
-      replacements: { id: society.id },
-    });
+    await sequelize.query(
+      'UPDATE societies SET status = "CLOSED", closedAt = NOW(3), suspensionCause = NULL WHERE id = :id',
+      {
+        replacements: { id: society.id },
+      },
+    );
     await flushAcl();
     const closed = await f('post', `/invitations/${token}/accept`, {}, { headers: idem() });
     expect(closed.status).toBe(423);

@@ -195,9 +195,12 @@ describe('society status and support access (BR-03-17, BR-03-19)', () => {
     const society = await makeSociety();
     const chair = await memberUser(society, 'chairman');
     const c = as(await login(chair));
-    await sequelize.query('UPDATE societies SET status = "SUSPENDED" WHERE id = :id', {
-      replacements: { id: society.id },
-    });
+    await sequelize.query(
+      'UPDATE societies SET status = "SUSPENDED", suspensionCause = "MANUAL" WHERE id = :id',
+      {
+        replacements: { id: society.id },
+      },
+    );
     await flushAcl();
     expect((await c('get', '/roles')).status).toBe(200);
     const w = await c(
@@ -208,9 +211,12 @@ describe('society status and support access (BR-03-17, BR-03-19)', () => {
     );
     expect(w.status).toBe(423);
     expect(w.body.code).toBe('SOCIETY_SUSPENDED');
-    await sequelize.query('UPDATE societies SET status = "CLOSED" WHERE id = :id', {
-      replacements: { id: society.id },
-    });
+    await sequelize.query(
+      'UPDATE societies SET status = "CLOSED", closedAt = NOW(3), suspensionCause = NULL WHERE id = :id',
+      {
+        replacements: { id: society.id },
+      },
+    );
     await flushAcl();
     const closed = await c('get', '/roles');
     expect(closed.status).toBe(423);
