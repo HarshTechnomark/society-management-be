@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # The tests read .env.test, which is not committed; use the committed test-only values.
+      - run: cp .env.test.example .env.test
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
