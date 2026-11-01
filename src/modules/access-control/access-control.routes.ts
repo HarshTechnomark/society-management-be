@@ -13,6 +13,7 @@ import {
 import { accessController as c } from './access-control.controller';
 import { accessSchemas as s } from './access-control.validation';
 import { tag } from './access-control.registry';
+import { routeMeta } from '../societies/societies.guard';
 
 /** Step-up (`401 REAUTH_REQUIRED`), tagged so the registry knows the route needs it. */
 const stepUp = (): RequestHandler => tag(requireRecentAuth(), { stepUp: true });
@@ -99,6 +100,7 @@ r.get(
 );
 r.get(
   '/members/export',
+  routeMeta({ noSupportAccess: true }), // module 05 section 6.4: no export through a support session
   society(),
   can('settings.members.export'),
   validate({ query: s.exportQuery }),
