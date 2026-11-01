@@ -15,10 +15,9 @@ import { istDate, now } from '../src/lib/clock';
 import { nextNumber, financialYearOf } from '../src/utils/numberSequences';
 import { addDaysYmd, addMonthsAnchored, zonedDayStart } from '../src/modules/subscriptions/pricing';
 import { chargedOf, priceOf } from '../src/modules/subscriptions/subscriptions.util';
-import {
-  gstStateCode,
-  PLATFORM_STATE_CODE,
-} from '../src/modules/platform-billing/platform-billing.constants';
+import { computeTax, placeOfSupply } from '../src/modules/platform-billing/pricing';
+import { percentOf } from '../src/lib/money';
+import { BILLING_SETTING_DEFAULTS as S } from '../src/modules/platform-billing/platform-billing.settings';
 
 /**
  * Module 06 demo seed (section 7.6), not run in production. For Sky Heights CHS (Premium) and Green Park CHS
@@ -26,22 +25,19 @@ import {
  * Sky Heights: month −2 paid by UPI, then a SERVICE_CREDIT credit note on it (the excess becomes credit), month −1
  * settled by that credit, a 194J TDS claim and a UPI payment. Green Park: month −2 paid by UPI, month −1 paid by NEFT
  * with a manual payment entered by Platform Admin and approved by Isha Kapoor.
- * Settings are the section 5.3 code defaults (module 07 does not exist yet); money is computed here with integer
- * paise until `pricing.ts` of module 06 exists. Idempotent: a society that already has a PERIOD invoice is skipped.
+ * Settings are the section 5.3 code defaults (module 07 does not exist yet); tax and place of supply come from the
+ * module 06 calculator (`pricing.ts`). Idempotent: a society that already has a PERIOD invoice is skipped.
  */
 const SUPPLIER = {
-  supplierLegalName: 'SocietyApp Technologies Pvt Ltd',
-  supplierGstin: '27ABCDE1234F1Z5',
-  supplierStateCode: PLATFORM_STATE_CODE,
-  supplierAddress: 'Registered office, Baner, Pune, Maharashtra 411045',
+  supplierLegalName: S['company.legalName'],
+  supplierGstin: S['company.gstin'],
+  supplierStateCode: S['company.stateCode'],
+  supplierAddress: S['company.address'],
 };
-const SAC = '998314';
-const GST_RATE = 18;
-const NET_TERMS_DAYS = 15;
-const SUSPEND_AFTER_DAYS = 15;
-
-/** `roundHalfUp(a × pct / 100)` for non-negative integers (BR-06-16). */
-const pctOf = (a: number, pct: number): number => Math.floor((2 * a * pct + 100) / 200);
+const SAC = S['billing.sacCode'];
+const GST_RATE = S['billing.gstRatePct'];
+const NET_TERMS_DAYS = S['billing.netTermsDays'];
+const SUSPEND_AFTER_DAYS = S['billing.suspendAfterDays'];
 
 interface Settlement {
   creditAppliedPaise?: number;
@@ -58,12 +54,9 @@ const amountDue = (total: number, s: Settlement): number =>
   (s.tdsPaise ?? 0) +
   (s.excessToCreditPaise ?? 0);
 
-function taxOf(subtotal: number, intra: boolean) {
-  const cgst = intra ? pctOf(subtotal, GST_RATE / 2) : 0;
-  const igst = intra ? 0 : pctOf(subtotal, GST_RATE);
-  const tax = 2 * cgst + igst;
-  return { cgstPaise: cgst, sgstPaise: cgst, igstPaise: igst, taxPaise: tax, totalPaise: subtotal + tax };
-}
+/** BR-06-15 amounts (subtotal, CGST/SGST or IGST, tax, total) from the module 06 calculator. */
+const taxOf = (subtotal: number, taxType: 'INTRA_STATE' | 'INTER_STATE') =>
+  computeTax(subtotal, taxType, GST_RATE);
 
 interface SeedCtx {
   society: Society;
@@ -74,14 +67,14 @@ interface SeedCtx {
 }
 
 function buyer(s: Society) {
-  const pos = s.gstin ? s.gstin.slice(0, 2) : (gstStateCode(s.state) ?? PLATFORM_STATE_CODE);
+  const pos = placeOfSupply({ gstin: s.gstin, state: s.state }, S['company.stateCode']);
   return {
     billingName: s.legalName ?? s.name,
     billingGstin: s.gstin,
     billingAddress: [s.addressLine1, s.addressLine2, s.city, s.pincode].filter(Boolean).join(', '),
     billingStateName: s.state,
-    placeOfSupplyStateCode: pos,
-    taxType: pos === PLATFORM_STATE_CODE ? ('INTRA_STATE' as const) : ('INTER_STATE' as const),
+    placeOfSupplyStateCode: pos.stateCode,
+    taxType: pos.taxType,
   };
 }
 
@@ -94,7 +87,7 @@ async function issuePeriodInvoice(c: SeedCtx, periodStart: string): Promise<Plat
   const b = buyer(society);
   const issueDate = periodStart;
   const dueDate = addDaysYmd(issueDate, NET_TERMS_DAYS);
-  const tax = taxOf(subtotal, b.taxType === 'INTRA_STATE');
+  const tax = taxOf(subtotal, b.taxType);
   const invoiceNo = await nextNumber(0, 'PLATFORM_INVOICE', { date: issueDate, transaction: t });
   const inv = await PlatformInvoice.create(
     {
@@ -115,9 +108,8 @@ async function issuePeriodInvoice(c: SeedCtx, periodStart: string): Promise<Plat
       billingCycle: 'MONTHLY',
       ...SUPPLIER,
       ...b,
-      gstRatePct: '18.0000',
+      gstRatePct: GST_RATE,
       sacCode: SAC,
-      subtotalPaise: subtotal,
       ...tax,
       amountDuePaise: tax.totalPaise,
       issuedAt: zonedDayStart(issueDate),
@@ -197,7 +189,7 @@ async function seedSkyHeights(c: SeedCtx, starts: string[]): Promise<void> {
   // credit note on month −2 (SMS outage): the invoice is already paid, so the whole note becomes credit (BR-06-35)
   const cnDate = addDaysYmd(starts[0]!, 20);
   const cnSubtotal = 50000;
-  const cnTax = taxOf(cnSubtotal, m2.taxType === 'INTRA_STATE');
+  const cnTax = taxOf(cnSubtotal, m2.taxType);
   const cn = await PlatformInvoice.create(
     {
       societyId: society.id!,
@@ -219,7 +211,6 @@ async function seedSkyHeights(c: SeedCtx, starts: string[]): Promise<void> {
       placeOfSupplyStateCode: m2.placeOfSupplyStateCode,
       gstRatePct: m2.gstRatePct,
       sacCode: SAC,
-      subtotalPaise: cnSubtotal,
       ...cnTax,
       amountDuePaise: 0,
       creditNoteReason: 'SERVICE_CREDIT',
@@ -277,7 +268,7 @@ async function seedSkyHeights(c: SeedCtx, starts: string[]): Promise<void> {
     { transaction: t },
   );
   await settle(m1, { creditAppliedPaise: cnTax.totalPaise }, starts[1]!, t);
-  const tds = pctOf(Number(m1.subtotalPaise), 10);
+  const tds = percentOf(Number(m1.subtotalPaise), S['billing.tdsMaxRatePct']);
   const tdsOn = addDaysYmd(starts[1]!, 4);
   await PlatformPayment.create(
     {
@@ -290,7 +281,7 @@ async function seedSkyHeights(c: SeedCtx, starts: string[]): Promise<void> {
       amountPaise: tds,
       appliedPaise: tds,
       tdsSection: '194J',
-      tdsRatePct: '10.0000',
+      tdsRatePct: S['billing.tdsMaxRatePct'],
       deductedOn: tdsOn,
       notes: 'TDS u/s 194J deducted by the society; certificate to follow',
     } as never,
