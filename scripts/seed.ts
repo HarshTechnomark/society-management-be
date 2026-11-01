@@ -11,6 +11,8 @@ import {
 } from '../seeders/subscriptions';
 import { registerAccessControl } from '../src/modules/access-control/access-control.public';
 import { registerSubscriptions } from '../src/modules/subscriptions/subscriptions.public';
+import { registerSocieties } from '../src/modules/societies/societies.public';
+import { seedSocieties } from '../seeders/societies';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -22,6 +24,7 @@ async function main(): Promise<void> {
   // module 04: real entitlement ports, so seats and custom roles are counted while members are seeded
   registerAccessControl();
   registerSubscriptions();
+  registerSocieties();
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
@@ -52,6 +55,10 @@ async function main(): Promise<void> {
       out(`  invitation ${name}: ${l.inviteLink}`);
       if (l.setupLink) out(`  setup link ${name}: ${l.setupLink}`);
     }
+    const so5 = await seedSocieties();
+    out(
+      `societies: lifecycle set ${so5.societies.join(', ') || 'none'}, grants ${so5.grants.join(', ') || 'none'}, notes ${so5.notes}`,
+    );
     out(`usage-reconcile: ${await reconcileDemoUsage()} counters set`);
   }
   await closeDb();
