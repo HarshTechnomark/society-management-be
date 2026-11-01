@@ -1,9 +1,8 @@
 name: CI
+# Paused: runs only when started by hand from the Actions tab (no automatic runs, no emails).
+# To turn automatic checks back on, restore the pull_request and push triggers for dev and main.
 on:
-  pull_request:
-    branches: [dev, main]
-  push:
-    branches: [dev, main]
+  workflow_dispatch:
 
 jobs:
   check:
