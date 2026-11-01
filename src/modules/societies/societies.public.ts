@@ -10,6 +10,7 @@ import {
   SocietyLifecycleEvent,
   SocietyMember,
   Subscription,
+  SubscriptionAddon,
   SupportAccessGrant,
   UsageCounter,
   User,
@@ -194,6 +195,15 @@ export const BUILT_IN_PROVIDERS: ExportProvider[] = [
         file: 'subscriptions.csv',
         stream: id =>
           rowsOf(() => Subscription.findAll({ where: { societyId: id }, order: [['id', 'ASC']] }), plain),
+      },
+      {
+        name: 'subscription_addons',
+        file: 'subscription_addons.csv',
+        stream: id =>
+          rowsOf(
+            () => SubscriptionAddon.findAll({ where: { societyId: id } as never, order: [['id', 'ASC']] }),
+            plain,
+          ),
       },
       {
         name: 'usage_counters',
