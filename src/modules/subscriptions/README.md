@@ -53,7 +53,9 @@ Admin seats for the Team screen: `GET /api/v1/subscription/usage` (item `limit.a
 | `lifecycle.getStatusInfo`                                                  | module 05 | reads `societies.status`                                                                  |
 | `approvals.createRequest` (type `SUBSCRIPTION_CANCEL`)                     | module 14 | records the call and returns an id; module 14 must call `subscriptions.applyCancellation` |
 
-The stub invoice total of `issuePeriodInvoice` is 0 (module 06 computes invoices). Notifications go through the temporary
+The stub invoice total of `issuePeriodInvoice` is 0 (module 06 computes invoices). Module 06 replaces the `billing` stubs
+in `registerPlatformBilling()`; for it, `getBillingSnapshot` takes an optional transaction (no usage-month close inside it)
+and `renewIfDue` closes the usage months before it opens the renewal transaction. Notifications go through the temporary
 `lib/notify.ts` (templates in `subscriptions.templates.ts`); in-app delivery is not sent by it. Kill-switch toggles and stale
 flags log a warning in place of module 07 platform notifications.
 
