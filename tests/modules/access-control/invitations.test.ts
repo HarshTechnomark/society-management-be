@@ -9,7 +9,7 @@ import {
   closeDb,
   sequelize,
 } from '../../../src/models';
-import { advance, setNow } from '../../../src/lib/clock';
+import { advance, now, setNow } from '../../../src/lib/clock';
 import { systemCtx } from '../../../src/types/context';
 import { authAccess, createInvitation, expireInvitationsForTest } from './invitations.support';
 import { events, get, inboxFor, makeUser, post, otpSignIn, call } from '../../helpers/auth';
@@ -330,7 +330,7 @@ describe('list, resend, revoke (8.13, 8.14)', () => {
 
   it('T03-25 an expired invitation: resend is 410, the expiry job marks EXPIRED and audits', async () => {
     const { c, id } = await pending();
-    await Invitation.update({ expiresAt: new Date(Date.now() - 1000) }, { where: { id } });
+    await Invitation.update({ expiresAt: new Date(now().getTime() - 1000) }, { where: { id } });
     const r = await c('post', `/invitations/${id}/resend`, {}, { headers: idem() });
     expect(r.status).toBe(410);
     expect(r.body.code).toBe('INVITATION_EXPIRED');

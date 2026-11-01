@@ -41,7 +41,7 @@ describe('route registry (T03-43, section 13)', () => {
     expect(routes.filter(r => r.kind === 'society').length).toBeGreaterThan(20);
     // module 03's own platform routes; module 04 adds plans, add-ons, subscriptions and flags; module 05 societies and support access
     const m04 =
-      /^\/platform\/(plans|plan-versions|entitlement-catalogue|addons|subscriptions|feature-flags|societies|support-access)/;
+      /^\/platform\/(plans|plan-versions|entitlement-catalogue|addons|subscriptions|feature-flags|support-access|societies(\/export|\/slug-availability|\/:id(\/(lifecycle-events|extend-trial|convert|suspend|reactivate|close|reopen|purge-hold|nudge|notes(\/:noteId)?|data-exports))?)?$)/;
     expect(routes.filter(r => r.kind === 'platform' && !m04.test(r.path)).length).toBe(15);
   });
 
