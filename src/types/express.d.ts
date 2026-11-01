@@ -1,4 +1,5 @@
 import type { RequestContext } from './context';
+import type { StatePolicy } from '../modules/societies/societies.types';
 
 declare global {
   namespace Express {
@@ -7,6 +8,8 @@ declare global {
       ctx: RequestContext;
       /** Parsed and validated input. Controllers read only these. */
       valid: { body: any; query: any; params: any };
+      /** Module 05 route policy set by `routeMeta()` (state guard allow-list, `noSupportAccess`). */
+      routePolicy?: StatePolicy;
     }
   }
 }

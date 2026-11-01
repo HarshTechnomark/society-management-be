@@ -15,8 +15,10 @@ import { devRoutes } from './modules/dev/dev.routes';
 import { accessControlRoutes } from './modules/access-control/access-control.routes';
 import { authArea, publicRoute } from './middlewares/permission.middleware';
 import { subscriptionsRoutes } from './modules/subscriptions/subscriptions.routes';
+import { societiesRoutes } from './modules/societies/societies.routes';
 import './modules/auth/auth.templates';
 import './modules/access-control/access-control.templates';
+import './modules/societies/societies.templates';
 
 /**
  * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > appContext > csrf > auth > routes > error handler.
@@ -49,6 +51,8 @@ export function createApp(): Express {
   api.use(accessControlRoutes);
   // module 04: plans, subscriptions, entitlements and feature flags
   api.use(subscriptionsRoutes);
+  // module 05: societies, lifecycle, support access, data exports, public sign-up
+  api.use(societiesRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

@@ -5,16 +5,16 @@ import {
   computeAccess,
   getPlatformRoleKeys,
   getSocietyInfo,
-  supportPermissions,
 } from '../modules/access-control/access-control.access';
+import { societyStateGuard } from '../modules/societies/societies.guard';
 import { accessPorts } from '../modules/access-control/access-control.ports';
 import { tag } from '../modules/access-control/access-control.registry';
 
+/** Same as `routeMeta({ suspended: 'allow' })` / `routeMeta({ closed: 'allow' })` of module 05 (kept for module 04 routes). */
 export interface SocietyOptions {
   allowWhenSuspended?: boolean;
   allowWhenClosed?: boolean;
 }
-const READ = new Set(['GET', 'HEAD']);
 
 /**
  * BR-03-17: the society comes only from `session.activeSocietyId`, never from a header, query or body. Fills
@@ -23,7 +23,7 @@ const READ = new Set(['GET', 'HEAD']);
  */
 export const societyMiddleware = (opts: SocietyOptions = {}): RequestHandler =>
   tag(
-    async (req, _res, next) => {
+    async (req, res, next) => {
       try {
         const ctx = req.ctx;
         if (!ctx.user || !ctx.session)
@@ -32,13 +32,14 @@ export const societyMiddleware = (opts: SocietyOptions = {}): RequestHandler =>
         if (!societyId) return next(new ForbiddenError('SOCIETY_NOT_SELECTED', 'Select a society first'));
         const society = await getSocietyInfo(societyId);
         if (!society) return next(new ForbiddenError('NOT_A_MEMBER', 'You are not a member of this society'));
-        const write = !READ.has(req.method);
-        if (society.status === 'CLOSED' && !opts.allowWhenClosed)
-          return next(new AppError(423, 'SOCIETY_CLOSED', 'This society is closed'));
-        if (society.status === 'SUSPENDED' && write && !opts.allowWhenSuspended)
-          return next(
-            new AppError(423, 'SOCIETY_SUSPENDED', 'This society is suspended. You can only view it.'),
-          );
+        // module 05 state guard (BR-05-11): options of this middleware plus `routeMeta()` placed before it
+        const policy = {
+          ...(opts.allowWhenSuspended ? { suspended: 'allow' as const } : {}),
+          ...(opts.allowWhenClosed ? { closed: 'allow' as const } : {}),
+          ...(req.routePolicy ?? {}),
+        };
+        const blocked = societyStateGuard({ status: society.status, method: req.method, policy });
+        if (blocked) return next(blocked);
 
         const access = await computeAccess(societyId, ctx.user.id);
         if (access.status === 'SUSPENDED' || access.status === 'ENDED')
@@ -69,19 +70,25 @@ export const societyMiddleware = (opts: SocietyOptions = {}): RequestHandler =>
             ? await accessPorts().support.getActiveGrant(ctx.user.id, societyId)
             : null;
         if (!grant) return next(new ForbiddenError('NOT_A_MEMBER', 'You are not a member of this society'));
-        if (grant.scope === 'READ_ONLY' && write)
-          return next(
-            new ForbiddenError(
-              'SUPPORT_GRANT_READ_ONLY',
-              'This support access is read only. Writes are blocked.',
-            ),
-          );
+        const refused = accessPorts().support.checkRequest({ grant, method: req.method, policy });
+        if (refused) return next(refused);
         ctx.society = society;
         ctx.supportGrant = grant;
-        ctx.permissions = new Set(await supportPermissions(societyId, grant.scope));
+        ctx.permissions = new Set(await accessPorts().support.permissionsFor(societyId, grant.scope));
         ctx.unitLinks = [];
         ctx.unitIds = [];
-        ctx.actorRoleKey = 'support';
+        ctx.actorRoleKey = `support:${grant.scope}`;
+        const userId = ctx.user.id;
+        res.on('finish', () =>
+          accessPorts().support.onRequest({
+            grant,
+            societyId,
+            userId,
+            method: req.method,
+            route: `${req.baseUrl}${req.route?.path ?? ''}`,
+            statusCode: res.statusCode,
+          }),
+        );
         next();
       } catch (err) {
         next(err);

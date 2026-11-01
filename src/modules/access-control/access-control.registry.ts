@@ -13,6 +13,8 @@ export interface AccessTag {
   idempotent?: boolean;
   allowWhenClosed?: boolean;
   allowWhenSuspended?: boolean;
+  /** Module 05 `routeMeta({ noSupportAccess: true })`. */
+  noSupportAccess?: boolean;
   /** Society route open to any active member (no permission key), e.g. `GET /subscription/entitlements`. */
   memberOnly?: boolean;
   /** Module 04 `requireFeature` keys on the route. */
@@ -37,6 +39,7 @@ export interface RouteMeta {
   idempotent: boolean;
   allowWhenClosed: boolean;
   allowWhenSuspended: boolean;
+  noSupportAccess: boolean;
   memberOnly: boolean;
   features: string[];
 }
@@ -84,6 +87,7 @@ function walk(stack: any[], prefix: string, inherited: AccessTag[], out: RouteMe
           idempotent: tags.some(t => t.idempotent),
           allowWhenClosed: tags.some(t => t.allowWhenClosed),
           allowWhenSuspended: tags.some(t => t.allowWhenSuspended),
+          noSupportAccess: tags.some(t => t.noSupportAccess),
           memberOnly: tags.some(t => t.memberOnly),
           features: [...new Set(tags.flatMap(t => t.features ?? []))],
         });

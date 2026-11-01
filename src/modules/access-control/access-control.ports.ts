@@ -1,7 +1,8 @@
 import type { Transaction } from 'sequelize';
 import { SocietyMember } from '../../models';
 import type { Invitation } from '../../models/invitation.model';
-import { PaymentRequiredError } from '../../utils/errors';
+import { type AppError, ForbiddenError, PaymentRequiredError } from '../../utils/errors';
+import { supportPermissions } from './access-control.access';
 import type { Ctx } from '../../types/context';
 import type { ActiveSupportGrant, LimitKey, UnitLink } from './access-control.types';
 
@@ -31,7 +32,25 @@ export interface AccessPorts {
   };
   /** Module 05. */
   support: {
+    /** May throw (module 05: `403 SUPPORT_ACCESS_EXPIRED` when the session's grant has ended). */
     getActiveGrant(platformUserId: number, societyId: number): Promise<ActiveSupportGrant | null>;
+    /** Permissions under a grant (BR-03-19; module 05 section 6.4 replaces the placeholder). */
+    permissionsFor(societyId: number, scope: ActiveSupportGrant['scope']): Promise<string[]>;
+    /** Route checks under a grant: read-only scope, `noSupportAccess` routes. Returns the error to send, or null. */
+    checkRequest(input: {
+      grant: ActiveSupportGrant;
+      method: string;
+      policy?: { noSupportAccess?: boolean };
+    }): AppError | null;
+    /** Called when a request under a grant finishes (module 05 read log, request and write counters). */
+    onRequest(input: {
+      grant: ActiveSupportGrant;
+      societyId: number;
+      userId: number;
+      method: string;
+      route: string;
+      statusCode: number;
+    }): void;
   };
   /** Module 09. Links with `toDate` NULL or today or later, resident ACTIVE. */
   residents: {
@@ -78,7 +97,18 @@ export const defaultAccessPorts: AccessPorts = {
     }),
     planKeyFor: async () => 'STANDARD',
   },
-  support: { getActiveGrant: async () => null },
+  support: {
+    getActiveGrant: async () => null,
+    permissionsFor: (societyId, scope) => supportPermissions(societyId, scope),
+    checkRequest: ({ grant, method }) =>
+      grant.scope === 'READ_ONLY' && !['GET', 'HEAD'].includes(method)
+        ? new ForbiddenError(
+            'SUPPORT_GRANT_READ_ONLY',
+            'This support access is read only. Writes are blocked.',
+          )
+        : null,
+    onRequest: () => undefined,
+  },
   residents: {
     getActiveUnitLinks: async () => [],
     onResidentInvitationAccepted: noop,

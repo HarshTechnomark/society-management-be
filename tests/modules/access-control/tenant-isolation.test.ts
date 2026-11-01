@@ -146,6 +146,13 @@ describe('tenant isolation (T03-33, section 13)', () => {
       // module 04: another society's add-on purchase id is 404 (tests/modules/subscriptions/society-routes.test.ts, T04-30)
       'DELETE /subscription/addons/:subscriptionAddonId',
       'POST /subscription/addons/:subscriptionAddonId/resume',
+      // module 05: another society's grant or export id is 404 (tests/modules/societies/isolation.test.ts, T05-41)
+      'GET /support-access/:id',
+      'POST /support-access/:id/approve',
+      'POST /support-access/:id/deny',
+      'POST /support-access/:id/revoke',
+      'GET /data-exports/:id',
+      'GET /data-exports/:id/download-url',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
