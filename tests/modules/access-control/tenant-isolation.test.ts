@@ -169,6 +169,28 @@ describe('tenant isolation (T03-33, section 13)', () => {
       // module 07 part 2: a banner the user cannot see (another audience) is 404 ANNOUNCEMENT_NOT_FOUND and another society's audit row is 404 AUDIT_LOG_NOT_FOUND (tests/modules/platform-ops/announcements.test.ts and audit.test.ts)
       'POST /platform-announcements/:id/dismiss',
       'GET /audit-logs/:id',
+      // module 08: another society's building, unit, location or holiday id is 404 with the module code on every route (tests/modules/society-setup/access.test.ts, T08-33); the stepKey of the onboarding routes is a fixed key, not an id
+      'GET /buildings/:id',
+      'GET /buildings/:id/grid',
+      'PATCH /buildings/:id',
+      'POST /buildings/:id/archive',
+      'POST /buildings/:id/restore',
+      'DELETE /buildings/:id',
+      'GET /units/:id',
+      'PATCH /units/:id',
+      'POST /units/:id/archive',
+      'POST /units/:id/restore',
+      'DELETE /units/:id',
+      'GET /locations/:id',
+      'PATCH /locations/:id',
+      'POST /locations/:id/archive',
+      'POST /locations/:id/restore',
+      'POST /locations/:id/regenerate-qr',
+      'PATCH /holidays/:id',
+      'DELETE /holidays/:id',
+      'POST /onboarding/steps/:stepKey/complete',
+      'POST /onboarding/steps/:stepKey/skip',
+      'POST /onboarding/steps/:stepKey/reopen',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
