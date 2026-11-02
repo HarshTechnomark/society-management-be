@@ -67,8 +67,8 @@ const linesOf = async (invoiceId: number) =>
   ]);
 
 beforeEach(async () => {
-  setNow('2026-11-01T06:00:00Z');
   await resetSocieties();
+  setNow('2026-11-01T06:00:00Z'); // after the reset, which returns the clock to real time
   registerPlatformBilling();
   events.length = 0;
   setRealtimeSink({ emit: e => events.push(e), disconnectSession: () => undefined });

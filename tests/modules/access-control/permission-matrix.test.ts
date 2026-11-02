@@ -42,7 +42,13 @@ describe('route registry (T03-43, section 13)', () => {
     // module 03's own platform routes; module 04 adds plans, add-ons, subscriptions and flags; module 05 societies and support access
     const m04 =
       /^\/platform\/(plans|plan-versions|entitlement-catalogue|addons|subscriptions|feature-flags|support-access|societies(\/export|\/slug-availability|\/:id(\/(lifecycle-events|extend-trial|convert|suspend|reactivate|close|reopen|purge-hold|nudge|notes(\/:noteId)?|data-exports))?)?$)/;
-    expect(routes.filter(r => r.kind === 'platform' && !m04.test(r.path)).length).toBe(15);
+    // module 06 adds invoices, payments, credits and refunds under /platform
+    const m06 =
+      /^\/platform\/(invoices(\/export|\/:id(\/(pdf-url|credit-notes|approve|reject|tds-claims))?)?|payments(\/:id\/(approve|reject|tds-decision|complete-refund))?|credits\/:id\/(approve|reject)|societies\/:societyId\/(credits|refunds))$/;
+    expect(routes.filter(r => r.kind === 'platform' && !m04.test(r.path) && !m06.test(r.path)).length).toBe(
+      15,
+    );
+    expect(routes.filter(r => r.kind === 'platform' && m06.test(r.path)).length).toBe(20);
   });
 
   it('detects an unmarked route and a society route without a permission', () => {

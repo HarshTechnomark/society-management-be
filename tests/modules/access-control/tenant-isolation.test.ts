@@ -153,6 +153,13 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /support-access/:id/revoke',
       'GET /data-exports/:id',
       'GET /data-exports/:id/download-url',
+      // module 06: another society's invoice or payment id is 404 (tests/modules/platform-billing/isolation.test.ts, T06-31)
+      'GET /subscription/invoices/:id',
+      'GET /subscription/invoices/:id/pdf-url',
+      'POST /subscription/invoices/:id/payment-orders',
+      'POST /subscription/invoices/:id/tds-claims',
+      'POST /subscription/payments/:id/verify',
+      'PATCH /subscription/tds-claims/:id',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
