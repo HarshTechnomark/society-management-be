@@ -30,6 +30,7 @@ export const PUBLIC_ROUTES: Rule[] = [
   { method: 'GET', path: /^\/dev\/exports\/\d+$/ },
   { method: 'GET', path: /^\/dev\/files\/\d+$/ },
   { method: 'POST', path: '/public/signups' },
+  { method: 'GET', path: '/public/status' },
   { method: 'GET', path: /^\/public\/invitations\/[^/]+$/ },
   { method: 'POST', path: /^\/public\/invitations\/[^/]+\/decline$/ },
   { method: 'POST', path: /^\/dev\/payments\/[^/]+\/pay$/ },

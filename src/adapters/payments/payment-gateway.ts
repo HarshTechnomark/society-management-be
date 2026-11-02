@@ -1,3 +1,4 @@
+import type { HealthResult } from '../provider-adapter';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /**
@@ -49,6 +50,8 @@ export interface PaymentGateway {
   cancelMandate(mandateId: string): Promise<void>;
   parseWebhook(rawBody: Buffer): GatewayWebhookEvent;
   readonly signatureHeader: string;
+  /** Module 07 (section 8.13): provider health check; real gateways implement it in module 16. */
+  healthCheck?(): Promise<HealthResult>;
 }
 
 interface FakeOrder {

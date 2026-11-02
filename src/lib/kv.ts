@@ -33,6 +33,15 @@ export interface KvStore {
   counterGet(key: string): Promise<number>;
   /** Atomic `INCR`; returns the new value. */
   counterIncr(key: string): Promise<number>;
+  /** Set with a TTL on the whole key (module 07 banner dismissals `pn:dismissed:<id>`). The TTL is refreshed on every add. */
+  setAdd(key: string, member: string, ttlSeconds: number): Promise<void>;
+  setHas(key: string, member: string): Promise<boolean>;
+  /** Hash of integer fields (module 07 request metrics and provider day counters); the TTL is refreshed on every call. */
+  hashIncr(key: string, field: string, by: number, ttlSeconds: number): Promise<void>;
+  hashGetAll(key: string): Promise<Record<string, number>>;
+  /** Hash keys that start with the prefix (module 07 metrics trim). */
+  hashKeys(prefix: string): Promise<string[]>;
+  hashDel(...keys: string[]): Promise<void>;
 }
 
 export class MemoryKv implements KvStore {
@@ -40,6 +49,8 @@ export class MemoryKv implements KvStore {
   private lists = new Map<string, string[]>();
   private cache = new Map<string, { value: string; expiresAt: number }>();
   private counters = new Map<string, number>();
+  private sets = new Map<string, { members: Set<string>; expiresAt: number }>();
+  private hashes = new Map<string, { fields: Map<string, number>; expiresAt: number }>();
 
   async slidingWindowHit(key: string, windowMs: number, limit: number): Promise<HitResult> {
     const t = nowMs();
@@ -89,7 +100,8 @@ export class MemoryKv implements KvStore {
     for (const k of keys) this.cache.delete(k);
   }
   async cacheDelPrefix(prefix: string): Promise<void> {
-    for (const k of [...this.cache.keys()]) if (k.startsWith(prefix)) this.cache.delete(k);
+    for (const m of [this.cache, this.sets, this.hashes] as Map<string, unknown>[])
+      for (const k of [...m.keys()]) if (k.startsWith(prefix)) m.delete(k);
   }
   async counterGet(key: string): Promise<number> {
     return this.counters.get(key) ?? 0;
@@ -98,6 +110,34 @@ export class MemoryKv implements KvStore {
     const n = (this.counters.get(key) ?? 0) + 1;
     this.counters.set(key, n);
     return n;
+  }
+  async setAdd(key: string, member: string, ttlSeconds: number): Promise<void> {
+    const e = this.sets.get(key);
+    const live = e && e.expiresAt > nowMs() ? e : { members: new Set<string>(), expiresAt: 0 };
+    live.members.add(member);
+    live.expiresAt = nowMs() + ttlSeconds * 1000;
+    this.sets.set(key, live);
+  }
+  async setHas(key: string, member: string): Promise<boolean> {
+    const e = this.sets.get(key);
+    return Boolean(e && e.expiresAt > nowMs() && e.members.has(member));
+  }
+  async hashIncr(key: string, field: string, by: number, ttlSeconds: number): Promise<void> {
+    const e = this.hashes.get(key);
+    const live = e && e.expiresAt > nowMs() ? e : { fields: new Map<string, number>(), expiresAt: 0 };
+    live.fields.set(field, (live.fields.get(field) ?? 0) + by);
+    live.expiresAt = nowMs() + ttlSeconds * 1000;
+    this.hashes.set(key, live);
+  }
+  async hashGetAll(key: string): Promise<Record<string, number>> {
+    const e = this.hashes.get(key);
+    return e && e.expiresAt > nowMs() ? Object.fromEntries(e.fields) : {};
+  }
+  async hashKeys(prefix: string): Promise<string[]> {
+    return [...this.hashes.keys()].filter(k => k.startsWith(prefix));
+  }
+  async hashDel(...keys: string[]): Promise<void> {
+    for (const k of keys) this.hashes.delete(k);
   }
 }
 
@@ -165,12 +205,40 @@ export class RedisKv implements KvStore {
     if (keys.length) await this.redis.del(...keys.map(k => `cache:${k}`));
   }
   async cacheDelPrefix(prefix: string): Promise<void> {
+    for (const ns of ['cache', 'set', 'hash']) {
+      let cursor = '0';
+      do {
+        const [next, keys] = await this.redis.scan(cursor, 'MATCH', `${ns}:${prefix}*`, 'COUNT', 500);
+        cursor = next;
+        if (keys.length) await this.redis.del(...keys);
+      } while (cursor !== '0');
+    }
+  }
+  async setAdd(key: string, member: string, ttlSeconds: number): Promise<void> {
+    await this.redis.multi().sadd(`set:${key}`, member).expire(`set:${key}`, ttlSeconds).exec();
+  }
+  async setHas(key: string, member: string): Promise<boolean> {
+    return (await this.redis.sismember(`set:${key}`, member)) === 1;
+  }
+  async hashIncr(key: string, field: string, by: number, ttlSeconds: number): Promise<void> {
+    await this.redis.multi().hincrby(`hash:${key}`, field, by).expire(`hash:${key}`, ttlSeconds).exec();
+  }
+  async hashGetAll(key: string): Promise<Record<string, number>> {
+    const raw = await this.redis.hgetall(`hash:${key}`);
+    return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Number(v)]));
+  }
+  async hashKeys(prefix: string): Promise<string[]> {
+    const out: string[] = [];
     let cursor = '0';
     do {
-      const [next, keys] = await this.redis.scan(cursor, 'MATCH', `cache:${prefix}*`, 'COUNT', 500);
+      const [next, keys] = await this.redis.scan(cursor, 'MATCH', `hash:${prefix}*`, 'COUNT', 500);
       cursor = next;
-      if (keys.length) await this.redis.del(...keys);
+      out.push(...keys.map(k => k.slice('hash:'.length)));
     } while (cursor !== '0');
+    return out;
+  }
+  async hashDel(...keys: string[]): Promise<void> {
+    if (keys.length) await this.redis.del(...keys.map(k => `hash:${k}`));
   }
   async counterGet(key: string): Promise<number> {
     return Number((await this.redis.get(`ctr:${key}`)) ?? 0);

@@ -22,6 +22,7 @@ import {
 } from '../../src/modules/auth/auth.crypto';
 import { resetSystemUserCache } from '../../src/modules/auth/auth.users';
 import { now } from '../../src/lib/clock';
+import { kv } from '../../src/lib/kv';
 import '../../src/modules/auth/auth.templates';
 
 export const app = createApp();
@@ -55,6 +56,12 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    'platform_ticket_messages',
+    'platform_tickets',
+    'platform_notifications',
+    'incidents',
+    'service_providers',
+    'platform_settings',
     'dunning_events',
     'platform_credits',
     'platform_payments',
@@ -93,6 +100,11 @@ export async function resetAll(): Promise<void> {
   await resetRateLimits();
   await flushAcl();
   await clearInbox();
+  // module 07 caches: settings, dashboard, status page, dismissals and fan-out marks, request metrics, provider day counters
+  for (const prefix of ['ps:', 'pd:', 'status:', 'pn:', 'm:', 'ph:', 'pfa:'])
+    await kv()
+      .cacheDelPrefix(prefix)
+      .catch(() => undefined);
 }
 
 export interface TestUser {

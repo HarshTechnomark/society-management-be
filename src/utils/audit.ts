@@ -17,6 +17,21 @@ export interface AuditInput {
   actor?: { userId: number | null; name: string; role: string };
 }
 
+export interface AuditedRow {
+  id: number;
+  societyId: number | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  entityLabel: string | null;
+  createdAt: Date;
+}
+const listeners: ((row: AuditedRow) => void)[] = [];
+/** Called after an audit row is committed (module 07 pushes dashboard activity). A throwing listener never fails the write. */
+export const onAuditCommitted = (fn: (row: AuditedRow) => void): void => {
+  if (!listeners.includes(fn)) listeners.push(fn);
+};
+
 /**
  * Writes one audit row. Call it inside the same transaction as the change it records (BR-01-8), so a rolled-back
  * change leaves no row. `before` and `after` go through the log redaction (secrets removed, phones and emails masked).
@@ -27,7 +42,7 @@ export async function audit(ctx: Ctx, input: AuditInput, tx?: Transaction): Prom
     name: ctx.user ? (ctx.user.name ?? 'User') : 'System',
     role: ctx.user ? (ctx.actorRoleKey ?? 'user') : 'system',
   };
-  await AuditLog.create(
+  const row = await AuditLog.create(
     {
       societyId: input.societyId ?? null,
       actorUserId: actor.userId,
@@ -47,4 +62,23 @@ export async function audit(ctx: Ctx, input: AuditInput, tx?: Transaction): Prom
     },
     { transaction: tx },
   );
+  if (!listeners.length) return;
+  const fire = () => {
+    for (const l of listeners)
+      try {
+        l({
+          id: row.id!,
+          societyId: row.societyId,
+          action: row.action,
+          entityType: row.entityType,
+          entityId: row.entityId,
+          entityLabel: row.entityLabel,
+          createdAt: row.createdAt!,
+        });
+      } catch {
+        // a listener must not undo the audited action
+      }
+  };
+  if (tx) tx.afterCommit(fire);
+  else fire();
 }

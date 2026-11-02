@@ -23,7 +23,8 @@
     "migrate:undo": "sequelize-cli db:migrate:undo",
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "seed": "tsx scripts/seed.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "providers:rekey": "tsx scripts/providers-rekey.ts"
   },
   "lint-staged": {
     "*.{ts,js,cjs,mjs}": [
@@ -44,6 +45,7 @@
     "express": "4",
     "helmet": "^8.3.0",
     "ioredis": "^6.0.0",
+    "ipaddr.js": "^2.5.0",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.6",
     "pino": "^10.4.0",

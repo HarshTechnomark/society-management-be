@@ -1,8 +1,11 @@
+import type { HealthResult } from '../provider-adapter';
 import { randomBytes } from 'node:crypto';
 import { recordInbox } from '../../lib/inbox';
 
 export interface EmailSender {
   send(to: string, subject: string, html: string, text: string): Promise<{ providerId: string }>;
+  healthCheck?(): Promise<HealthResult>;
+  testSend?(to: string, text: string): Promise<{ providerMessageId: string }>;
 }
 
 export class FakeEmailSender implements EmailSender {

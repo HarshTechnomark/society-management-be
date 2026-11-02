@@ -14,6 +14,14 @@ import { registerSubscriptions } from '../src/modules/subscriptions/subscription
 import { registerSocieties } from '../src/modules/societies/societies.public';
 import { seedSocieties } from '../seeders/societies';
 import { seedPlatformBilling } from '../seeders/platform-billing';
+import {
+  seedDemoAnnouncement,
+  seedDemoIncidents,
+  seedDemoProviders,
+  seedDemoTickets,
+  seedSettings,
+} from '../seeders/platform-ops';
+import { registerPlatformOps } from '../src/modules/platform-ops/platform-ops.public';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -26,10 +34,13 @@ async function main(): Promise<void> {
   registerAccessControl();
   registerSubscriptions();
   registerSocieties();
+  registerPlatformOps();
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
   );
+  const st = await seedSettings();
+  out(`platform-settings: ${st.added} keys added`);
   if (process.env.NODE_ENV === 'production') {
     out('demo-users: skipped in production');
     const a = await seedAccessControl({ demo: false });
@@ -65,6 +76,14 @@ async function main(): Promise<void> {
     out(
       `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,
     );
+    const dt = await seedDemoTickets();
+    out(`platform-ops: demo tickets created ${dt.created.length}, skipped ${dt.skipped.length}`);
+    const dp = await seedDemoProviders();
+    out(`platform-ops: providers created ${dp.created.length}, skipped ${dp.skipped.length}`);
+    const di = await seedDemoIncidents();
+    out(`platform-ops: incidents created ${di.created.length}, skipped ${di.skipped.length}`);
+    const da = await seedDemoAnnouncement();
+    out(`platform-ops: announcement ${da.created ? 'created' : 'already exists'}`);
   }
   await closeDb();
 }

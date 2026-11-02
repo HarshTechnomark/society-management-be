@@ -31,6 +31,11 @@ const schema = z.object({
   PLATFORM_RAZORPAY_KEY_ID: z.string().min(1).default('rzp_test_fake'),
   PLATFORM_RAZORPAY_KEY_SECRET: z.string().min(16).optional(),
   PLATFORM_RAZORPAY_WEBHOOK_SECRET: z.string().min(16).default('fake-platform-webhook-secret'),
+  // module 07 (platform operations): provider credential key ring `1:<base64>,2:<base64>` (32 bytes each), required in production
+  PROVIDER_CREDENTIALS_KEYS: z.string().optional(),
+  PROVIDER_CREDENTIALS_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).max(255).optional(),
+  STATUS_PAGE_ORIGIN: z.string().url().optional(),
+  AUDIT_ARCHIVE_PREFIX: z.string().min(1).default('platform/audit-archive'),
   COOKIE_SECURE: z
     .enum(['true', 'false'])
     .default('true')
@@ -38,6 +43,24 @@ const schema = z.object({
 });
 
 export type Env = z.infer<typeof schema> & { appOrigins: string[] };
+
+/** Parses `1:<base64>,2:<base64>`; every key must decode to exactly 32 bytes and versions are 1 to 255 and unique. */
+export function parseKeyRing(raw: string): Map<number, Buffer> {
+  const ring = new Map<number, Buffer>();
+  for (const part of raw.split(',').map(p => p.trim())) {
+    const m = /^(\d{1,3}):([A-Za-z0-9+/=]+)$/.exec(part);
+    const version = m ? Number(m[1]) : 0;
+    if (!m || version < 1 || version > 255 || ring.has(version))
+      throw new Error(
+        'Invalid environment:\n  PROVIDER_CREDENTIALS_KEYS: use unique "<version 1-255>:<base64>" pairs',
+      );
+    const key = Buffer.from(m[2]!, 'base64');
+    if (key.length !== 32)
+      throw new Error(`Invalid environment:\n  PROVIDER_CREDENTIALS_KEYS: key ${version} must be 32 bytes`);
+    ring.set(version, key);
+  }
+  return ring;
+}
 
 /** Parses a raw environment. Throws one error that lists every bad variable by name. */
 export function parseEnv(raw: NodeJS.ProcessEnv): Env {
@@ -63,6 +86,21 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
       throw new Error('Invalid environment:\n  PROVIDERS_MODE: fake is forbidden in production');
     if (!r.data.REDIS_URL) throw new Error('Invalid environment:\n  REDIS_URL: required in production');
   }
+  if (r.data.PROVIDER_CREDENTIALS_KEYS) {
+    const ring = parseKeyRing(r.data.PROVIDER_CREDENTIALS_KEYS);
+    const active = r.data.PROVIDER_CREDENTIALS_ACTIVE_KEY_VERSION;
+    if (active === undefined || !ring.has(active))
+      throw new Error(
+        'Invalid environment:\n  PROVIDER_CREDENTIALS_ACTIVE_KEY_VERSION: must name a version in PROVIDER_CREDENTIALS_KEYS',
+      );
+  }
+  if (
+    r.data.NODE_ENV === 'production' &&
+    (!r.data.PROVIDER_CREDENTIALS_KEYS || r.data.PROVIDER_CREDENTIALS_ACTIVE_KEY_VERSION === undefined)
+  )
+    throw new Error(
+      'Invalid environment:\n  PROVIDER_CREDENTIALS_KEYS: required in production (with PROVIDER_CREDENTIALS_ACTIVE_KEY_VERSION)',
+    );
   if (r.data.PROVIDERS_MODE === 'real') {
     const unset = [
       'PLATFORM_GATEWAY_ACCOUNT_ID',

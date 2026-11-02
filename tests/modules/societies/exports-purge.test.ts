@@ -264,6 +264,8 @@ describe('society data export (8.24, 6.6, BR-05-22 to BR-05-24)', () => {
       'feature_flag_overrides',
       'sessions',
       'number_sequences',
+      'platform_tickets', // module 07 support tickets: platform support data, internal notes inside
+      'platform_ticket_messages',
     ]);
     const missing = rows.map(r => r.t).filter(t => !covered.has(t) && !exempt.has(t));
     expect(missing).toEqual([]);
