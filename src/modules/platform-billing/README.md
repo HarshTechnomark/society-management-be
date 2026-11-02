@@ -1,8 +1,9 @@
 # Module 06: Platform billing (backend)
 
 Spec: `Society_Management_Build_Modules/Markdown_for_AI/06_Platform_Billing.md`. Built so far: task 6.1 (data layer),
-task 6.2 (invoicing) and task 6.3 (payments, TDS, credits, refunds, autopay routes, the routes of 8.1 to 8.14, 8.18 to
-8.23 and 8.28). Write-off, remind, extend-grace, approvals queue, dunning, reports, the other jobs and the PDF come in task 6.4.
+task 6.2 (invoicing), task 6.3 (payments, TDS, credits, refunds, autopay routes, the routes of 8.1 to 8.14, 8.18 to
+8.23 and 8.28) and task 6.4 (write-off, remind, extend grace, dunning, reports, the remaining jobs, the PDF, the module 05
+export provider and retention handler). Module 06 backend is complete.
 
 ## Files
 
@@ -72,6 +73,39 @@ stubs, so their tests are unchanged. Jobs use `lib/queue` (in-process without `R
   check makes a repeat a 409). Create routes of 8.5, 8.9, 8.12, 8.13, 8.18, 8.22 and 8.23 require it.
 - Credits list (8.8) answers `data: [rows]`, `pagination` and a top-level `balancePaise`.
 - TDS decision: rejecting a claim of a VOID or WRITTEN_OFF invoice is `409 INVALID_STATE` (its amounts are closed).
-- Not yet (task 6.4): `invoice_issued` and `credit_note_issued` notifications, PDF rendering, write-off, remind,
-  extend-grace, approvals queue, dunning, reports, jobs `reconcile-orders`, `refund-status`, `autopay-charge`,
-  `tds-certificate-reminders`, export provider and retention-expiry handler for module 05.
+
+## Task 6.4
+
+- `platform-billing.collections.ts`: write-off request, approve, reject (8.17), manual reminder (8.15, `429 REMINDER_TOO_SOON`),
+  extend grace (8.16). `days` outside 1 to 30 and a result beyond `dueDate + 60` are `422 GRACE_EXTENSION_INVALID` (the schema only
+  checks for an integer, as section 12 lists the 422).
+- `platform-billing.dunning.ts`: `runDunning(today)` (job `platform-billing:dunning`, 09:00 IST). One transaction per open
+  invoice (society lock, invoice lock). Reminder events are `REMINDER:<invoiceId>:<offset>` (only the latest missed offset is
+  sent, earlier ones `SKIPPED SUPERSEDED`; the last configured offset uses `suspension_warning`). PAST_DUE: invoice re-derived to
+  OVERDUE, then module 05 `onInvoiceOverdue`. The hook is called on every run, so a society that became ACTIVE again (TDS
+  rejected) goes back to PAST_DUE; the event is written once. SUSPENDED on `suspendOn`: success key
+  `SUSPENDED:<id>:<suspendOn>`, skips are keyed by day (`...:skip:<today>`) so the next day retries. A society that became past due
+  in the same run is suspended on the next run (edge case table, TDS). A society already SUSPENDED is left alone silently.
+  `HOLD_ACTIVE` compares the IST date of `suspensionHoldUntil`. CLOSED societies write nothing.
+- `platform-billing.pdf.ts` and `platform-billing.pdf-writer.ts`: a dependency free A4 PDF writer (Helvetica, WinAnsi, `Rs.`
+  for the rupee sign) and the invoice and credit note template. The file goes through `billingPorts().files.storePdf`
+  (default: the module 05 placeholder store, purpose `PLATFORM_INVOICE_PDF`; module 01 replaces it). 5 attempts, then FAILED.
+- `platform-billing.reconcile.ts` (`reconcile-orders` every 15 minutes, `refund-status` hourly), `platform-billing.autopay-charge.ts`
+  (06:00 IST, retry days 0, +1, +3, one SYSTEM payment per invoice per day, skips amounts above the mandate limit and the flag off;
+  the payment keeps method `UPI_AUTOPAY` or `EMANDATE`), `tdsCertificateReminders` in `platform-billing.tds.ts` (scheduler slot is daily 10:00 IST,
+  the processor runs on the 5th; per-claim job id carries the month).
+- `platform-billing.reports.ts`: approvals queue (8.24; `version` on every item, `PAYMENT_MISMATCH` items come from the
+  `.payment.mismatch` audit rows of the last 7 days for orders still unsettled and have `canApprove = false`), dunning list (8.25),
+  revenue (8.26, cached 10 minutes through `lib/kv`; `clearRevenueCache()`), `getMrrSummary` and `getMrrSeries` (9.3),
+  GST summary and TDS receivable with CSV (needs `platform.billing.export`, audited `.report.exported`). `MrrModel` loads the PERIOD
+  invoices and the lifecycle events once and applies the `getStatusAt` rule in memory (last transition up to the end of the IST day).
+  Revenue notes: billed this month = invoices issued in the month minus credit notes issued in it; GST = invoice tax minus credit
+  note tax; outstanding and ageing use current balances against `asOf`; TDS `claimedPaise` is every claim of the period, `verified` and
+  `rejected` are the parts by status; `missingCertificates` counts non-rejected claims without a certificate.
+- `platform-billing.retention.ts`: export provider `platform-billing` (five tables, `bankRefKey` left out) and the retention expiry
+  handler (raw SQL deletes, children first; the models forbid deletes). `registerPlatformBilling()` registers both. There is no purge
+  handler on purpose. `number_sequences` is internal and exempt in the contract test.
+- Notifications `invoice_issued` and `credit_note_issued` go out at issue time (`enqueuePdf` in the service); the dunning
+  templates (`payment_reminder`, `suspension_warning`, `past_due`, `suspended`, `grace_extended`, `tds_certificate_due`) are in
+  `platform-billing.templates.ts` (email only, in-app and WhatsApp wait for module 16).
+- Not built: nothing of the backend of module 06 is left. Platform-wide realtime for the approvals queue belongs to module 07.

@@ -503,8 +503,8 @@ export async function revenueSeriesFor(m: MrrModel, asOf: string, months: number
       contractionPaise: con,
       churnedPaise: churned,
       endMrrPaise: endMrr,
-      logoChurnPct: pct2(churnedCount * 100, a.size),
-      revenueChurnPct: pct2((churned + con) * 100, startMrr),
+      logoChurnPct: pct2(churnedCount, a.size),
+      revenueChurnPct: pct2(churned + con, startMrr),
     });
   }
   return series;
@@ -563,7 +563,7 @@ async function computeRevenue(asOf: string, months: number) {
   let gst = 0;
   for (const i of issued) {
     const sign = i.documentType === 'CREDIT_NOTE' ? -1 : 1;
-    if (sign === 1) billed += num(i.totalPaise);
+    billed += sign * num(i.totalPaise); // net of credit notes issued in the month
     gst += sign * num(i.taxPaise);
   }
   const open = await PlatformInvoice.findAll({

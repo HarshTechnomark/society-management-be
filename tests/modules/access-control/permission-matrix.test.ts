@@ -42,13 +42,13 @@ describe('route registry (T03-43, section 13)', () => {
     // module 03's own platform routes; module 04 adds plans, add-ons, subscriptions and flags; module 05 societies and support access
     const m04 =
       /^\/platform\/(plans|plan-versions|entitlement-catalogue|addons|subscriptions|feature-flags|support-access|societies(\/export|\/slug-availability|\/:id(\/(lifecycle-events|extend-trial|convert|suspend|reactivate|close|reopen|purge-hold|nudge|notes(\/:noteId)?|data-exports))?)?$)/;
-    // module 06 adds invoices, payments, credits and refunds under /platform
+    // module 06 adds invoices (with remind, extend-grace and write-off), payments, credits, refunds and the billing reports under /platform
     const m06 =
-      /^\/platform\/(invoices(\/export|\/:id(\/(pdf-url|credit-notes|approve|reject|tds-claims))?)?|payments(\/:id\/(approve|reject|tds-decision|complete-refund))?|credits\/:id\/(approve|reject)|societies\/:societyId\/(credits|refunds))$/;
+      /^\/platform\/(invoices(\/export|\/:id(\/(pdf-url|credit-notes|approve|reject|tds-claims|remind|extend-grace|write-off(\/approve|\/reject)?))?)?|billing\/(approvals|dunning|revenue|gst-summary|tds-receivable)|payments(\/:id\/(approve|reject|tds-decision|complete-refund))?|credits\/:id\/(approve|reject)|societies\/:societyId\/(credits|refunds))$/;
     expect(routes.filter(r => r.kind === 'platform' && !m04.test(r.path) && !m06.test(r.path)).length).toBe(
       15,
     );
-    expect(routes.filter(r => r.kind === 'platform' && m06.test(r.path)).length).toBe(20);
+    expect(routes.filter(r => r.kind === 'platform' && m06.test(r.path)).length).toBe(30);
   });
 
   it('detects an unmarked route and a society route without a permission', () => {
