@@ -4,6 +4,7 @@ import type { Society, Subscription } from '../../src/models';
 import { setPaymentGateway } from '../../src/adapters';
 import { FakePaymentGateway } from '../../src/adapters/payments/payment-gateway';
 import { setNow } from '../../src/lib/clock';
+import { drainQueues } from '../../src/lib/queue';
 import {
   setBillingPorts,
   placeholderBillingFiles,
@@ -21,6 +22,7 @@ export const idemKey = (): Record<string, string> => ({ 'Idempotency-Key': rando
 
 /** Fresh data, frozen clock (1 Nov 2026, 11:30 IST), real module 06 ports and a new fake gateway. */
 export async function resetBilling(): Promise<FakePaymentGateway> {
+  await drainQueues(); // render-pdf jobs of the previous test must not run while the tables are reset
   await resetSocieties();
   setNow('2026-11-01T06:00:00Z');
   resetLogins();

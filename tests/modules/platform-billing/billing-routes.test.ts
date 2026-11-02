@@ -44,6 +44,7 @@ describe('reads (8.1 to 8.4)', () => {
       { headers: idemKey() },
     );
     expect(d.status, JSON.stringify(d.body)).toBe(201);
+    await drainQueues(); // the PDF job renders the issued invoice
     const list = await view('get', '/subscription/invoices');
     expect(list.status, JSON.stringify(list.body)).toBe(200);
     expect(list.body.data).toHaveLength(1);
@@ -63,7 +64,7 @@ describe('reads (8.1 to 8.4)', () => {
       taxPaise: 189000,
       totalPaise: 1239000,
       amountDuePaise: 1239000,
-      pdfStatus: 'PENDING',
+      pdfStatus: 'READY',
     });
     expect(list.body.pagination).toEqual({ page: 1, limit: 20, total: 1, totalPages: 1 });
     const pl = await maker.c('get', '/platform/invoices');
@@ -167,6 +168,13 @@ describe('reads (8.1 to 8.4)', () => {
       ownerUserId: null,
       status: 'CLEAN',
     });
+    await drainQueues();
+    await sequelize.query(
+      "UPDATE platform_invoices SET pdfStatus = 'PENDING', pdfFileId = NULL WHERE id = :id",
+      {
+        replacements: { id: invoice.id },
+      },
+    );
     const early = await view('get', `/subscription/invoices/${invoice.id}/pdf-url`);
     expect([early.status, early.body.code]).toEqual([409, 'PDF_NOT_READY']);
     await sequelize.query("UPDATE platform_invoices SET pdfStatus = 'READY', pdfFileId = 55 WHERE id = :id", {
