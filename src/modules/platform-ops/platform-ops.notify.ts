@@ -51,6 +51,20 @@ export async function send(
   }
 }
 
+/** Resolves the recipients and sends now (jobs, which have no transaction). Never throws. */
+export async function notifyNow(
+  template: string,
+  recipients: (() => Promise<number[]>) | number[],
+  data: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const ids = Array.isArray(recipients) ? recipients : await recipients();
+    if (ids.length) await send(template, ids, data);
+  } catch (err) {
+    logger.error({ err, template }, 'platform-ops notify failed');
+  }
+}
+
 /** Sends after the transaction commits (or at once without one). `recipients` may be resolved lazily. */
 export function notifyAfterCommit(
   t: Transaction | null,

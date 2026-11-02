@@ -45,9 +45,13 @@ describe('route registry (T03-43, section 13)', () => {
     // module 06 adds invoices (with remind, extend-grace and write-off), payments, credits, refunds and the billing reports under /platform
     const m06 =
       /^\/platform\/(invoices(\/export|\/:id(\/(pdf-url|credit-notes|approve|reject|tds-claims|remind|extend-grace|write-off(\/approve|\/reject)?))?)?|billing\/(approvals|dunning|revenue|gst-summary|tds-receivable)|payments(\/:id\/(approve|reject|tds-decision|complete-refund))?|credits\/:id\/(approve|reject)|societies\/:societyId\/(credits|refunds))$/;
-    expect(routes.filter(r => r.kind === 'platform' && !m04.test(r.path) && !m06.test(r.path)).length).toBe(
-      15,
-    );
+    // module 07 (part 1) adds platform support tickets, settings and organizations
+    const m07 = /^\/platform\/(tickets(\/:id(\/messages)?)?|settings|organizations(\/:id(\/status)?)?)$/;
+    expect(
+      routes.filter(r => r.kind === 'platform' && !m04.test(r.path) && !m06.test(r.path) && !m07.test(r.path))
+        .length,
+    ).toBe(15);
+    expect(routes.filter(r => r.kind === 'platform' && m07.test(r.path)).length).toBe(12);
     expect(routes.filter(r => r.kind === 'platform' && m06.test(r.path)).length).toBe(30);
   });
 

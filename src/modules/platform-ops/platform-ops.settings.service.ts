@@ -71,7 +71,10 @@ export async function seedPlatformSettings(): Promise<{ added: number }> {
       updatedBy: null,
     };
   });
-  if (rows.length) await PlatformSetting.bulkCreate(rows, { ignoreDuplicates: true });
+  if (rows.length) {
+    await PlatformSetting.bulkCreate(rows, { ignoreDuplicates: true });
+    await kv().cacheDel(...rows.map(r => cacheKey(r.settingKey))); // a cached "missing" must not hide the new row
+  }
   return { added: rows.length };
 }
 

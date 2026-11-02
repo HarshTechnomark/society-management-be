@@ -100,7 +100,9 @@ export async function resetAll(): Promise<void> {
   await resetRateLimits();
   await flushAcl();
   await clearInbox();
-  await kv().cacheDelPrefix('ps:'); // module 07 settings cache
+  await kv()
+    .cacheDelPrefix('ps:') // module 07 settings cache
+    .catch(() => undefined);
 }
 
 export interface TestUser {

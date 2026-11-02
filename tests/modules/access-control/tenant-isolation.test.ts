@@ -160,6 +160,12 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /subscription/invoices/:id/tds-claims',
       'POST /subscription/payments/:id/verify',
       'PATCH /subscription/tds-claims/:id',
+      // module 07: another society's ticket id is 404 TICKET_NOT_FOUND on every route (tests/modules/platform-ops/tickets-society.test.ts, T07-02); the /platform/* ticket routes are platform-wide
+      'GET /support-tickets/:id',
+      'POST /support-tickets/:id/messages',
+      'POST /support-tickets/:id/reopen',
+      'POST /support-tickets/:id/close',
+      'POST /support-tickets/:id/rating',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

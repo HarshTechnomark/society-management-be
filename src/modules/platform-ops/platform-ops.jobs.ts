@@ -15,7 +15,7 @@ import {
   notifyStatusChanged,
   platformLink,
 } from './platform-ops.tickets.core';
-import { notifyAfterCommit, platformUsersWith } from './platform-ops.notify';
+import { notifyNow, platformUsersWith } from './platform-ops.notify';
 import { assigneeOrSupport } from './platform-ops.tickets.service';
 
 /** Queue `platform-ops` jobs of module 07 section 9.1 that belong to tickets. Part 2 adds the others. */
@@ -79,7 +79,7 @@ export async function runTicketSlaScan(): Promise<SlaScanResult> {
     ];
     if (s.firstResponseBreach && (await claim('firstResponseBreachedAt'))) {
       r.firstResponseBreaches += 1;
-      notifyAfterCommit(null, 'platform.ticket.sla_breached', breachRecipients, {
+      await notifyNow('platform.ticket.sla_breached', breachRecipients, {
         ...base,
         which: 'FIRST_RESPONSE',
       });
@@ -88,12 +88,11 @@ export async function runTicketSlaScan(): Promise<SlaScanResult> {
     if (warned) r.warnings += 1;
     if (s.resolutionBreach && (await claim('resolutionBreachedAt'))) {
       r.resolutionBreaches += 1;
-      notifyAfterCommit(null, 'platform.ticket.sla_breached', breachRecipients, {
+      await notifyNow('platform.ticket.sla_breached', breachRecipients, {
         ...base,
         which: 'RESOLUTION',
       });
-    } else if (warned)
-      notifyAfterCommit(null, 'platform.ticket.sla_warning', () => assigneeOrSupport(tk), base);
+    } else if (warned) await notifyNow('platform.ticket.sla_warning', () => assigneeOrSupport(tk), base);
   }
   logger.info(r, 'platform-ops:ticket-sla-scan done');
   return r;
