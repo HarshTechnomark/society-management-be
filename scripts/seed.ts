@@ -13,6 +13,7 @@ import { registerAccessControl } from '../src/modules/access-control/access-cont
 import { registerSubscriptions } from '../src/modules/subscriptions/subscriptions.public';
 import { registerSocieties } from '../src/modules/societies/societies.public';
 import { seedSocieties } from '../seeders/societies';
+import { seedPlatformBilling } from '../seeders/platform-billing';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -60,6 +61,10 @@ async function main(): Promise<void> {
       `societies: lifecycle set ${so5.societies.join(', ') || 'none'}, grants ${so5.grants.join(', ') || 'none'}, notes ${so5.notes}`,
     );
     out(`usage-reconcile: ${await reconcileDemoUsage()} counters set`);
+    const pb = await seedPlatformBilling();
+    out(
+      `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,
+    );
   }
   await closeDb();
 }

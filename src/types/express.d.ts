@@ -10,6 +10,8 @@ declare global {
       valid: { body: any; query: any; params: any };
       /** Module 05 route policy set by `routeMeta()` (state guard allow-list, `noSupportAccess`). */
       routePolicy?: StatePolicy;
+      /** Raw body of webhook requests (`/api/v1/webhooks/*`), kept for signature checks. */
+      rawBody?: Buffer;
     }
   }
 }

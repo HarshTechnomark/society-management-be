@@ -16,6 +16,7 @@ import { accessControlRoutes } from './modules/access-control/access-control.rou
 import { authArea, publicRoute } from './middlewares/permission.middleware';
 import { subscriptionsRoutes } from './modules/subscriptions/subscriptions.routes';
 import { societiesRoutes } from './modules/societies/societies.routes';
+import { platformBillingRoutes } from './modules/platform-billing/platform-billing.routes';
 import './modules/auth/auth.templates';
 import './modules/access-control/access-control.templates';
 import './modules/societies/societies.templates';
@@ -34,7 +35,16 @@ export function createApp(): Express {
   app.use(helmet());
   app.use(cors({ origin: env().appOrigins, credentials: true }));
   app.use(cookieParser());
-  app.use(express.json({ limit: '1mb' }));
+  app.use(
+    express.json({
+      limit: '1mb',
+      // webhooks are signed over the exact bytes (module 06 8.28)
+      verify: (req, _res, buf) => {
+        if ((req as express.Request).originalUrl.startsWith('/api/v1/webhooks/'))
+          (req as express.Request).rawBody = Buffer.from(buf);
+      },
+    }),
+  );
 
   const api = express.Router();
   // app from Origin, CSRF and Origin check, then authentication (module 02). Public routes are listed in
@@ -53,6 +63,8 @@ export function createApp(): Express {
   api.use(subscriptionsRoutes);
   // module 05: societies, lifecycle, support access, data exports, public sign-up
   api.use(societiesRoutes);
+  // module 06: platform invoices, payments, TDS, credits, refunds and the gateway webhook
+  api.use(platformBillingRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

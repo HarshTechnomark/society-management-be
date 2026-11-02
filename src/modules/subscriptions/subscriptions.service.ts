@@ -1153,6 +1153,12 @@ export async function renewOnce(subscriptionId: number, ctx: Ctx = SYSTEM): Prom
 
 /** Renews until the current period contains today (a society that missed several runs catches up). */
 export async function renewIfDue(subscriptionId: number, ctx: Ctx = SYSTEM): Promise<number> {
+  const pre = await Subscription.findByPk(subscriptionId, {
+    attributes: ['id', 'societyId', 'status', 'currentPeriodEnd'],
+  });
+  // the renewal invoice carries last period's overage: close those usage months before any row is locked
+  if (pre?.status === 'ACTIVE' && pre.currentPeriodEnd && pre.currentPeriodEnd < localDate(now()))
+    await closeUsageMonths(pre.societyId);
   let n = 0;
   while (n < 40 && (await renewOnce(subscriptionId, ctx))) n += 1;
   return n;
@@ -1200,13 +1206,20 @@ export async function listDueForInvoicing(
   return rows.map(r => ({ subscriptionId: r.id!, periodStart: r.currentPeriodStart! }));
 }
 
-export async function getBillingSnapshot(subscriptionId: number, periodStart: string) {
-  const sub = await Subscription.findByPk(subscriptionId);
+/**
+ * Module 06 snapshot of a period (module 06 §9.3). With `t` (module 06 issuing inside module 04's renewal or start
+ * transaction) the subscription and add-ons are read in that transaction and usage months are not closed here: closing
+ * runs its own transactions (and module 06 overage invoices) that would wait on rows the caller holds, so
+ * `renewIfDue` closes them before it opens the renewal transaction. Overage counters are read outside `t` so months
+ * closed just before are visible.
+ */
+export async function getBillingSnapshot(subscriptionId: number, periodStart: string, t?: Transaction) {
+  const sub = await Subscription.findByPk(subscriptionId, { transaction: t });
   if (!sub) throw subscriptionNotFound();
   if (sub.currentPeriodStart !== periodStart)
     throw invalidState('The snapshot is only for the current period');
-  const v = await versionById(sub.planVersionId);
-  const plan = await planByCode(await planCodeOfVersion(v.id!));
+  const v = await versionById(sub.planVersionId, t);
+  const plan = await planByCode(await planCodeOfVersion(v.id!, t), t);
   const addons = await SubscriptionAddon.findAll({
     where: {
       subscriptionId,
@@ -1215,11 +1228,12 @@ export async function getBillingSnapshot(subscriptionId: number, periodStart: st
       [Op.or]: [{ endsAt: null }, { endsAt: { [Op.gt]: zonedDayStart(periodStart) } }],
     },
     include: [{ model: Addon, attributes: ['name'] }],
+    transaction: t,
   });
   let previousPeriod = null;
   if (sub.previousPeriod) {
-    await closeUsageMonths(sub.societyId);
     const pv = sub.previousPeriod;
+    if (!t) await closeUsageMonths(sub.societyId);
     const rows = await loadVersionRows(pv.planVersionId);
     const counters = await UsageCounter.findAll({
       where: {

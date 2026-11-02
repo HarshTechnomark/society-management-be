@@ -5,6 +5,8 @@ import { placeholderFiles } from '../societies/societies.ports';
 import { AppError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
+import { paymentGateway } from '../../adapters';
+import { FakePaymentGateway } from '../../adapters/payments/payment-gateway';
 
 /** Non-production only: the last messages the fake adapters recorded (module 01 section 8.9). */
 export const devRoutes = Router();
@@ -46,3 +48,21 @@ devRoutes.get('/files/:id', (req, res, next) => {
   res.setHeader('Content-Disposition', `attachment; filename="${f.name}"`);
   res.send(f.content);
 });
+
+/** Non-production only: what the checkout would do on the fake gateway. Pay a platform order (module 01 section 10). */
+devRoutes.post(
+  '/payments/:orderId/pay',
+  asyncHandler(async (req, res) => {
+    const gw = paymentGateway();
+    if (!(gw instanceof FakePaymentGateway)) throw new AppError(404, 'NOT_FOUND', 'Not found');
+    const orderId = String(req.params.orderId);
+    if (!gw.orders.has(orderId)) throw new AppError(404, 'NOT_FOUND', 'Order not found');
+    const body = (req.body ?? {}) as {
+      amountPaise?: number;
+      status?: 'captured' | 'failed' | 'pending';
+      method?: string;
+    };
+    const p = gw.payOrder(orderId, body);
+    ok(res, { gatewayPaymentId: p.paymentId, orderId, status: p.status, amountPaise: p.amountPaise });
+  }),
+);

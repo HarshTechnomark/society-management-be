@@ -28,6 +28,7 @@ import {
   unregisterRetentionExpiryHandler,
 } from '../../../src/modules/societies/societies.purge';
 import { placeholderFiles, societyPorts } from '../../../src/modules/societies/societies.ports';
+import { registerPlatformBilling } from '../../../src/modules/platform-billing/platform-billing.public';
 import { readZip } from '../../../src/modules/societies/societies.zip';
 import { systemCtx } from '../../../src/types/context';
 import { as, idem, login, memberUser, resetLogins } from '../../helpers/access';
@@ -248,9 +249,11 @@ describe('society data export (8.24, 6.6, BR-05-22 to BR-05-24)', () => {
       "SELECT DISTINCT TABLE_NAME AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'societyId'",
       { type: QueryTypes.SELECT },
     );
+    registerPlatformBilling(); // module 06 registers its provider at start-up
     const covered = new Set(exportProviders().flatMap(p => p.tables.map(t => t.name)));
     // audit_logs: module 07 audit export; idempotency_keys: request plumbing; society_notes: platform internal (BR-05-34);
-    // member_grants, role_permissions: permission plumbing; entitlement_overrides, feature_flag_overrides: platform config
+    // member_grants, role_permissions: permission plumbing; entitlement_overrides, feature_flag_overrides: platform config;
+    // number_sequences: platform numbering (society 0 series for module 06), internal and not society data
     const exempt = new Set([
       'audit_logs',
       'idempotency_keys',
@@ -260,6 +263,7 @@ describe('society data export (8.24, 6.6, BR-05-22 to BR-05-24)', () => {
       'entitlement_overrides',
       'feature_flag_overrides',
       'sessions',
+      'number_sequences',
     ]);
     const missing = rows.map(r => r.t).filter(t => !covered.has(t) && !exempt.has(t));
     expect(missing).toEqual([]);

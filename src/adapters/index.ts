@@ -1,6 +1,7 @@
 import { env } from '../lib/env';
 import { FakeSmsSender, type SmsSender } from './sms/sms';
 import { FakeWhatsAppSender, type WhatsAppSender } from './whatsapp/whatsapp';
+import { FakePaymentGateway, type PaymentGateway } from './payments/payment-gateway';
 import { FakeEmailSender, type EmailSender } from './email/email';
 
 export interface Adapters {
@@ -27,4 +28,23 @@ export function adapters(): Adapters {
 /** Test helper. */
 export function setAdapters(a: Adapters | undefined): void {
   current = a;
+}
+
+let gateway: PaymentGateway | undefined;
+
+/**
+ * Payment gateway (module 01 section 10), kept apart from `Adapters` so the messaging set stays as it was. Only the
+ * fake exists; real mode fails loudly until the Razorpay adapter is built.
+ */
+export function paymentGateway(): PaymentGateway {
+  if (!gateway) {
+    if (env().PROVIDERS_MODE !== 'fake') throw new Error('The real payment gateway is not built yet');
+    gateway = new FakePaymentGateway();
+  }
+  return gateway;
+}
+
+/** Test helper. */
+export function setPaymentGateway(g: PaymentGateway | undefined): void {
+  gateway = g;
 }
