@@ -235,7 +235,9 @@ export async function confirmGatewayPayment(
       });
       return 'MISMATCH';
     }
-    payment.set({ gatewayPaymentId: gw.paymentId, method: gatewayMethod(gw.method), failureReason: null });
+    // an autopay charge keeps its mandate method (the gateway reports plain `upi`)
+    const method = payment.origin === 'SYSTEM' && payment.method ? payment.method : gatewayMethod(gw.method);
+    payment.set({ gatewayPaymentId: gw.paymentId, method, failureReason: null });
     const capturedAt = now();
     const { applied, excess } = await applyCapturedPayment(ctx, payment, invoice, capturedAt, t);
     await audit(
