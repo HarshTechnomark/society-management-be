@@ -15,6 +15,24 @@ module.exports = tseslint.config(
     },
   },
   {
+    // BR-07-47: only the audit archive may delete audit rows
+    files: ['src/**/*.ts'],
+    ignores: ['src/modules/platform-ops/platform-ops.audit-archive.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Literal[value=/DELETE\\s+FROM\\s+audit_logs/i]',
+          message: 'Only platform-ops.audit-archive.ts may delete audit_logs rows (no-audit-delete)',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/DELETE\\s+FROM\\s+audit_logs/i]',
+          message: 'Only platform-ops.audit-archive.ts may delete audit_logs rows (no-audit-delete)',
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.cjs', '**/*.js'],
     languageOptions: {
       sourceType: 'commonjs',

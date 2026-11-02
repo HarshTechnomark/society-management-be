@@ -1,3 +1,4 @@
+import type { HealthResult } from '../provider-adapter';
 import { randomBytes } from 'node:crypto';
 import { recordInbox } from '../../lib/inbox';
 
@@ -9,6 +10,8 @@ export interface WhatsAppSender {
     params: string[],
     buttons?: { url: string }[],
   ): Promise<{ providerId: string }>;
+  healthCheck?(): Promise<HealthResult>;
+  testSend?(to: string, text: string): Promise<{ providerMessageId: string }>;
 }
 
 export class FakeWhatsAppSender implements WhatsAppSender {

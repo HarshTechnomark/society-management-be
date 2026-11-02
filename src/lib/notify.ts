@@ -15,6 +15,8 @@ export interface Recipient {
 export interface NotifyOptions {
   channel?: 'SMS' | 'WHATSAPP';
   locale?: string;
+  /** Restricts delivery to these channels (module 07 announcements); omitted = every channel of the template. */
+  channels?: NotifyChannel[];
 }
 export interface RenderedMessage {
   sms?: string;
@@ -63,7 +65,9 @@ export async function notify(
         email = email ?? c?.email ?? null;
       }
       const a = adapters();
-      if (tpl.channels.includes('SMS') && mobile && msg.sms) {
+      const wants = (c: NotifyChannel) =>
+        tpl.channels.includes(c) && (!options.channels || options.channels.includes(c));
+      if (wants('SMS') && mobile && msg.sms) {
         if (options.channel === 'WHATSAPP' && templateKey === 'auth.otp')
           await a.whatsapp.sendTemplate(
             mobile,
@@ -73,7 +77,7 @@ export async function notify(
           );
         else await a.sms.send(mobile, templateKey, msg.sms);
       }
-      if (tpl.channels.includes('EMAIL') && email && msg.email)
+      if (wants('EMAIL') && email && msg.email)
         await a.email.send(
           email,
           msg.email.subject,

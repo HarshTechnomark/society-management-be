@@ -100,9 +100,11 @@ export async function resetAll(): Promise<void> {
   await resetRateLimits();
   await flushAcl();
   await clearInbox();
-  await kv()
-    .cacheDelPrefix('ps:') // module 07 settings cache
-    .catch(() => undefined);
+  // module 07 caches: settings, dashboard, status page, dismissals and fan-out marks, request metrics, provider day counters
+  for (const prefix of ['ps:', 'pd:', 'status:', 'pn:', 'm:', 'ph:', 'pfa:'])
+    await kv()
+      .cacheDelPrefix(prefix)
+      .catch(() => undefined);
 }
 
 export interface TestUser {

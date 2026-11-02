@@ -23,7 +23,8 @@
     "migrate:undo": "sequelize-cli db:migrate:undo",
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "seed": "tsx scripts/seed.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "providers:rekey": "tsx scripts/providers-rekey.ts"
   },
   "lint-staged": {
     "*.{ts,js,cjs,mjs}": [
