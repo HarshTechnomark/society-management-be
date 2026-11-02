@@ -26,6 +26,11 @@ const schema = z.object({
   PASSWORD_BREACH_CHECK: z.enum(['local', 'hibp']).default('local'),
   // module 03 (roles and permissions)
   PLATFORM_TEAM_EMAIL_DOMAIN: z.string().min(3).default('societyapp.in'),
+  // module 06 (platform billing): the platform's own gateway account; required when PROVIDERS_MODE=real
+  PLATFORM_GATEWAY_ACCOUNT_ID: z.string().min(1).default('platform'),
+  PLATFORM_RAZORPAY_KEY_ID: z.string().min(1).default('rzp_test_fake'),
+  PLATFORM_RAZORPAY_KEY_SECRET: z.string().min(16).optional(),
+  PLATFORM_RAZORPAY_WEBHOOK_SECRET: z.string().min(16).default('fake-platform-webhook-secret'),
   COOKIE_SECURE: z
     .enum(['true', 'false'])
     .default('true')
@@ -57,6 +62,18 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
     if (r.data.PROVIDERS_MODE === 'fake')
       throw new Error('Invalid environment:\n  PROVIDERS_MODE: fake is forbidden in production');
     if (!r.data.REDIS_URL) throw new Error('Invalid environment:\n  REDIS_URL: required in production');
+  }
+  if (r.data.PROVIDERS_MODE === 'real') {
+    const unset = [
+      'PLATFORM_GATEWAY_ACCOUNT_ID',
+      'PLATFORM_RAZORPAY_KEY_ID',
+      'PLATFORM_RAZORPAY_KEY_SECRET',
+      'PLATFORM_RAZORPAY_WEBHOOK_SECRET',
+    ].filter(k => !raw[k]);
+    if (unset.length)
+      throw new Error(
+        `Invalid environment:\n${unset.map(k => `  ${k}: required when PROVIDERS_MODE=real`).join('\n')}`,
+      );
   }
   return { ...r.data, appOrigins };
 }
