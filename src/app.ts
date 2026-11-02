@@ -17,9 +17,12 @@ import { authArea, publicRoute } from './middlewares/permission.middleware';
 import { subscriptionsRoutes } from './modules/subscriptions/subscriptions.routes';
 import { societiesRoutes } from './modules/societies/societies.routes';
 import { platformBillingRoutes } from './modules/platform-billing/platform-billing.routes';
+import { platformOpsRoutes } from './modules/platform-ops/platform-ops.routes';
+import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
 import './modules/access-control/access-control.templates';
 import './modules/societies/societies.templates';
+import './modules/platform-ops/platform-ops.templates';
 
 /**
  * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > appContext > csrf > auth > routes > error handler.
@@ -57,6 +60,8 @@ export function createApp(): Express {
   if (env().NODE_ENV !== 'production') api.use('/dev', publicRoute(), devRoutes);
   api.use('/auth', authArea(), authRoutes);
   api.use('/me/security', authArea(), meSecurityRoutes);
+  // module 07 (BR-07-43): the platform IP allowlist applies to every /platform route of every module
+  api.use('/platform', platformIpAllowlist());
   // module 03: roles, members, invitations, grants, household and platform team (every route carries a marker)
   api.use(accessControlRoutes);
   // module 04: plans, subscriptions, entitlements and feature flags
@@ -65,6 +70,8 @@ export function createApp(): Express {
   api.use(societiesRoutes);
   // module 06: platform invoices, payments, TDS, credits, refunds and the gateway webhook
   api.use(platformBillingRoutes);
+  // module 07: support tickets, settings and organizations (part 1)
+  api.use(platformOpsRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 
