@@ -57,29 +57,53 @@ const goLiveHooks: GoLiveHook[] = [];
 export const registerGoLiveHook = (h: GoLiveHook): void => {
   if (!goLiveHooks.includes(h)) goLiveHooks.push(h);
 };
+/** Test helper. */
+export const clearGoLiveHooks = (): void => {
+  goLiveHooks.length = 0;
+};
 
 // ------------------------------------------------------------------ rows
+const isDeadlock = (err: unknown): boolean =>
+  (err as { parent?: { errno?: number } })?.parent?.errno === 1213 ||
+  (err as { original?: { errno?: number } })?.original?.errno === 1213;
+
+/**
+ * BR-08-43: the 8 rows are created once and idempotently. Existing rows are counted first (a plain read), because an
+ * `INSERT IGNORE` of rows that exist takes shared locks that deadlock with a transaction holding them; two first-time
+ * callers that race are retried after a deadlock.
+ */
 export async function ensureSteps(societyId: number, t?: Transaction): Promise<void> {
+  if ((await OnboardingStep.count({ where: { societyId }, transaction: t })) >= ONBOARDING_STEP_KEYS.length)
+    return;
   const at = now();
-  await OnboardingStep.bulkCreate(
-    ONBOARDING_STEP_KEYS.map(stepKey => ({
-      societyId,
-      stepKey,
-      stepNo: STEP_NO[stepKey],
-      isRequired: REQUIRED.has(stepKey),
-      status: 'PENDING' as const,
-      completedAt: null,
-      completedBy: null,
-      skipReason: null,
-      lastCheckSummary: null,
-      version: 1,
-      createdBy: null,
-      updatedBy: null,
-      createdAt: at,
-      updatedAt: at,
-    })),
-    { ignoreDuplicates: true, transaction: t },
-  );
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await OnboardingStep.bulkCreate(
+        ONBOARDING_STEP_KEYS.map(stepKey => ({
+          societyId,
+          stepKey,
+          stepNo: STEP_NO[stepKey],
+          isRequired: REQUIRED.has(stepKey),
+          status: 'PENDING' as const,
+          completedAt: null,
+          completedBy: null,
+          skipReason: null,
+          lastCheckSummary: null,
+          version: 1,
+          createdBy: null,
+          updatedBy: null,
+          createdAt: at,
+          updatedAt: at,
+        })),
+        { ignoreDuplicates: true, transaction: t },
+      );
+      return;
+    } catch (err) {
+      // inside a caller's transaction a deadlock rolls that transaction back, so it is rethrown there
+      if (t || !isDeadlock(err) || attempt >= 4) throw err;
+      await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)));
+    }
+  }
 }
 
 const rowsOf = (societyId: number, t?: Transaction) =>
@@ -281,7 +305,8 @@ export async function completeStep(ctx: Ctx, societyId: number, stepKey: Onboard
     const step = rows.get(stepKey)!;
     if (step.status !== 'PENDING') throw invalidState('This step is not waiting to be completed');
     const c = await runCheck(societyId, stepKey);
-    if (c.state === 'FAIL')
+    // a check that timed out cannot confirm the step, so it is not accepted either
+    if (c.state === 'FAIL' || c.state === 'UNKNOWN')
       throw new UnprocessableError('ONBOARDING_STEP_INCOMPLETE', c.summary, [
         { field: stepKey, message: c.summary },
       ]);
@@ -402,7 +427,8 @@ export async function goLive(ctx: Ctx, societyId: number) {
       }
       if (r.isRequired) {
         const c = await runCheck(societyId, r.stepKey);
-        if (c.state === 'FAIL') failing.push({ field: r.stepKey, message: c.summary });
+        if (c.state === 'FAIL' || c.state === 'UNKNOWN')
+          failing.push({ field: r.stepKey, message: c.summary });
       }
     }
     if (failing.length)

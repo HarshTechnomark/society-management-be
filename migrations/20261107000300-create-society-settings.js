@@ -16,7 +16,7 @@ module.exports = {
         PRIMARY KEY (id),
         UNIQUE KEY uq_society_settings_key (societyId, settingKey),
         CONSTRAINT fk_society_settings_society FOREIGN KEY (societyId) REFERENCES societies (id) ON DELETE RESTRICT,
-        CONSTRAINT ck_society_settings_key CHECK (settingKey REGEXP '^[a-z][a-zA-Z0-9]*\\\\.[a-z][a-zA-Z0-9]*$')
+        CONSTRAINT ck_society_settings_key CHECK (REGEXP_LIKE(settingKey, '^[a-z][a-zA-Z0-9]*\\\\.[a-z][a-zA-Z0-9]*$', 'c'))
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
   },
   async down(qi) {

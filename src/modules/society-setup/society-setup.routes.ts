@@ -5,6 +5,7 @@ import { requireRecentAuth } from '../../middlewares/recentAuth.middleware';
 import { idempotency } from '../../middlewares/idempotency.middleware';
 import { requireFeature as feature } from '../../middlewares/entitlement.middleware';
 import { societyMiddleware } from '../../middlewares/society.middleware';
+import { routeMeta } from '../societies/societies.guard';
 import { requirePermission as can } from '../../middlewares/permission.middleware';
 import { tag } from '../access-control/access-control.registry';
 import { setupController as c } from './society-setup.controller';
@@ -37,6 +38,8 @@ const stepUpIf = (pred: (req: Request) => Promise<boolean> | boolean): RequestHa
     { stepUp: true },
   );
 };
+/** A support grant never deletes (module 05 section 6.4 and module 08 section 13); unit delete is out of reach by permission. */
+const noSupport = (): RequestHandler => routeMeta({ noSupportAccess: true });
 const read = { mode: 'read' } as const;
 
 export const societySetupRoutes = Router();
@@ -133,6 +136,7 @@ r.post(
 );
 r.delete(
   '/buildings/:id',
+  noSupport(),
   society(),
   can('settings.society.edit'),
   feature(F.hierarchy),
@@ -336,6 +340,7 @@ r.patch(
 );
 r.delete(
   '/holidays/:id',
+  noSupport(),
   society(),
   can('settings.society.edit'),
   feature(F.settings),

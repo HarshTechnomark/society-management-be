@@ -43,7 +43,7 @@ module.exports = {
         CONSTRAINT ck_loc_floor CHECK (nodeType <> 'FLOOR' OR floor IS NOT NULL),
         CONSTRAINT ck_loc_building CHECK (nodeType <> 'BUILDING' OR (buildingId IS NOT NULL AND parentId IS NULL)),
         CONSTRAINT ck_loc_depth CHECK (depth BETWEEN 1 AND 4),
-        CONSTRAINT ck_loc_qr CHECK (qrToken REGEXP '^[A-Za-z0-9]{12}$')
+        CONSTRAINT ck_loc_qr CHECK (REGEXP_LIKE(qrToken, '^[A-Za-z0-9]{12}$', 'c'))
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
   },
   async down(qi) {

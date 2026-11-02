@@ -261,6 +261,8 @@ async function buildPlan(societyId: number, p: GeneratorParams, t?: Transaction)
       },
       attributes: ['buildingId', 'unitNumber', 'label'],
       transaction: t,
+      // a locking read sees what a parallel commit into the same building committed while this one waited for the lock
+      ...(t ? { lock: t.LOCK.UPDATE } : {}),
     });
     const taken2 = new Set(clash.map(c => `${c.buildingId}|${c.unitNumber}`));
     for (const r of rows) {
@@ -320,10 +322,21 @@ export async function preview(_ctx: Ctx, societyId: number, p: GeneratorParams) 
 }
 
 // ------------------------------------------------------------------ commit (8.14, BR-08-32)
+/** A duplicate number that slipped past the conflict check (a parallel writer) is still a conflict, never a 500. */
+async function insertChunk(rows: object[], t: Transaction): Promise<void> {
+  try {
+    await Unit.bulkCreate(rows as never, { transaction: t });
+  } catch (err) {
+    if ((err as { name?: string }).name === 'SequelizeUniqueConstraintError')
+      throw new AppError(409, 'UNIT_NUMBER_CONFLICT', 'Some unit numbers already exist');
+    throw err;
+  }
+}
+
 export async function commit(ctx: Ctx, societyId: number, p: GeneratorParams & { previewHash: string }) {
   const basis = (await getSetting(societyId, 'billing.areaBasis')) as AreaBasis;
   const { previewHash, ...params } = p;
-  return sequelize.transaction(async t => {
+  const result = await sequelize.transaction(async t => {
     const plan = await buildPlan(societyId, params, t); // locks the existing target buildings FOR UPDATE
     if (plan.hash !== previewHash)
       throw new AppError(409, 'PREVIEW_STALE', 'The inputs changed since the preview. Preview again.');
@@ -371,13 +384,13 @@ export async function commit(ctx: Ctx, societyId: number, p: GeneratorParams & {
     }
 
     const countable = plan.rows.filter(r => isCountable(r.unitType)).length;
-    const usage = countable ? await adjustFlats(ctx, societyId, countable, t) : null;
+    if (countable) await adjustFlats(ctx, societyId, countable, t);
 
     const userId = ctx.user?.id ?? null;
     let inserted = 0;
     for (let i = 0; i < plan.rows.length; i += INSERT_CHUNK) {
       const chunk = plan.rows.slice(i, i + INSERT_CHUNK);
-      await Unit.bulkCreate(
+      await insertChunk(
         chunk.map(r => ({
           societyId,
           buildingId: buildingIds.get(r.buildingKey)!,
@@ -403,7 +416,7 @@ export async function commit(ctx: Ctx, societyId: number, p: GeneratorParams & {
           createdBy: userId,
           updatedBy: userId,
         })),
-        { transaction: t },
+        t,
       );
       inserted += chunk.length;
       testHooks.afterUnitsInserted?.(inserted);
@@ -451,14 +464,13 @@ export async function commit(ctx: Ctx, societyId: number, p: GeneratorParams & {
         t,
       );
     }
-    // counter values: from the consumption above (this transaction is not committed yet), else as stored
-    const now = usage ?? (await entitlements.getUsage(societyId, FLATS_LIMIT));
     return {
       created: plan.rows.length,
       buildingsCreated: created.map(b => b.id!),
       unitIds,
-      used: now.used,
-      limit: now.limit,
     };
   });
+  // the counter after the commit (the transaction's own reads are not visible to other connections before it)
+  const usage = await entitlements.getUsage(societyId, FLATS_LIMIT);
+  return { ...result, used: usage.used, limit: usage.limit };
 }

@@ -255,7 +255,7 @@ export async function createBuildingCore(
       entityLabel: `${b.code} ${b.name}`,
       societyId,
       after: {
-        code: b.code,
+        buildingCode: b.code, // not `code`: the audit redaction masks keys named code
         name: b.name,
         kind: b.kind,
         parentBuildingId: b.parentBuildingId,
@@ -306,13 +306,14 @@ export async function patchBuilding(
     };
     for (const k of Object.keys(next) as (keyof typeof next)[])
       if (next[k] !== b[k]) {
-        before[k] = b[k];
-        after[k] = next[k];
+        const field = k === 'code' ? 'buildingCode' : k; // the audit redaction masks keys named code
+        before[field] = b[k];
+        after[field] = next[k];
       }
     if (!Object.keys(after).length) return;
 
     const hasUnits = () => Unit.count({ where: { buildingId: b.id!, societyId }, transaction: t });
-    if ('code' in after) {
+    if ('buildingCode' in after) {
       if (await hasUnits())
         throw new AppError(409, 'BUILDING_CODE_LOCKED', 'The code cannot change once the building has units');
       if (
@@ -492,7 +493,8 @@ export async function deleteBuilding(ctx: Ctx, societyId: number, id: number): P
       (await Building.count({ where: { parentBuildingId: b.id!, societyId }, transaction: t }))
     )
       throw inUse();
-    const row = b.get({ plain: true });
+    const { code, ...rest } = b.get({ plain: true });
+    const row = { ...rest, buildingCode: code }; // the audit redaction masks keys named code
     try {
       await deleteBuildingNodes(societyId, b.id!, t);
       await b.destroy({ transaction: t });
@@ -507,7 +509,7 @@ export async function deleteBuilding(ctx: Ctx, societyId: number, id: number): P
         action: AUDIT.buildingDeleted,
         entityType: ENTITY.building,
         entityId: row.id!,
-        entityLabel: `${row.code} ${row.name}`,
+        entityLabel: `${row.buildingCode} ${row.name}`,
         societyId,
         before: row,
       },

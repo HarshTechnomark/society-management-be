@@ -34,7 +34,7 @@ module.exports = {
         CONSTRAINT ck_buildings_basements CHECK (basements <= 5),
         CONSTRAINT ck_buildings_lifts CHECK (liftCount <= 50),
         CONSTRAINT ck_buildings_sort CHECK (sortOrder <= 9999),
-        CONSTRAINT ck_buildings_code CHECK (code REGEXP '^[A-Z0-9]{1,6}$'),
+        CONSTRAINT ck_buildings_code CHECK (REGEXP_LIKE(code, '^[A-Z0-9]{1,6}$', 'c')),
         CONSTRAINT ck_buildings_wing CHECK ((kind = 'WING') = (parentBuildingId IS NOT NULL)),
         CONSTRAINT ck_buildings_archived CHECK ((status = 'ARCHIVED') = (archivedAt IS NOT NULL))
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
