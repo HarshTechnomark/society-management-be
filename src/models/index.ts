@@ -37,6 +37,12 @@ import { PlatformInvoiceLine } from './platform-invoice-line.model';
 import { PlatformPayment } from './platform-payment.model';
 import { PlatformCredit } from './platform-credit.model';
 import { DunningEvent } from './dunning-event.model';
+import { PlatformSetting } from './platform-setting.model';
+import { PlatformTicket } from './platform-ticket.model';
+import { PlatformTicketMessage } from './platform-ticket-message.model';
+import { ServiceProvider } from './service-provider.model';
+import { Incident } from './incident.model';
+import { PlatformNotification } from './platform-notification.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -94,6 +100,12 @@ const models = {
   PlatformPayment,
   PlatformCredit,
   DunningEvent,
+  PlatformSetting,
+  PlatformTicket,
+  PlatformTicketMessage,
+  ServiceProvider,
+  Incident,
+  PlatformNotification,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -200,6 +212,18 @@ PlatformCredit.belongsTo(PlatformPayment, { as: 'payment', foreignKey: 'paymentI
 DunningEvent.belongsTo(Society, { foreignKey: 'societyId' });
 DunningEvent.belongsTo(PlatformInvoice, { as: 'invoice', foreignKey: 'invoiceId' });
 
+// Module 07 associations (section 7)
+PlatformTicket.belongsTo(Society, { foreignKey: 'societyId' });
+PlatformTicket.belongsTo(User, { as: 'raisedBy', foreignKey: 'raisedByUserId' });
+PlatformTicket.belongsTo(User, { as: 'assignee', foreignKey: 'assigneeUserId' });
+PlatformTicket.hasMany(PlatformTicketMessage, { as: 'messages', foreignKey: 'ticketId' });
+PlatformTicketMessage.belongsTo(PlatformTicket, { foreignKey: 'ticketId' });
+PlatformTicketMessage.belongsTo(User, { as: 'author', foreignKey: 'authorUserId' });
+ServiceProvider.hasMany(Incident, { foreignKey: 'serviceProviderId' });
+Incident.belongsTo(ServiceProvider, { foreignKey: 'serviceProviderId' });
+Incident.hasMany(PlatformNotification, { foreignKey: 'incidentId' });
+PlatformNotification.belongsTo(Incident, { foreignKey: 'incidentId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -240,6 +264,12 @@ export {
   PlatformPayment,
   PlatformCredit,
   DunningEvent,
+  PlatformSetting,
+  PlatformTicket,
+  PlatformTicketMessage,
+  ServiceProvider,
+  Incident,
+  PlatformNotification,
 };
 
 export async function closeDb(): Promise<void> {

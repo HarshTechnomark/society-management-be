@@ -1,0 +1,62 @@
+'use strict';
+/** Module 07 section 7.2: support tickets raised by societies (or by the platform on their behalf). Never deleted. */
+module.exports = {
+  async up(qi) {
+    await qi.sequelize.query(`
+      CREATE TABLE platform_tickets (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        societyId BIGINT UNSIGNED NOT NULL,
+        raisedByUserId BIGINT UNSIGNED NOT NULL,
+        source VARCHAR(12) NOT NULL DEFAULT 'ADMIN_APP',
+        subject VARCHAR(150) NOT NULL,
+        category VARCHAR(20) NOT NULL,
+        priority VARCHAR(10) NOT NULL DEFAULT 'MEDIUM',
+        status VARCHAR(15) NOT NULL DEFAULT 'OPEN',
+        assigneeUserId BIGINT UNSIGNED NULL,
+        firstResponseDueAt DATETIME(3) NOT NULL,
+        resolutionDueAt DATETIME(3) NOT NULL,
+        firstRespondedAt DATETIME(3) NULL,
+        firstResponseBreachedAt DATETIME(3) NULL,
+        resolutionWarnedAt DATETIME(3) NULL,
+        resolutionBreachedAt DATETIME(3) NULL,
+        waitingSince DATETIME(3) NULL,
+        pausedMinutes INT UNSIGNED NOT NULL DEFAULT 0,
+        resolvedAt DATETIME(3) NULL,
+        closedAt DATETIME(3) NULL,
+        closedReason VARCHAR(20) NULL,
+        reopenCount TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        lastMessageAt DATETIME(3) NOT NULL,
+        lastSocietyMessageAt DATETIME(3) NULL,
+        lastPlatformMessageAt DATETIME(3) NULL,
+        messageCount SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+        satisfactionRating TINYINT UNSIGNED NULL,
+        satisfactionComment VARCHAR(500) NULL,
+        ratedAt DATETIME(3) NULL,
+        version INT UNSIGNED NOT NULL DEFAULT 1,
+        createdBy BIGINT UNSIGNED NULL,
+        updatedBy BIGINT UNSIGNED NULL,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        KEY ix_ptickets_society_status (societyId, status, createdAt),
+        KEY ix_ptickets_status_priority (status, priority, createdAt),
+        KEY ix_ptickets_assignee (assigneeUserId, status),
+        KEY ix_ptickets_resolution_due (status, resolutionDueAt),
+        KEY ix_ptickets_response_due (status, firstRespondedAt, firstResponseDueAt),
+        KEY ix_ptickets_raised_by (raisedByUserId),
+        CONSTRAINT fk_ptickets_society FOREIGN KEY (societyId) REFERENCES societies (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_ptickets_raiser FOREIGN KEY (raisedByUserId) REFERENCES users (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_ptickets_assignee FOREIGN KEY (assigneeUserId) REFERENCES users (id) ON DELETE RESTRICT,
+        CONSTRAINT ck_ptickets_source CHECK (source IN ('ADMIN_APP','PLATFORM')),
+        CONSTRAINT ck_ptickets_category CHECK (category IN ('BILLING','PAYMENTS','TECHNICAL','ONBOARDING','ACCOUNT','DATA_FIX','FEATURE_REQUEST','OTHER')),
+        CONSTRAINT ck_ptickets_priority CHECK (priority IN ('LOW','MEDIUM','HIGH')),
+        CONSTRAINT ck_ptickets_status CHECK (status IN ('OPEN','IN_PROGRESS','WAITING','RESOLVED','CLOSED')),
+        CONSTRAINT ck_ptickets_closed_reason CHECK (closedReason IS NULL OR closedReason IN ('AUTO_CLOSED','CLOSED_BY_SOCIETY','CLOSED_BY_PLATFORM')),
+        CONSTRAINT ck_ptickets_reopen CHECK (reopenCount BETWEEN 0 AND 5),
+        CONSTRAINT ck_ptickets_rating CHECK (satisfactionRating IS NULL OR satisfactionRating BETWEEN 1 AND 5)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
+  },
+  async down(qi) {
+    await qi.sequelize.query('DROP TABLE IF EXISTS platform_tickets');
+  },
+};
