@@ -119,8 +119,11 @@ export async function seedDemoTickets(): Promise<{ created: string[]; skipped: s
       include: [{ model: User, attributes: ['id', 'name'], required: true }],
       order: [['id', 'ASC']],
     });
-    if (!member) continue;
-    const raiser = (member as unknown as { User: User }).User;
+    // Tulip Gardens only has an invited admin so far: the invited user raises its tickets
+    const raiser = member
+      ? (member as unknown as { User: User }).User
+      : await User.findOne({ where: { email: 'admin@tulipgardens.in' } });
+    if (!raiser) continue;
     const created = addHours(now(), -d.hoursAgo);
     const replied = d.status !== 'OPEN';
     const first = addMinutes(created, 40);
