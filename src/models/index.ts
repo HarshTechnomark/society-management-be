@@ -43,6 +43,12 @@ import { PlatformTicketMessage } from './platform-ticket-message.model';
 import { ServiceProvider } from './service-provider.model';
 import { Incident } from './incident.model';
 import { PlatformNotification } from './platform-notification.model';
+import { Building } from './building.model';
+import { Unit } from './unit.model';
+import { SocietySetting } from './society-setting.model';
+import { OnboardingStep } from './onboarding-step.model';
+import { Holiday } from './holiday.model';
+import { LocationNode } from './location-node.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -106,6 +112,12 @@ const models = {
   ServiceProvider,
   Incident,
   PlatformNotification,
+  Building,
+  Unit,
+  SocietySetting,
+  OnboardingStep,
+  Holiday,
+  LocationNode,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -224,6 +236,26 @@ Incident.belongsTo(ServiceProvider, { foreignKey: 'serviceProviderId' });
 Incident.hasMany(PlatformNotification, { foreignKey: 'incidentId' });
 PlatformNotification.belongsTo(Incident, { foreignKey: 'incidentId' });
 
+// Module 08 associations (section 7)
+Building.belongsTo(Society, { foreignKey: 'societyId' });
+Building.belongsTo(Building, { as: 'parent', foreignKey: 'parentBuildingId' });
+Building.hasMany(Building, { as: 'wings', foreignKey: 'parentBuildingId' });
+Building.hasMany(Unit, { foreignKey: 'buildingId' });
+Building.hasOne(LocationNode, {
+  as: 'locationNode',
+  foreignKey: 'buildingId',
+  scope: { nodeType: 'BUILDING' },
+});
+Unit.belongsTo(Society, { foreignKey: 'societyId' });
+Unit.belongsTo(Building, { foreignKey: 'buildingId' });
+SocietySetting.belongsTo(Society, { foreignKey: 'societyId' });
+OnboardingStep.belongsTo(Society, { foreignKey: 'societyId' });
+Holiday.belongsTo(Society, { foreignKey: 'societyId' });
+LocationNode.belongsTo(Society, { foreignKey: 'societyId' });
+LocationNode.belongsTo(LocationNode, { as: 'parent', foreignKey: 'parentId' });
+LocationNode.hasMany(LocationNode, { as: 'children', foreignKey: 'parentId' });
+LocationNode.belongsTo(Building, { foreignKey: 'buildingId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -270,6 +302,12 @@ export {
   ServiceProvider,
   Incident,
   PlatformNotification,
+  Building,
+  Unit,
+  SocietySetting,
+  OnboardingStep,
+  Holiday,
+  LocationNode,
 };
 
 export async function closeDb(): Promise<void> {
