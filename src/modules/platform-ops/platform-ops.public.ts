@@ -50,13 +50,11 @@ export function registerPlatformOps(): void {
   });
   setBillingSettingsSource(key => getStoredSetting(key as SettingKey));
   registerPlatformOpsJobs();
-  // new activity items go to the platform console live (section 8.2, room `platform:ops`)
-  onAuditCommitted(row => {
-    if (isActivityAction(row.action))
-      emitToRoom(
-        'platform:ops',
-        'platform.activity',
-        activityItem(row) as unknown as Record<string, unknown>,
-      );
-  });
+  onAuditCommitted(pushActivity); // new activity items go to the platform console live (section 8.2)
+}
+
+/** Room `platform:ops` event `platform.activity` for each committed audit row on the activity allowlist. */
+function pushActivity(row: Parameters<Parameters<typeof onAuditCommitted>[0]>[0]): void {
+  if (isActivityAction(row.action))
+    emitToRoom('platform:ops', 'platform.activity', activityItem(row) as unknown as Record<string, unknown>);
 }
