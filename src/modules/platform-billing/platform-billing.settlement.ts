@@ -40,9 +40,9 @@ export function emitBillingChanged(t: Transaction, societyId: number, invoiceId:
 }
 
 // ------------------------------------------------------------------ credit ledger
-/** BR-06-25: `balanceAfterPaise` of the latest POSTED row, 0 when none. */
-export async function creditBalance(societyId: number, t?: Transaction): Promise<number> {
-  const last = await PlatformCredit.findOne({
+/** The latest POSTED row of the ledger (`postedAt`, then `id`), or null. */
+export async function lastPostedCredit(societyId: number, t?: Transaction): Promise<PlatformCredit | null> {
+  return PlatformCredit.findOne({
     where: { societyId, status: 'POSTED' },
     order: [
       ['postedAt', 'DESC'],
@@ -50,7 +50,24 @@ export async function creditBalance(societyId: number, t?: Transaction): Promise
     ],
     transaction: t,
   });
-  return num(last?.balanceAfterPaise);
+}
+
+/** BR-06-25: `balanceAfterPaise` of the latest POSTED row, 0 when none. */
+export async function creditBalance(societyId: number, t?: Transaction): Promise<number> {
+  return num((await lastPostedCredit(societyId, t))?.balanceAfterPaise);
+}
+
+/**
+ * `postedAt` for the next ledger row: never before the latest row, so the order by `postedAt, id` is the order of
+ * posting even when the clock is frozen or two rows share a millisecond. `strictlyAfter` is for a row with a lower id
+ * than rows already posted (a goodwill credit approved later).
+ */
+export function nextPostedAt(last: PlatformCredit | null, strictlyAfter = false): Date {
+  const t = now();
+  const prev = last?.postedAt;
+  if (!prev) return t;
+  if (strictlyAfter) return t.getTime() > prev.getTime() ? t : new Date(prev.getTime() + 1);
+  return t.getTime() >= prev.getTime() ? t : prev;
 }
 
 /** Posts a system credit row (6.4) and returns it; the balance never goes negative (BR-06-25). */
@@ -66,7 +83,8 @@ export async function postCredit(
   },
   t: Transaction,
 ): Promise<PlatformCredit> {
-  const balance = await creditBalance(input.societyId, t);
+  const last = await lastPostedCredit(input.societyId, t);
+  const balance = num(last?.balanceAfterPaise);
   const after = balance + input.amountPaise;
   if (after < 0)
     throw new UnprocessableError('INSUFFICIENT_CREDIT_BALANCE', 'The credit balance is not enough');
@@ -80,7 +98,7 @@ export async function postCredit(
       invoiceId: input.invoiceId ?? null,
       paymentId: input.paymentId ?? null,
       reason: input.reason ?? null,
-      postedAt: now(),
+      postedAt: nextPostedAt(last),
       createdBy: actorId(ctx),
     } as never,
     { transaction: t },

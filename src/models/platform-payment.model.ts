@@ -5,6 +5,7 @@ import {
   type InferCreationAttributes,
   type Sequelize,
 } from 'sequelize';
+import { now } from '../lib/clock';
 import { dateColumn, fkColumn, idColumn, timestampColumns } from './_columns';
 
 export const PAYMENT_KINDS = ['PAYMENT', 'TDS', 'REFUND'] as const;
@@ -144,6 +145,10 @@ export class PlatformPayment extends Model<
         sequelize,
         tableName: 'platform_payments',
         hooks: {
+          // the clock helper, so `createdAt` follows a frozen test clock (24 h and pending-order rules read it)
+          beforeCreate: p => {
+            p.createdAt = now();
+          },
           beforeUpdate: p => {
             const bad = FIXED.filter(c => p.changed(c));
             if (bad.length) throw new Error(`platform_payments.${bad.join(', ')} never change`);

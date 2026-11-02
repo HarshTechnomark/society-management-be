@@ -5,6 +5,8 @@ import type { Ctx } from '../../types/context';
 import { subscriptions } from '../subscriptions/subscriptions.public';
 import { issuePeriod, PLATFORM_BILLING_QUEUE, RENDER_PDF_JOB } from './platform-billing.service';
 import { todayIst } from './platform-billing.settlement';
+import { PROCESS_WEBHOOK_JOB, processWebhookEvent } from './platform-billing.webhook';
+import type { GatewayWebhookEvent } from '../../adapters/payments/payment-gateway';
 
 /** Queue `platform-billing` (section 9.1, Asia/Kolkata). This task registers the invoice jobs; payments and dunning come later. */
 export const GENERATE_INVOICES_JOB = 'platform-billing:generate-invoices';
@@ -62,5 +64,9 @@ export function registerPlatformBillingJobs(): void {
   registerQueue(PLATFORM_BILLING_QUEUE, 'Platform billing: invoices, payments, dunning', 5);
   registerProcessor(PLATFORM_BILLING_QUEUE, GENERATE_INVOICES_JOB, async () => runGenerateInvoices());
   registerProcessor(PLATFORM_BILLING_QUEUE, RENDER_PDF_JOB, data => renderPdfPlaceholder(data));
+  registerProcessor(PLATFORM_BILLING_QUEUE, PROCESS_WEBHOOK_JOB, async data => {
+    const outcome = await processWebhookEvent(data.event as GatewayWebhookEvent);
+    logger.info({ eventId: data.eventId, outcome }, 'platform-billing:process-webhook done');
+  });
   registerRepeatable(PLATFORM_BILLING_QUEUE, GENERATE_INVOICES_JOB, { dailyAtIst: '02:00' });
 }
