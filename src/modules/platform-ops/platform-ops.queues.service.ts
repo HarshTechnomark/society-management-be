@@ -141,6 +141,7 @@ const notFailed = () => new ConflictError('JOB_NOT_FAILED', 'Only a failed job c
 export async function retryJob(ctx: Ctx, queue: string, jobId: string) {
   const j = await findJob(queue, jobId);
   if (j.state !== 'failed') throw notFailed();
+  const permanent = isPermanent(j);
   await sequelize.transaction(async t => {
     await audit(
       ctx,
@@ -157,7 +158,7 @@ export async function retryJob(ctx: Ctx, queue: string, jobId: string) {
   return {
     jobId,
     state: 'waiting' as const,
-    warning: isPermanent(j) ? 'PERMANENT_ERROR_LIKELY_TO_FAIL' : null,
+    warning: permanent ? 'PERMANENT_ERROR_LIKELY_TO_FAIL' : null,
   };
 }
 

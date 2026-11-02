@@ -378,10 +378,11 @@ const memoryInspector: QueueInspector = {
     const all = [...memJobs.values()]
       .filter(j => j.queue === queue && j.state === state)
       .sort((a, b) => (b.failedAt ?? b.createdAt).getTime() - (a.failedAt ?? a.createdAt).getTime());
-    return { items: all.slice(offset, offset + limit), total: all.length };
+    return { items: all.slice(offset, offset + limit).map(j => ({ ...j })), total: all.length };
   },
   async get(queue, jobId) {
-    return memJobs.get(`${queue}:${jobId}`) ?? null;
+    const rec = memJobs.get(`${queue}:${jobId}`);
+    return rec ? { ...rec } : null;
   },
   async retry(queue, jobId) {
     const rec = memJobs.get(`${queue}:${jobId}`);
