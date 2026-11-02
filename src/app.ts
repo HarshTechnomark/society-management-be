@@ -18,12 +18,14 @@ import { subscriptionsRoutes } from './modules/subscriptions/subscriptions.route
 import { societiesRoutes } from './modules/societies/societies.routes';
 import { platformBillingRoutes } from './modules/platform-billing/platform-billing.routes';
 import { platformOpsRoutes } from './modules/platform-ops/platform-ops.routes';
+import { societySetupRoutes } from './modules/society-setup/society-setup.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
 import './modules/access-control/access-control.templates';
 import './modules/societies/societies.templates';
 import './modules/platform-ops/platform-ops.templates';
+import './modules/society-setup/society-setup.templates';
 
 /**
  * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > appContext > csrf > auth > routes > error handler.
@@ -74,6 +76,8 @@ export function createApp(): Express {
   api.use(platformBillingRoutes);
   // module 07: support tickets, settings, organizations, dashboard, providers, incidents, announcements, queues, audit
   api.use(platformOpsRoutes);
+  // module 08: society profile, settings, buildings, units, generator, locations, holidays, onboarding
+  api.use(societySetupRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

@@ -22,6 +22,8 @@ import {
   seedSettings,
 } from '../seeders/platform-ops';
 import { registerPlatformOps } from '../src/modules/platform-ops/platform-ops.public';
+import { seedSocietySetup } from '../seeders/society-setup';
+import { registerSocietySetup } from '../src/modules/society-setup/society-setup.public';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -35,6 +37,7 @@ async function main(): Promise<void> {
   registerSubscriptions();
   registerSocieties();
   registerPlatformOps();
+  registerSocietySetup();
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
@@ -72,6 +75,10 @@ async function main(): Promise<void> {
       `societies: lifecycle set ${so5.societies.join(', ') || 'none'}, grants ${so5.grants.join(', ') || 'none'}, notes ${so5.notes}`,
     );
     out(`usage-reconcile: ${await reconcileDemoUsage()} counters set`);
+    const ss = await seedSocietySetup();
+    out(
+      `society-setup: seeded ${ss.societies.join(', ') || 'none'} (${ss.units} units), skipped ${ss.skipped.join(', ') || 'none'}`,
+    );
     const pb = await seedPlatformBilling();
     out(
       `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,
