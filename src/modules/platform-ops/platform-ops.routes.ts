@@ -12,6 +12,7 @@ import { routeMeta } from '../societies/societies.guard';
 import { platformOpsController as c } from './platform-ops.controller';
 import { opsSchemas as s } from './platform-ops.validation';
 import { isSettingKey, settingDef } from './platform-ops.settings-registry';
+import { operationsRoutes } from './platform-ops.operations.routes';
 
 /**
  * Module 07 routes, part 1: support tickets (8.3, 8.4), settings (8.10) and organizations (8.12). Order on a route:
@@ -30,6 +31,7 @@ const supportRoute = () => routeMeta({ suspended: 'allow' });
 
 export const platformOpsRoutes = Router();
 const r = platformOpsRoutes;
+r.use(operationsRoutes); // part 2 (8.2, 8.5 to 8.9)
 
 // ---- 8.3 platform support tickets
 r.get(

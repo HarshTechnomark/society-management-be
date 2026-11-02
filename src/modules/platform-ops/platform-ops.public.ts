@@ -10,16 +10,26 @@ import type { SettingKey } from './platform-ops.settings-registry';
 import { registerPlatformOpsJobs } from './platform-ops.jobs';
 import { countOpenTicketsBySociety } from './platform-ops.tickets.core';
 import { createTicket } from './platform-ops.tickets.service';
+import { createAnnouncement } from './platform-ops.announcements.service';
+import { listEnabledProviders, resolveProvider } from './platform-ops.providers.registry';
+import { onAuditCommitted } from '../../utils/audit';
+import { emitToRoom } from '../../lib/realtime';
+import { activityItem, isActivityAction } from './platform-ops.dashboard.service';
 import './platform-ops.templates';
 
 export { getPlatformSetting, countOpenTicketsBySociety };
 export { setPlatformOpsPorts } from './platform-ops.ports';
+export { createAnnouncement, resolveProvider, listEnabledProviders };
+export type { ResolvedProvider } from './platform-ops.providers.registry';
 export { SETTINGS_REGISTRY, type SettingKey, type SettingValue } from './platform-ops.settings-registry';
 
 export const platformOps = {
   getPlatformSetting,
   countOpenTickets: countOpenTicketsBySociety,
   createTicketForSociety: createTicket,
+  resolveProvider,
+  listEnabledProviders,
+  createAnnouncement,
 };
 
 /**
@@ -40,4 +50,13 @@ export function registerPlatformOps(): void {
   });
   setBillingSettingsSource(key => getStoredSetting(key as SettingKey));
   registerPlatformOpsJobs();
+  // new activity items go to the platform console live (section 8.2, room `platform:ops`)
+  onAuditCommitted(row => {
+    if (isActivityAction(row.action))
+      emitToRoom(
+        'platform:ops',
+        'platform.activity',
+        activityItem(row) as unknown as Record<string, unknown>,
+      );
+  });
 }

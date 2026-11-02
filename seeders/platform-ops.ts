@@ -1,5 +1,8 @@
 import {
+  Incident,
+  PlatformNotification,
   PlatformTicket,
+  ServiceProvider,
   PlatformTicketMessage,
   Society,
   SocietyMember,
@@ -17,9 +20,9 @@ import { SETTINGS_REGISTRY } from '../src/modules/platform-ops/platform-ops.sett
  * - `platform-settings` (all environments): every registry key with its default; existing values are never overwritten.
  * - Demo tickets (not production): the six prototype tickets on the demo societies, idempotent by society and subject.
  *
- * Not seeded yet (part 2 of module 07, section 7.8): the non-production providers (`sms_fake`, `whatsapp_fake`,
- * `email_fake`, `push_fake`, `pg_fake`, `storage_s3`, `ivr_fake`), the two demo incidents and the published
- * announcement "New billing run wizard is live". Their tables exist already (migrations 20261106000400 to 600).
+ * Part 2 adds, outside production and idempotently: the providers `sms_fake`, `whatsapp_fake`, `email_fake`, `push_fake`,
+ * `pg_fake`, `storage_s3` and `ivr_fake`, the two demo incidents and the published announcement "New billing run wizard
+ * is live" (section 7.8).
  */
 export const seedSettings = seedPlatformSettings;
 
@@ -204,4 +207,208 @@ export async function seedDemoTickets(): Promise<{ created: string[]; skipped: s
     out.created.push(d.subject);
   }
   return out;
+}
+
+// ------------------------------------------------------------------ part 2: providers, incidents, announcement
+const DEMO_PROVIDERS = [
+  {
+    key: 'sms_fake',
+    channel: 'SMS',
+    vendor: 'FAKE',
+    name: 'SMS gateway (DLT)',
+    description: 'OTP and alerts',
+  },
+  {
+    key: 'whatsapp_fake',
+    channel: 'WHATSAPP',
+    vendor: 'FAKE',
+    name: 'WhatsApp Business API',
+    description: 'Reminders and receipts',
+  },
+  {
+    key: 'email_fake',
+    channel: 'EMAIL',
+    vendor: 'FAKE',
+    name: 'Email (SES)',
+    description: 'Invoices and notices',
+  },
+  { key: 'push_fake', channel: 'PUSH', vendor: 'FAKE', name: 'Push notifications', description: 'Web push' },
+  {
+    key: 'pg_fake',
+    channel: 'PAYMENT_GATEWAY',
+    vendor: 'FAKE',
+    name: 'Payment gateway',
+    description: 'Platform invoices',
+  },
+  {
+    key: 'storage_s3',
+    channel: 'STORAGE',
+    vendor: 'S3_COMPATIBLE',
+    name: 'Object storage (S3)',
+    description: 'Documents and photos',
+  },
+  {
+    key: 'ivr_fake',
+    channel: 'IVR',
+    vendor: 'FAKE',
+    name: 'IVR and call bridge',
+    description: 'Visitor calls',
+  },
+] as const;
+
+export async function seedDemoProviders(): Promise<{ created: string[]; skipped: string[] }> {
+  const out = { created: [] as string[], skipped: [] as string[] };
+  for (const d of DEMO_PROVIDERS) {
+    if (
+      await ServiceProvider.findOne({ where: { providerKey: d.key }, paranoid: false, attributes: ['id'] })
+    ) {
+      out.skipped.push(d.key);
+      continue;
+    }
+    const at = now();
+    await ServiceProvider.create({
+      providerKey: d.key,
+      channel: d.channel,
+      vendor: d.vendor,
+      displayName: d.name,
+      description: d.description,
+      isEnabled: true,
+      priority: 1,
+      credentialsSource: 'ENV',
+      configJson: d.vendor === 'FAKE' ? { failMode: 'none' } : {},
+      credentialsEnc: null,
+      credentialsIv: null,
+      credentialsTag: null,
+      credentialsKeyVersion: null,
+      credentialsMasked: null,
+      credentialsUpdatedAt: null,
+      credentialsUpdatedBy: null,
+      healthStatus: 'OPERATIONAL',
+      statusMode: 'AUTOMATIC',
+      statusReason: null,
+      statusChangedAt: at,
+      consecutiveFailures: 0,
+      degradedLatencyMs: 3000,
+      lastCheckAt: at,
+      lastCheckOk: true,
+      lastCheckLatencyMs: 120,
+      lastCheckError: null,
+      uptime30dPct: '99.950',
+      lastTestAt: null,
+      lastTestOk: null,
+      lastTestBy: null,
+      version: 1,
+      createdBy: null,
+      updatedBy: null,
+    });
+    out.created.push(d.key);
+  }
+  return out;
+}
+
+export async function seedDemoIncidents(): Promise<{ created: string[]; skipped: string[] }> {
+  const out = { created: [] as string[], skipped: [] as string[] };
+  const wa = await ServiceProvider.findOne({ where: { providerKey: 'whatsapp_fake' } });
+  const pg = await ServiceProvider.findOne({ where: { providerKey: 'pg_fake' } });
+  const at = now();
+  const entry = (
+    when: Date,
+    status: 'INVESTIGATING' | 'IDENTIFIED' | 'MONITORING' | 'RESOLVED',
+    message: string,
+  ) => ({
+    at: when.toISOString(),
+    status,
+    message,
+    isPublic: true,
+    byUserId: null,
+    byName: 'Isha Kapoor',
+  });
+  const rows = [
+    {
+      title: 'Delivery delays of about 4 minutes',
+      provider: wa,
+      component: 'notifications_whatsapp',
+      status: 'MONITORING' as const,
+      startedAt: addHours(at, -4),
+      resolvedAt: null as Date | null,
+      updates: (s: Date) => [
+        entry(s, 'INVESTIGATING', 'WhatsApp messages are reaching residents late.'),
+        entry(addMinutes(s, 20), 'IDENTIFIED', 'The delay is on the provider side.'),
+        entry(addMinutes(s, 100), 'MONITORING', 'Delivery times are back to normal. We are watching them.'),
+      ],
+    },
+    {
+      title: 'Webhook retries elevated for 12 minutes',
+      provider: pg,
+      component: 'payments',
+      status: 'RESOLVED' as const,
+      startedAt: addDays(at, -6),
+      resolvedAt: addMinutes(addDays(at, -6), 12),
+      updates: (s: Date) => [
+        entry(s, 'INVESTIGATING', 'Payment confirmations are arriving late.'),
+        entry(addMinutes(s, 12), 'RESOLVED', 'Payment confirmations are back to normal.'),
+      ],
+    },
+  ];
+  for (const r of rows) {
+    if (await Incident.findOne({ where: { title: r.title }, attributes: ['id'] })) {
+      out.skipped.push(r.title);
+      continue;
+    }
+    await Incident.create({
+      title: r.title,
+      severity: 'SEV3',
+      status: r.status,
+      components: [r.component],
+      serviceProviderId: r.provider?.id ?? null,
+      source: 'PROVIDER_MANUAL',
+      isPublic: true,
+      updates: r.updates(r.startedAt),
+      startedAt: r.startedAt,
+      identifiedAt: r.status === 'MONITORING' ? addMinutes(r.startedAt, 20) : null,
+      monitoringAt: r.status === 'MONITORING' ? addMinutes(r.startedAt, 100) : null,
+      resolvedAt: r.resolvedAt,
+      durationMinutes: r.resolvedAt ? 12 : null,
+      rootCause: null,
+      version: 1,
+      createdBy: null,
+      updatedBy: null,
+    });
+    out.created.push(r.title);
+  }
+  return out;
+}
+
+export async function seedDemoAnnouncement(): Promise<{ created: boolean }> {
+  const title = 'New billing run wizard is live';
+  if (await PlatformNotification.findOne({ where: { title }, attributes: ['id'] })) return { created: false };
+  const at = now();
+  await PlatformNotification.create({
+    title,
+    body: 'Run monthly maintenance billing in four steps: pick the period, review the charges, preview and send.',
+    kind: 'RELEASE_NOTE',
+    severity: 'INFO',
+    audienceType: 'ALL',
+    audiencePlanKeys: null,
+    audienceSocietyStatuses: null,
+    audienceSocietyIds: null,
+    audienceRoleKeys: ['chairman', 'secretary', 'treasurer', 'society_admin'],
+    channels: [],
+    status: 'PUBLISHED',
+    publishAt: null,
+    expiresAt: addDays(at, 30),
+    publishedAt: at,
+    cancelledAt: null,
+    cancelReason: null,
+    isDismissible: true,
+    ctaLabel: null,
+    ctaUrl: null,
+    incidentId: null,
+    recipientCount: 0,
+    fanoutCompletedAt: at,
+    version: 1,
+    createdBy: null,
+    updatedBy: null,
+  });
+  return { created: true };
 }

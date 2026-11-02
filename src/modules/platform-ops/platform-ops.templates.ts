@@ -68,4 +68,39 @@ registerTemplates({
       `${d.ticketNo} (${d.societyName}) missed its ${d.which === 'FIRST_RESPONSE' ? 'first response' : 'resolution'} time.\nOpen it: ${link(d)}`,
     ),
   ),
+  'platform.provider.status_changed': t(['EMAIL'], d =>
+    mail(
+      `${d.provider} is now ${String(d.to).toLowerCase()}`,
+      `${d.provider} changed from ${d.from} to ${d.to}${d.manual ? ' (set by hand)' : ' (automatic checks)'}.${d.reason ? `\nReason: ${d.reason}` : ''}\nOpen it: ${link(d)}`,
+    ),
+  ),
+  'platform.incident.opened': t(
+    ['EMAIL', 'SMS'],
+    d => ({
+      ...mail(
+        `${d.severity} incident ${d.incidentNo}: ${d.title}`,
+        `${d.incidentNo} (${d.severity}) was opened: ${d.title}\nAffects: ${(d.components ?? []).join(', ')}.\nOpen it: ${link(d)}`,
+      ),
+      // SMS only for SEV1
+      ...(d.severity === 'SEV1'
+        ? { sms: `SocietyApp SEV1 ${d.incidentNo}: ${String(d.title).slice(0, 80)}` }
+        : {}),
+    }),
+    true,
+  ),
+  'platform.jobs.failed': t(['EMAIL'], d =>
+    mail(
+      `${d.failed} failed background jobs`,
+      `The number of failed jobs rose to ${d.failed} (was ${d.previous}).\nOpen the queues: ${link(d)}`,
+    ),
+  ),
+  'platform.announcement': t(['EMAIL'], d =>
+    mail(String(d.title), `${d.body}${d.ctaUrl ? `\n\n${d.ctaLabel ?? 'Open'}: ${d.ctaUrl}` : ''}`),
+  ),
+  'platform.audit_archive.failed': t(['EMAIL'], d =>
+    mail(
+      `Audit archive of ${d.month} failed verification`,
+      `The archive of ${d.month} (part ${d.part}) did not match its source rows. No rows were deleted. The job retries tomorrow.`,
+    ),
+  ),
 });

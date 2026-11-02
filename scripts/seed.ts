@@ -14,7 +14,13 @@ import { registerSubscriptions } from '../src/modules/subscriptions/subscription
 import { registerSocieties } from '../src/modules/societies/societies.public';
 import { seedSocieties } from '../seeders/societies';
 import { seedPlatformBilling } from '../seeders/platform-billing';
-import { seedDemoTickets, seedSettings } from '../seeders/platform-ops';
+import {
+  seedDemoAnnouncement,
+  seedDemoIncidents,
+  seedDemoProviders,
+  seedDemoTickets,
+  seedSettings,
+} from '../seeders/platform-ops';
 import { registerPlatformOps } from '../src/modules/platform-ops/platform-ops.public';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
@@ -72,6 +78,12 @@ async function main(): Promise<void> {
     );
     const dt = await seedDemoTickets();
     out(`platform-ops: demo tickets created ${dt.created.length}, skipped ${dt.skipped.length}`);
+    const dp = await seedDemoProviders();
+    out(`platform-ops: providers created ${dp.created.length}, skipped ${dp.skipped.length}`);
+    const di = await seedDemoIncidents();
+    out(`platform-ops: incidents created ${di.created.length}, skipped ${di.skipped.length}`);
+    const da = await seedDemoAnnouncement();
+    out(`platform-ops: announcement ${da.created ? 'created' : 'already exists'}`);
   }
   await closeDb();
 }

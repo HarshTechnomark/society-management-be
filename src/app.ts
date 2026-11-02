@@ -18,6 +18,7 @@ import { subscriptionsRoutes } from './modules/subscriptions/subscriptions.route
 import { societiesRoutes } from './modules/societies/societies.routes';
 import { platformBillingRoutes } from './modules/platform-billing/platform-billing.routes';
 import { platformOpsRoutes } from './modules/platform-ops/platform-ops.routes';
+import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
 import './modules/access-control/access-control.templates';
@@ -35,6 +36,7 @@ export function createApp(): Express {
   app.set('trust proxy', 1);
 
   app.use(requestId);
+  app.use(requestMetrics()); // module 07 (9.4): request counts and latency buckets
   app.use(helmet());
   app.use(cors({ origin: env().appOrigins, credentials: true }));
   app.use(cookieParser());
@@ -70,7 +72,7 @@ export function createApp(): Express {
   api.use(societiesRoutes);
   // module 06: platform invoices, payments, TDS, credits, refunds and the gateway webhook
   api.use(platformBillingRoutes);
-  // module 07: support tickets, settings and organizations (part 1)
+  // module 07: support tickets, settings, organizations, dashboard, providers, incidents, announcements, queues, audit
   api.use(platformOpsRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);

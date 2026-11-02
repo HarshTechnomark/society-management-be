@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { kv } from '../../lib/kv';
 import { PlatformTicket, Society, sequelize } from '../../models';
 import { logger } from '../../lib/logger';
 import { addDays, now } from '../../lib/clock';
@@ -17,8 +18,13 @@ import {
 } from './platform-ops.tickets.core';
 import { notifyNow, platformUsersWith } from './platform-ops.notify';
 import { assigneeOrSupport } from './platform-ops.tickets.service';
+import { runAnnouncementFanout, runAnnouncementScheduler } from './platform-ops.announcements.service';
+import { runProviderHealthChecks, runUptimeRollup } from './platform-ops.providers.health';
+import { runAuditArchive } from './platform-ops.audit-archive';
+import { runMetricsTrim } from './platform-ops.metrics';
+import { totalFailed } from './platform-ops.queues.service';
 
-/** Queue `platform-ops` jobs of module 07 section 9.1 that belong to tickets. Part 2 adds the others. */
+/** Queue `platform-ops` jobs of module 07 section 9.1: tickets (part 1) and providers, announcements, alerts, archive, metrics (part 2). */
 const SYSTEM = systemCtx('job');
 const SYSTEM_BY = { side: 'SYSTEM' as const, userId: null, name: 'SocietyApp' };
 const BATCH = 500;
@@ -191,14 +197,52 @@ export async function runTicketHousekeeping(): Promise<HousekeepingResult> {
   return r;
 }
 
+const FAILED_LAST_KEY = 'pfa:last';
+
+/**
+ * `platform-ops:failed-jobs-alert` (every 5 minutes): when `alerts.jobFailed` is on and the total failed count rose since
+ * the last run, the users holding `platform.jobs.edit` are notified. The last count is stored under `pfa:last`.
+ */
+export async function runFailedJobsAlert(): Promise<{ failed: number; alerted: boolean }> {
+  const failed = await totalFailed();
+  if (!(await getPlatformSetting('alerts.jobFailed'))) return { failed, alerted: false };
+  const raw = await kv().cacheGet(FAILED_LAST_KEY);
+  const previous = raw === null ? 0 : Number(raw);
+  await kv().cacheSet(FAILED_LAST_KEY, String(failed), 30 * 86_400);
+  if (failed <= previous) return { failed, alerted: false };
+  await notifyNow('platform.jobs.failed', () => platformUsersWith('platform.jobs.edit'), {
+    failed,
+    previous,
+    link: '/queues',
+  });
+  return { failed, alerted: true };
+}
+
 let registered = false;
 /** Registers the queue, processors and repeatable schedules of this part of the module (idempotent). */
 export function registerPlatformOpsJobs(): void {
   registerQueue(PLATFORM_OPS_QUEUE, 'Platform operations: tickets, announcements, providers, audit', 5);
   registerProcessor(PLATFORM_OPS_QUEUE, JOBS.ticketSlaScan, async () => runTicketSlaScan());
   registerProcessor(PLATFORM_OPS_QUEUE, JOBS.ticketHousekeeping, async () => runTicketHousekeeping());
+  registerProcessor(PLATFORM_OPS_QUEUE, JOBS.providerHealthCheck, async d =>
+    runProviderHealthChecks({ providerId: typeof d.providerId === 'number' ? d.providerId : undefined }),
+  );
+  registerProcessor(PLATFORM_OPS_QUEUE, JOBS.providerUptimeRollup, async () => runUptimeRollup());
+  registerProcessor(PLATFORM_OPS_QUEUE, JOBS.announcementScheduler, async () => runAnnouncementScheduler());
+  registerProcessor(PLATFORM_OPS_QUEUE, JOBS.announcementFanout, async d =>
+    runAnnouncementFanout(Number(d.notificationId)),
+  );
+  registerProcessor(PLATFORM_OPS_QUEUE, JOBS.failedJobsAlert, async () => runFailedJobsAlert());
+  registerProcessor(PLATFORM_OPS_QUEUE, JOBS.auditArchive, async () => runAuditArchive());
+  registerProcessor(PLATFORM_OPS_QUEUE, JOBS.metricsTrim, async () => runMetricsTrim());
   if (!registered) {
     registered = true;
+    registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.providerHealthCheck, { everyMs: 2 * 60_000 });
+    registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.providerUptimeRollup, { dailyAtIst: '00:10' });
+    registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.announcementScheduler, { everyMs: 60_000 });
+    registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.failedJobsAlert, { everyMs: 5 * 60_000 });
+    registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.auditArchive, { dailyAtIst: '02:30' });
+    registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.metricsTrim, { hourlyAtMinute: 15 });
     registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.ticketSlaScan, { everyMs: 5 * 60_000 });
     registerRepeatable(PLATFORM_OPS_QUEUE, JOBS.ticketHousekeeping, { hourlyAtMinute: 0 });
   }
