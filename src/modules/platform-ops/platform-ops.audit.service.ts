@@ -126,8 +126,10 @@ async function buildWhere(
 ): Promise<{ where: WhereOptions; range: ReturnType<typeof auditRange> }> {
   const range = auditRange(f.from, f.to);
   const and: WhereOptions[] = [{ createdAt: { [Op.gte]: range.from, [Op.lt]: range.to } }];
-  if (forcedSociety !== null) and.push({ societyId: forcedSociety });
-  else if (f.societyId === 'platform') and.push({ societyId: null });
+  if (forcedSociety !== null) {
+    and.push({ societyId: forcedSociety });
+    and.push({ entityType: { [Op.ne]: 'society_note' } }); // platform internal notes never show to a society (BR-05-34)
+  } else if (f.societyId === 'platform') and.push({ societyId: null });
   else if (f.societyId) and.push({ societyId: Number(f.societyId) });
   if (f.actorUserId) and.push({ actorUserId: f.actorUserId });
   if (f.actorRole) and.push({ actorRole: f.actorRole });
@@ -280,7 +282,9 @@ export async function listSocietyAudit(ctx: Ctx, f: AuditFilter) {
 }
 
 export async function getSocietyAuditRow(ctx: Ctx, id: number) {
-  const r = await AuditLog.findOne({ where: { id, societyId: ctx.society!.id } });
+  const r = await AuditLog.findOne({
+    where: { id, societyId: ctx.society!.id, entityType: { [Op.ne]: 'society_note' } },
+  });
   if (!r) throw new NotFoundError('AUDIT_LOG_NOT_FOUND', 'Audit entry not found');
   return societyRow(r, await platformRoleKeys(), ctx.permissions?.has('residents.contacts.view') ?? false);
 }
