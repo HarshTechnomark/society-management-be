@@ -1,3 +1,4 @@
+import { addSeconds, now } from '../../lib/clock';
 import { placeholderFiles } from '../societies/societies.ports';
 import type { Ctx } from '../../types/context';
 import type { Transaction } from 'sequelize';
@@ -18,7 +19,20 @@ export interface Attachment {
   status: 'CLEAN' | 'DELETED';
 }
 
+/**
+ * `storage`: private object storage (module 01 files/storage service) used by the audit archive (6.6). The placeholder keeps
+ * objects in memory; the owner replaces it with `setPlatformOpsPorts({ storage })`.
+ */
+export interface ObjectStorage {
+  putObject(key: string, body: Buffer, contentType: string): Promise<void>;
+  getObject(key: string): Promise<Buffer | null>;
+  deleteObject(key: string): Promise<void>;
+  /** Pre-signed download URL valid for `ttlSeconds`. */
+  signedUrl(key: string, ttlSeconds: number): Promise<{ url: string; expiresAt: Date }>;
+}
+
 export interface PlatformOpsPorts {
+  storage: ObjectStorage;
   files: {
     /** Checks every file is a clean `PLATFORM_ATTACHMENT` upload of the caller and links it to the message. */
     linkMessageFiles(
@@ -32,12 +46,27 @@ export interface PlatformOpsPorts {
 }
 
 const links = new Map<number, number[]>(); // messageId -> fileIds
+/** Memory object store of the placeholder; tests read and corrupt it. */
+export const placeholderObjects = new Map<string, Buffer>();
 export const placeholderLinks = links;
 
 const notLinkable = () =>
   new UnprocessableError('FILE_NOT_LINKABLE', 'An attachment cannot be linked to this message');
 
 export const defaultPlatformOpsPorts: PlatformOpsPorts = {
+  storage: {
+    putObject: async (key, body) => {
+      placeholderObjects.set(key, Buffer.from(body));
+    },
+    getObject: async key => placeholderObjects.get(key) ?? null,
+    deleteObject: async key => {
+      placeholderObjects.delete(key);
+    },
+    signedUrl: async (key, ttlSeconds) => ({
+      url: `https://storage.invalid/${encodeURI(key)}?expires=${ttlSeconds}`,
+      expiresAt: addSeconds(now(), ttlSeconds),
+    }),
+  },
   files: {
     linkMessageFiles: async (ctx, input) => {
       const linkedAlready = new Set([...links.values()].flat());
@@ -89,6 +118,7 @@ export function setPlatformOpsPorts(p?: {
   if (!p) {
     current = defaultPlatformOpsPorts;
     links.clear();
+    placeholderObjects.clear();
     return;
   }
   const next = { ...current } as Record<string, unknown>;
