@@ -16,6 +16,7 @@ import { financialYearOf, nextNumber } from '../../utils/numberSequences';
 import type { Ctx } from '../../types/context';
 import { subscriptions } from '../subscriptions/subscriptions.public';
 import { CREDIT_NOTE_SERIES, INVOICE_SERIES } from './platform-billing.constants';
+import { notifySubscriptionViewers } from './platform-billing.notify';
 import { billingSettings, type BillingSettings } from './platform-billing.settings';
 import {
   addDaysYmd,
@@ -138,7 +139,21 @@ async function writeLines(
 }
 
 /** After commit: the PDF job (task 6.x renders it; until then the document stays `pdfStatus = PENDING`). */
-function enqueuePdf(t: Transaction, inv: PlatformInvoice): void {
+function enqueuePdf(t: Transaction, inv: PlatformInvoice, originalInvoiceNo: string | null = null): void {
+  const credit = inv.documentType === 'CREDIT_NOTE';
+  notifySubscriptionViewers(
+    t,
+    credit ? 'platform_billing.credit_note_issued' : 'platform_billing.invoice_issued',
+    inv.societyId,
+    {
+      invoiceNo: inv.invoiceNo,
+      totalPaise: num(inv.totalPaise),
+      dueDate: inv.dueDate,
+      societyName: inv.billingName,
+      originalInvoiceNo,
+      link: '/settings/subscription',
+    },
+  );
   enqueueAfterCommit(
     t,
     PLATFORM_BILLING_QUEUE,
@@ -773,7 +788,7 @@ async function issueCreditNoteDraft(ctx: Ctx, cn: PlatformInvoice, t: Transactio
       t,
     );
   await auditIssued(ctx, cn, t);
-  enqueuePdf(t, cn);
+  enqueuePdf(t, cn, orig.invoiceNo);
   // the credit note itself is a settlement change of the original invoice (BR-06-40)
   const r2 = await applyCredits(ctx, cn.societyId, t);
   await afterSettlement(ctx, cn.societyId, [...(r.becamePaid ? [orig] : []), ...r2.paid], t);

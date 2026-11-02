@@ -1,12 +1,14 @@
 /** TDS claims by the society or the platform and the platform decision (BR-06-33; 6.3; 8.9, 8.10, 8.20). */
+import { Op } from 'sequelize';
 import { PlatformInvoice, PlatformPayment, sequelize } from '../../models';
 import type { TdsSection } from '../../models/platform-payment.model';
 import { percentOf } from '../../lib/money';
 import { now } from '../../lib/clock';
+import { enqueue } from '../../lib/queue';
 import { audit } from '../../utils/audit';
 import { AppError, ConflictError, UnprocessableError } from '../../utils/errors';
 import type { Ctx } from '../../types/context';
-import { notifyAfterCommit } from '../societies/societies.notify';
+import { notifyAfterCommit, send } from '../societies/societies.notify';
 import { addDaysYmd } from './pricing';
 import { billingSettings } from './platform-billing.settings';
 import { billingPorts } from './platform-billing.ports';
@@ -212,4 +214,45 @@ export async function decideTds(
       });
     return claimView(p, invoice);
   });
+}
+
+export const TDS_REMINDER_ONE_JOB = 'platform-billing:tds-certificate-reminder';
+
+/** Claims older than this many days without a certificate get the monthly reminder. */
+const CERTIFICATE_REMINDER_DAYS = 60;
+
+/**
+ * `platform-billing:tds-certificate-reminders` (monthly, 5th 10:00 IST): CLAIMED TDS older than 60 days and no
+ * certificate. One notification per claim per month: the per-claim job id carries the month.
+ */
+export async function runTdsCertificateReminders(): Promise<{ claims: number; queued: number }> {
+  const cutoff = new Date(now().getTime() - CERTIFICATE_REMINDER_DAYS * 86_400_000);
+  const claims = await PlatformPayment.findAll({
+    where: { kind: 'TDS', status: 'CLAIMED', tdsCertificateFileId: null, createdAt: { [Op.lt]: cutoff } },
+    attributes: ['id'],
+    order: [['id', 'ASC']],
+  });
+  const month = todayIst().slice(0, 7);
+  for (const c of claims)
+    await enqueue(
+      'platform-billing',
+      TDS_REMINDER_ONE_JOB,
+      { claimId: c.id! },
+      { jobId: `tds-cert-${c.id}-${month}` },
+    );
+  return { claims: claims.length, queued: claims.length };
+}
+
+/** Sends the reminder of one claim (re-checks that it is still waiting for a certificate). */
+export async function sendTdsCertificateReminder(claimId: number): Promise<boolean> {
+  const claim = await PlatformPayment.findByPk(claimId);
+  if (!claim || claim.status !== 'CLAIMED' || claim.tdsCertificateFileId !== null) return false;
+  const inv = claim.invoiceId
+    ? await PlatformInvoice.findByPk(claim.invoiceId, { attributes: ['invoiceNo'] })
+    : null;
+  await send('platform_billing.tds_certificate_due', await payersOf(claim.societyId), {
+    invoiceNo: inv?.invoiceNo ?? '',
+    amountPaise: num(claim.amountPaise),
+  });
+  return true;
 }

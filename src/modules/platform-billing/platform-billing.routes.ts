@@ -9,7 +9,7 @@ import {
   requirePermission as can,
   requirePlatformPermission as canPlatform,
 } from '../../middlewares/permission.middleware';
-import { NotFoundError } from '../../utils/errors';
+import { ForbiddenError, NotFoundError } from '../../utils/errors';
 import { tag } from '../access-control/access-control.registry';
 import { routeMeta } from '../societies/societies.guard';
 import { isFlagOn } from '../subscriptions/flags.service';
@@ -38,6 +38,12 @@ const autopayFlag = (): RequestHandler => async (req, _res, next) => {
     next(err);
   }
 };
+
+/** `format=csv` of a report also needs `platform.billing.export` (8.27); the view permission was checked before. */
+const csvNeedsExport = (): RequestHandler => (req, _res, next) =>
+  req.valid?.query?.format === 'csv' && !req.ctx.platformPermissions.has('platform.billing.export')
+    ? next(new ForbiddenError('PERMISSION_DENIED', 'You do not have permission to do this'))
+    : next();
 
 export const platformBillingRoutes = Router();
 const r = platformBillingRoutes;
@@ -201,6 +207,84 @@ r.post(
   validate({ params: s.idParam, body: s.tdsClaim }),
   idempotency(),
   c.platformTds,
+);
+
+// ---- collections (8.15 to 8.17)
+r.post(
+  '/platform/invoices/:id/remind',
+  platform(),
+  canPlatform('platform.billing.edit'),
+  validate({ params: s.idParam, body: s.remind }),
+  c.remind,
+);
+r.post(
+  '/platform/invoices/:id/extend-grace',
+  platform(),
+  canPlatform('platform.billing.edit'),
+  validate({ params: s.idParam, body: s.extendGrace }),
+  c.extendGrace,
+);
+r.post(
+  '/platform/invoices/:id/write-off',
+  platform(),
+  canPlatform('platform.billing.edit'),
+  validate({ params: s.idParam, body: s.writeOffRequest }),
+  stepUp(),
+  c.requestWriteOff,
+);
+r.post(
+  '/platform/invoices/:id/write-off/approve',
+  platform(),
+  canPlatform('platform.billing.approve'),
+  validate({ params: s.idParam, body: s.approve }),
+  stepUp(),
+  c.approveWriteOff,
+);
+r.post(
+  '/platform/invoices/:id/write-off/reject',
+  platform(),
+  canPlatform('platform.billing.approve'),
+  validate({ params: s.idParam, body: s.reject }),
+  c.rejectWriteOff,
+);
+
+// ---- queues and reports (8.24 to 8.27)
+r.get(
+  '/platform/billing/approvals',
+  platform(),
+  canPlatform('platform.billing.view'),
+  validate({ query: s.approvals }),
+  c.approvals,
+);
+r.get(
+  '/platform/billing/dunning',
+  platform(),
+  canPlatform('platform.billing.view'),
+  validate({ query: s.dunning }),
+  c.dunning,
+);
+r.get(
+  '/platform/billing/revenue',
+  platform(),
+  canPlatform('platform.billing.view'),
+  validate({ query: s.revenue }),
+  c.revenue,
+);
+r.get(
+  '/platform/billing/gst-summary',
+  platform(),
+  canPlatform('platform.billing.view'),
+  validate({ query: s.gstSummary }),
+  csvNeedsExport(),
+  c.gstSummary,
+);
+r.get(
+  '/platform/billing/tds-receivable',
+  platform(),
+  canPlatform('platform.billing.view'),
+  validate({ query: s.tdsReceivable }),
+  csvNeedsExport(),
+  c.tdsReceivable,
 );
 
 // ---- platform payments, TDS decision, refunds, credits (8.7, 8.8, 8.18 to 8.23)

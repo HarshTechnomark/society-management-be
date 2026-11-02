@@ -227,4 +227,52 @@ export const platformBillingSchemas = {
         ctx.addIssue({ code: 'custom', path: ['payeeReference'], message: 'Required for a bank transfer' });
     }),
   goodwill: z.object({ amountPaise: amount(100, 100_000_000), reason }).strict(),
+
+  // 8.15 to 8.17: the range of `days` is a business rule (422 GRACE_EXTENSION_INVALID)
+  remind: z.object({ note: text(1, 300, 'Note').optional() }).strict(),
+  extendGrace: z.object({ days: z.number().int(), reason, version }).strict(),
+  writeOffRequest: z.object({ reason, version }).strict(),
+
+  // 8.24 to 8.27
+  approvals: z.object({
+    type: z
+      .enum([
+        'MANUAL_PAYMENT',
+        'REFUND',
+        'MANUAL_INVOICE',
+        'CREDIT_NOTE',
+        'GOODWILL_CREDIT',
+        'WRITE_OFF',
+        'PAYMENT_MISMATCH',
+      ])
+      .optional(),
+    page: page.page,
+    limit: page.limit,
+    sortBy: z.enum(['createdAt']).default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).default('asc'),
+  }),
+  dunning: z.object({
+    status: commaOf(['PAST_DUE', 'SUSPENDED']).optional(),
+    page: page.page,
+    limit: page.limit,
+    sortBy: z.enum(['daysLate', 'overduePaise', 'nextSuspensionDate']).default('daysLate'),
+    sortOrder: page.sortOrder,
+  }),
+  revenue: z.object({ asOf: ymd.optional(), months: z.coerce.number().int().min(1).max(24).default(12) }),
+  gstSummary: z.object({
+    month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM'),
+    format: z.enum(['json', 'csv']).default('json'),
+  }),
+  tdsReceivable: z.object({
+    financialYear: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/, 'Use YYYY-YY')
+      .refine(
+        v => (Number(v.slice(0, 4)) + 1) % 100 === Number(v.slice(5)),
+        'The second year must follow the first',
+      ),
+    quarter: z.coerce.number().int().min(1).max(4).optional(),
+    status: commaOf(['CLAIMED', 'VERIFIED', 'REJECTED']).optional(),
+    format: z.enum(['json', 'csv']).default('json'),
+  }),
 };

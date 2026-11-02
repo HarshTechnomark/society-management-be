@@ -62,4 +62,62 @@ registerTemplates({
       `The refund of ${rs(d.amountPaise)} for ${d.societyName} failed. The balance was restored.`,
     ),
   ),
+  'platform_billing.invoice_issued': t(['EMAIL'], d =>
+    mail(
+      `Invoice ${d.invoiceNo} for ${rs(d.totalPaise)}`,
+      `A SocietyApp invoice ${d.invoiceNo} of ${rs(d.totalPaise)} was issued to ${d.societyName}. It is due on ${d.dueDate}. View or pay it from Settings, Subscription and billing.`,
+    ),
+  ),
+  'platform_billing.credit_note_issued': t(['EMAIL'], d =>
+    mail(
+      `Credit note ${d.invoiceNo} for ${rs(d.totalPaise)}`,
+      `A credit note ${d.invoiceNo} of ${rs(d.totalPaise)} was issued to ${d.societyName} against ${d.originalInvoiceNo}. View it from Settings, Subscription and billing.`,
+    ),
+  ),
+  'platform_billing.payment_reminder': t(['EMAIL'], d =>
+    mail(
+      d.manual ? `Reminder: invoice ${d.invoiceNo}` : `Payment reminder for invoice ${d.invoiceNo}`,
+      `Invoice ${d.invoiceNo} of ${d.societyName} has ${rs(d.amountDuePaise)} due on ${d.dueDate}. Pay from Settings, Subscription and billing.${d.note ? ` Note: ${d.note}` : ''}`,
+    ),
+  ),
+  'platform_billing.suspension_warning': t(
+    ['EMAIL', 'SMS', 'WHATSAPP'],
+    d => ({
+      ...mail(
+        `Your SocietyApp service will be suspended on ${d.suspendOn}`,
+        `Invoice ${d.invoiceNo} of ${d.societyName} has ${rs(d.amountDuePaise)} overdue (due ${d.dueDate}). Service will be suspended on ${d.suspendOn} unless it is paid.`,
+      ),
+      sms: `SocietyApp: ${rs(d.amountDuePaise)} overdue on ${d.invoiceNo}. Service is suspended on ${d.suspendOn} unless paid.`,
+    }),
+    true,
+  ),
+  'platform_billing.past_due': t(['EMAIL'], d =>
+    mail(
+      `${d.societyName} is past due`,
+      `Invoice ${d.invoiceNo} (${rs(d.amountDuePaise)}) is overdue. Please pay it before ${d.suspendOn} to avoid suspension.`,
+    ),
+  ),
+  'platform_billing.suspended': t(
+    ['EMAIL', 'SMS', 'WHATSAPP'],
+    d => ({
+      ...mail(
+        `${d.societyName} is suspended`,
+        `Service for ${d.societyName} was suspended for non-payment. Pay the overdue invoices to restore it.`,
+      ),
+      sms: `SocietyApp: service for ${d.societyName} is suspended for non-payment. Pay the overdue invoices to restore it.`,
+    }),
+    true,
+  ),
+  'platform_billing.grace_extended': t(['EMAIL'], d =>
+    mail(
+      `More time to pay invoice ${d.invoiceNo}`,
+      `The suspension date of invoice ${d.invoiceNo} was moved from ${d.suspendOnBefore} to ${d.suspendOnAfter}.`,
+    ),
+  ),
+  'platform_billing.tds_certificate_due': t(['EMAIL'], d =>
+    mail(
+      `TDS certificate needed for ${d.invoiceNo}`,
+      `The TDS claim of ${rs(d.amountPaise)} on ${d.invoiceNo} has no certificate yet. Please upload it from Settings, Subscription and billing.`,
+    ),
+  ),
 });

@@ -7,6 +7,8 @@ import * as svc from './platform-billing.service';
 import { getOutstanding, hasOverdueInvoice } from './platform-billing.settlement';
 import { periodValue } from './pricing';
 import { registerPlatformBillingJobs } from './platform-billing.jobs';
+import { registerBillingRetention } from './platform-billing.retention';
+import { getMrrSeries, getMrrSummary } from './platform-billing.reports';
 
 export const platformBilling = {
   issuePeriodInvoice: svc.issuePeriodInvoice,
@@ -16,6 +18,8 @@ export const platformBilling = {
   getOutstanding,
   periodValue,
   previewTax: svc.previewTax,
+  getMrrSummary,
+  getMrrSeries,
 };
 export { setBillingSettingsSource } from './platform-billing.settings';
 export type { PlatformInvoiceDto } from './platform-billing.types';
@@ -37,5 +41,6 @@ export function registerPlatformBilling(): void {
     },
   });
   setSocietyPorts({ billing: { hasOverdueInvoice } });
+  registerBillingRetention();
   registerPlatformBillingJobs();
 }

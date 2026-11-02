@@ -13,6 +13,8 @@ import * as tds from './platform-billing.tds';
 import * as credits from './platform-billing.credits';
 import * as autopay from './platform-billing.autopay';
 import * as queries from './platform-billing.queries';
+import * as collections from './platform-billing.collections';
+import * as reports from './platform-billing.reports';
 import { PROCESS_WEBHOOK_JOB, HANDLED_EVENTS } from './platform-billing.webhook';
 import { creditBalance } from './platform-billing.settlement';
 import { num } from './platform-billing.shared';
@@ -38,6 +40,16 @@ async function approvalView(dto: Awaited<ReturnType<typeof invoicing.approveDocu
     },
     creditBalancePaise: await creditBalance(dto.societyId),
   };
+}
+
+function sendReport(res: Response, name: string, r: { csv?: string; json?: unknown }): void {
+  if (r.csv !== undefined) {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}.csv"`);
+    res.status(200).send(r.csv);
+    return;
+  }
+  ok(res, r.json);
 }
 
 export const platformBillingController = {
@@ -172,6 +184,38 @@ export const platformBillingController = {
   ),
   rejectCredit: h(async (req, res) =>
     ok(res, await credits.rejectCredit(req.ctx, pid(req), v(req).body), 'Credit rejected'),
+  ),
+
+  // ---- collections and reports (8.15 to 8.17, 8.24 to 8.27)
+  remind: h(async (req, res) =>
+    ok(res, await collections.sendManualReminder(req.ctx, pid(req), v(req).body), 'Reminder sent'),
+  ),
+  extendGrace: h(async (req, res) =>
+    ok(res, await collections.extendGrace(req.ctx, pid(req), v(req).body), 'Grace extended'),
+  ),
+  requestWriteOff: h(async (req, res) =>
+    ok(res, await collections.requestWriteOff(req.ctx, pid(req), v(req).body), 'Write-off requested'),
+  ),
+  approveWriteOff: h(async (req, res) =>
+    ok(res, await collections.approveWriteOff(req.ctx, pid(req), v(req).body), 'Written off'),
+  ),
+  rejectWriteOff: h(async (req, res) =>
+    ok(res, await collections.rejectWriteOff(req.ctx, pid(req), v(req).body), 'Write-off rejected'),
+  ),
+  approvals: h(async (req, res) => {
+    const r = await reports.approvalsQueue(req.ctx, v(req).query);
+    okList(res, r.data, r.pagination);
+  }),
+  dunning: h(async (req, res) => {
+    const r = await reports.dunningList(v(req).query);
+    okList(res, r.data, r.pagination);
+  }),
+  revenue: h(async (req, res) => ok(res, await reports.revenueReport(v(req).query))),
+  gstSummary: h(async (req, res) =>
+    sendReport(res, 'gst-summary', await reports.gstSummary(req.ctx, v(req).query)),
+  ),
+  tdsReceivable: h(async (req, res) =>
+    sendReport(res, 'tds-receivable', await reports.tdsReceivable(req.ctx, v(req).query)),
   ),
 
   // ---- 8.28 webhook: raw body, signature first, then enqueue and answer
