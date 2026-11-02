@@ -45,13 +45,14 @@ describe('route registry (T03-43, section 13)', () => {
     // module 06 adds invoices (with remind, extend-grace and write-off), payments, credits, refunds and the billing reports under /platform
     const m06 =
       /^\/platform\/(invoices(\/export|\/:id(\/(pdf-url|credit-notes|approve|reject|tds-claims|remind|extend-grace|write-off(\/approve|\/reject)?))?)?|billing\/(approvals|dunning|revenue|gst-summary|tds-receivable)|payments(\/:id\/(approve|reject|tds-decision|complete-refund))?|credits\/:id\/(approve|reject)|societies\/:societyId\/(credits|refunds))$/;
-    // module 07 (part 1) adds platform support tickets, settings and organizations
-    const m07 = /^\/platform\/(tickets(\/:id(\/messages)?)?|settings|organizations(\/:id(\/status)?)?)$/;
+    // module 07 adds platform support tickets, settings, organizations, dashboard, providers, incidents, announcements, queues and audit logs
+    const m07 =
+      /^\/platform\/(tickets(\/:id(\/messages)?)?|settings|organizations(\/:id(\/status)?)?|dashboard(\/activity)?|health\/summary|providers(\/check-all|\/:id(\/(credentials|check|test-send|status))?)?|incidents(\/:id(\/(updates|resolve))?)?|announcements(\/audience-preview|\/:id(\/(publish|cancel))?)?|queues(\/retry-failed|\/:name(\/(pause|resume|jobs(\/:jobId(\/(retry|discard))?)?))?)?|jobs\/failed|audit-logs(\/export|\/archives(\/download-url)?|\/:id)?)$/;
     expect(
       routes.filter(r => r.kind === 'platform' && !m04.test(r.path) && !m06.test(r.path) && !m07.test(r.path))
         .length,
     ).toBe(15);
-    expect(routes.filter(r => r.kind === 'platform' && m07.test(r.path)).length).toBe(12);
+    expect(routes.filter(r => r.kind === 'platform' && m07.test(r.path)).length).toBe(53); // 12 of part 1 and 41 of part 2
     expect(routes.filter(r => r.kind === 'platform' && m06.test(r.path)).length).toBe(30);
   });
 
@@ -128,7 +129,7 @@ describe('permission matrix (T03-35)', () => {
         },
         { transaction: tx },
       );
-      await replaceRoleKeys(role, ['dashboard.today.view'], null, tx);
+      await replaceRoleKeys(role, [], null, tx); // a role with no permission at all (module 07 added routes for every dashboard key)
     });
     const member = await join(society, user, 'committee_member');
     await member.update({ roleId: (await Role.findOne({ where: { key: 'custom_minimal' } }))!.id! });
@@ -169,7 +170,7 @@ describe('permission matrix (T03-35)', () => {
       createdBy: null,
       updatedBy: null,
     });
-    await sequelize.transaction(tx => replaceRoleKeys(role, ['platform.dashboard.view'], null, tx));
+    await sequelize.transaction(tx => replaceRoleKeys(role, [], null, tx));
     const u = await makeUser({ email: 'dash@societyapp.in', mfa: true, platformRoleId: role.id! });
     const call = as(await platformLogin({ ...u, email: 'dash@societyapp.in' }), 'PLATFORM');
     const failures: string[] = [];
