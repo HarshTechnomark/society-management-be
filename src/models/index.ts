@@ -49,6 +49,16 @@ import { SocietySetting } from './society-setting.model';
 import { OnboardingStep } from './onboarding-step.model';
 import { Holiday } from './holiday.model';
 import { LocationNode } from './location-node.model';
+import { Resident } from './resident.model';
+import { UnitResident } from './unit-resident.model';
+import { Tenancy } from './tenancy.model';
+import { ResidentDocument } from './resident-document.model';
+import { JoinRequest } from './join-request.model';
+import { MoveRequest } from './move-request.model';
+import { RenovationPermit } from './renovation-permit.model';
+import { OwnershipTransfer } from './ownership-transfer.model';
+import { Pet } from './pet.model';
+import { EmergencyProfile } from './emergency-profile.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -118,6 +128,16 @@ const models = {
   OnboardingStep,
   Holiday,
   LocationNode,
+  Resident,
+  UnitResident,
+  Tenancy,
+  ResidentDocument,
+  JoinRequest,
+  MoveRequest,
+  RenovationPermit,
+  OwnershipTransfer,
+  Pet,
+  EmergencyProfile,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -255,6 +275,41 @@ LocationNode.belongsTo(Society, { foreignKey: 'societyId' });
 LocationNode.belongsTo(LocationNode, { as: 'parent', foreignKey: 'parentId' });
 LocationNode.hasMany(LocationNode, { as: 'children', foreignKey: 'parentId' });
 LocationNode.belongsTo(Building, { foreignKey: 'buildingId' });
+
+// Module 09 associations (section 7)
+Resident.belongsTo(Society, { foreignKey: 'societyId' });
+Resident.belongsTo(User, { foreignKey: 'userId' });
+Resident.belongsTo(SocietyMember, { as: 'member', foreignKey: 'memberId' });
+Resident.belongsTo(Resident, { as: 'localRepresentative', foreignKey: 'localRepresentativeResidentId' });
+Resident.hasMany(UnitResident, { foreignKey: 'residentId' });
+Resident.hasOne(EmergencyProfile, { foreignKey: 'residentId' });
+Resident.hasMany(ResidentDocument, { foreignKey: 'residentId' });
+Resident.hasMany(Pet, { foreignKey: 'ownerResidentId' });
+UnitResident.belongsTo(Resident, { foreignKey: 'residentId' });
+UnitResident.belongsTo(Unit, { foreignKey: 'unitId' });
+UnitResident.belongsTo(Tenancy, { foreignKey: 'tenancyId' });
+UnitResident.belongsTo(OwnershipTransfer, { foreignKey: 'ownershipTransferId' });
+Tenancy.belongsTo(Unit, { foreignKey: 'unitId' });
+Tenancy.belongsTo(Resident, { as: 'tenant', foreignKey: 'tenantResidentId' });
+Tenancy.belongsTo(Resident, { as: 'landlord', foreignKey: 'landlordResidentId' });
+Tenancy.hasMany(UnitResident, { foreignKey: 'tenancyId' });
+ResidentDocument.belongsTo(Resident, { foreignKey: 'residentId' });
+ResidentDocument.belongsTo(Unit, { foreignKey: 'unitId' });
+JoinRequest.belongsTo(User, { foreignKey: 'userId' });
+JoinRequest.belongsTo(Unit, { foreignKey: 'unitId' });
+JoinRequest.belongsTo(Resident, { as: 'confirmer', foreignKey: 'confirmerResidentId' });
+JoinRequest.belongsTo(Resident, { foreignKey: 'residentId' });
+MoveRequest.belongsTo(Unit, { foreignKey: 'unitId' });
+MoveRequest.belongsTo(Tenancy, { foreignKey: 'tenancyId' });
+MoveRequest.belongsTo(Resident, { as: 'requestedBy', foreignKey: 'requestedByResidentId' });
+RenovationPermit.belongsTo(Unit, { foreignKey: 'unitId' });
+RenovationPermit.belongsTo(Resident, { as: 'requestedBy', foreignKey: 'requestedByResidentId' });
+OwnershipTransfer.belongsTo(Unit, { foreignKey: 'unitId' });
+OwnershipTransfer.hasMany(UnitResident, { foreignKey: 'ownershipTransferId' });
+OwnershipTransfer.belongsTo(Resident, { as: 'initiatedBy', foreignKey: 'initiatedByResidentId' });
+Pet.belongsTo(Unit, { foreignKey: 'unitId' });
+Pet.belongsTo(Resident, { as: 'owner', foreignKey: 'ownerResidentId' });
+EmergencyProfile.belongsTo(Resident, { foreignKey: 'residentId' });
 
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };

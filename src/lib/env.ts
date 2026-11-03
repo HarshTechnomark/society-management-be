@@ -26,6 +26,10 @@ const schema = z.object({
   PASSWORD_BREACH_CHECK: z.enum(['local', 'hibp']).default('local'),
   // module 03 (roles and permissions)
   PLATFORM_TEAM_EMAIL_DOMAIN: z.string().min(3).default('societyapp.in'),
+  // module 09 (residents): AES-256-GCM key of the emergency-profile medical notes
+  RESIDENT_DATA_KEY: z
+    .string()
+    .refine(v => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes in base64'),
   // module 06 (platform billing): the platform's own gateway account; required when PROVIDERS_MODE=real
   PLATFORM_GATEWAY_ACCOUNT_ID: z.string().min(1).default('platform'),
   PLATFORM_RAZORPAY_KEY_ID: z.string().min(1).default('rzp_test_fake'),
