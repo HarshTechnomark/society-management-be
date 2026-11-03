@@ -26,6 +26,8 @@ import { seedSocietySetup } from '../seeders/society-setup';
 import { registerSocietySetup } from '../src/modules/society-setup/society-setup.public';
 import { registerResidents } from '../src/modules/residents/residents.public';
 import { seedResidents } from '../seeders/residents';
+import { registerCommittee } from '../src/modules/committee/committee.public';
+import { seedCommittee } from '../seeders/committee';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -41,6 +43,7 @@ async function main(): Promise<void> {
   registerPlatformOps();
   registerSocietySetup();
   registerResidents();
+  registerCommittee();
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
@@ -86,6 +89,8 @@ async function main(): Promise<void> {
     out(
       `residents: seeded ${rs.societies.join(', ') || 'none'} (${rs.residents} residents, ${rs.links} links, ${rs.tenancies} tenancies, ${rs.pets} pets), skipped ${rs.skipped.join(', ') || 'none'}`,
     );
+    const cm = await seedCommittee();
+    out(`committee: created ${cm.created.join('; ') || 'none'}, skipped ${cm.skipped.length}`);
     const pb = await seedPlatformBilling();
     out(
       `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,
