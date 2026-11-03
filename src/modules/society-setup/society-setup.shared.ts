@@ -1,5 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { AppError, NotFoundError } from '../../utils/errors';
+import { User } from '../../models';
+import type { Ctx } from '../../types/context';
 import { getMany } from './society-setup.settings.service';
 
 /** Small helpers shared by the services of module 08. */
@@ -47,3 +49,25 @@ export const ymdToUtc = (d: string): Date => new Date(`${d}T00:00:00.000Z`);
 export const addDaysYmd = (d: string, n: number): string =>
   new Date(ymdToUtc(d).getTime() + n * 86_400_000).toISOString().slice(0, 10);
 export const weekdayOf = (d: string): number => ymdToUtc(d).getUTCDay();
+
+/** The context a job uses to act for a user (audit actor = the user, section 9.1). */
+export async function actorCtx(userId: number, requestId: string): Promise<Ctx> {
+  const user = await User.findByPk(userId, { attributes: ['id', 'name', 'mobile', 'email', 'status'] });
+  return {
+    requestId,
+    ip: '',
+    userAgent: '',
+    ...(user
+      ? {
+          user: {
+            id: user.id!,
+            name: user.name,
+            mobile: user.mobile,
+            email: user.email,
+            platformRoleId: null,
+            status: user.status,
+          },
+        }
+      : {}),
+  };
+}

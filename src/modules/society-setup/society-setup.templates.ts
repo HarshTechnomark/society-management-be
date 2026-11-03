@@ -31,4 +31,30 @@ registerTemplates({
       `${d.actorName} changed: ${(d.fields as string[]).join(', ')}.\nReason: ${d.reason ?? 'not given'}\nReview: ${d.link}`,
     ),
   ),
+  // import and export results (section 10); the push and in-app channels belong to module 16
+  'setup.import.validated': t(['PUSH'], d => ({
+    link: String(d.link),
+    ...mail(
+      `Import checked for ${d.societyName}`,
+      d.status === 'VALIDATED'
+        ? `Your unit sheet was checked: ${d.counts.create} to add, ${d.counts.update} to update, ${d.counts.unchanged} unchanged, ${d.counts.error} with problems.\nReview: ${d.link}`
+        : `Your unit sheet could not be checked (${d.failureCode}).\nReview: ${d.link}`,
+    ),
+  })),
+  'setup.import.committed': t(['EMAIL'], d =>
+    mail(
+      `Import finished for ${d.societyName}`,
+      `${d.written} flats were written and ${d.skipped} were skipped.\nOpen the units: ${d.link}`,
+    ),
+  ),
+  'setup.import.failed': t(['EMAIL'], d =>
+    mail(
+      `Import failed for ${d.societyName}`,
+      `The unit import did not finish (${d.failureCode}). Nothing was written.\nReview: ${d.link}`,
+    ),
+  ),
+  'setup.export.ready': t([], d => ({
+    link: String(d.link),
+    ...mail('Units export ready', `Your units export is ready: ${d.link}`),
+  })),
 });

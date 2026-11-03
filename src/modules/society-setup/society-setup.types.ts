@@ -4,6 +4,14 @@ import type { Bhk, UnitType } from '../../models/unit.model';
 /** Shared constants and DTO types of module 08 (Society Setup and Onboarding). Audit actions follow section 9.2. */
 export const SOCIETY_SETUP_QUEUE = 'society-setup';
 
+/** Job names of section 9.1 (queue `society-setup`). */
+export const JOBS = {
+  validateImport: 'society-setup:validate-import',
+  commitImport: 'society-setup:commit-import',
+  exportUnits: 'society-setup:export-units',
+  goLiveInvites: 'society-setup:go-live-invites',
+} as const;
+
 export const AUDIT = {
   societyUpdated: 'setup.society.updated',
   societyWentLive: 'setup.society.went_live',

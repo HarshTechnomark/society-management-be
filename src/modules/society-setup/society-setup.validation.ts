@@ -405,7 +405,25 @@ const holidayYear = z.object({ year: z.coerce.number().int().min(1900).max(2200)
 const stepParam = z.object({ stepKey: z.enum(CLIENT_STEP_KEYS) });
 const skipBody = z.object({ reason: reason(5, 300) }).strict();
 
+// ------------------------------------------------------------------ import and export (8.15 to 8.18)
+const importStart = z
+  .object({
+    fileId: z.number().int().positive(),
+    mode: z.enum(['CREATE_ONLY', 'UPSERT']),
+    createMissingBuildings: z.boolean().default(false),
+  })
+  .strict();
+const importParam = z.object({ importId: id });
+const importCommit = z.object({ commitPolicy: z.enum(['ALL_OR_NOTHING', 'VALID_ROWS_ONLY']) }).strict();
+const unitExport = z
+  .object({ status: z.enum(['ACTIVE', 'ALL']).default('ACTIVE'), buildingId: id.optional() })
+  .strict();
+
 export const setupSchemas = {
+  importStart,
+  importParam,
+  importCommit,
+  unitExport,
   idParam,
   empty,
   profileUpdate,

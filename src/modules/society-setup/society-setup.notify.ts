@@ -37,6 +37,14 @@ async function send(
   }
 }
 
+/** Sends to one user right away (jobs: import and export results). A failed send never fails the job. */
+export const notifyUser = (
+  template: string,
+  societyId: number,
+  userId: number,
+  data: Record<string, unknown>,
+): Promise<void> => send(template, societyId, async () => [userId], data);
+
 /** Sends once the transaction has committed. */
 export function notifyAfterCommit(
   t: Transaction,

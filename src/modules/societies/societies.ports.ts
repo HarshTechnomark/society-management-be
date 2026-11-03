@@ -68,6 +68,8 @@ export const portCalls: PortCall[] = [];
 /** Placeholder file store (memory) until the module 01 files service exists; `GET /api/v1/dev/files/:id` serves it outside production. */
 export const placeholderFiles = new Map<number, StoredFile>();
 let fileSeq = 0;
+/** A fresh id from the same sequence `storeSystemFile` uses (module 08 puts import files into the memory store with it). */
+export const nextPlaceholderFileId = (): number => ++fileSeq;
 
 export const defaultSocietyPorts: SocietyPorts = {
   settings: { get: async key => SETTING_DEFAULTS[key] },
@@ -89,7 +91,7 @@ export const defaultSocietyPorts: SocietyPorts = {
   collections: { efficiency: async () => null },
   files: {
     storeSystemFile: async input => {
-      const fileId = ++fileSeq;
+      const fileId = nextPlaceholderFileId();
       placeholderFiles.set(fileId, {
         fileId,
         societyId: input.societyId,

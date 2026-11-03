@@ -29,6 +29,8 @@ export interface KvStore {
   cacheDel(...keys: string[]): Promise<void>;
   /** Deletes every key that starts with the prefix (SCAN on Redis). */
   cacheDelPrefix(prefix: string): Promise<void>;
+  /** Sets the key only when it does not exist (lock keys, module 08 `ss:import-lock:<societyId>`); true when this call set it. */
+  setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean>;
   /** Integer counter without expiry (module 04 cache generations `ent:gen:<id>`, `ff:gen`). Missing reads as 0. */
   counterGet(key: string): Promise<number>;
   /** Atomic `INCR`; returns the new value. */
@@ -98,6 +100,11 @@ export class MemoryKv implements KvStore {
   }
   async cacheDel(...keys: string[]): Promise<void> {
     for (const k of keys) this.cache.delete(k);
+  }
+  async setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    if ((await this.cacheGet(key)) !== null) return false;
+    await this.cacheSet(key, value, ttlSeconds);
+    return true;
   }
   async cacheDelPrefix(prefix: string): Promise<void> {
     for (const m of [this.cache, this.sets, this.hashes] as Map<string, unknown>[])
@@ -203,6 +210,9 @@ export class RedisKv implements KvStore {
   }
   async cacheDel(...keys: string[]): Promise<void> {
     if (keys.length) await this.redis.del(...keys.map(k => `cache:${k}`));
+  }
+  async setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    return (await this.redis.set(`cache:${key}`, value, 'EX', ttlSeconds, 'NX')) === 'OK';
   }
   async cacheDelPrefix(prefix: string): Promise<void> {
     for (const ns of ['cache', 'set', 'hash']) {
