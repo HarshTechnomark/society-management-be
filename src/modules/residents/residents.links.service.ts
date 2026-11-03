@@ -7,6 +7,7 @@ import { AppError, NotFoundError } from '../../utils/errors';
 import type { Ctx } from '../../types/context';
 import { revokeHouseholdGrants } from '../access-control/access-control.public';
 import { units } from '../society-setup/society-setup.public';
+import type { UnitDto } from '../society-setup/society-setup.types';
 import {
   AUDIT,
   ENTITY,
@@ -66,6 +67,8 @@ export interface LinkOptions {
   allowMinorOwner?: boolean;
   /** Import: shares are validated by the caller once all owner rows of the unit are in. */
   skipShareCheck?: boolean;
+  /** The caller already holds the unit lock in this transaction (tenancy and transfer flows), so it is not locked again. */
+  already?: UnitDto;
 }
 
 const featureOfRelation = (r: LinkRelation) =>
@@ -173,7 +176,7 @@ export async function createLink(
   opts: LinkOptions = {},
 ): Promise<UnitResident> {
   if (opts.checkFeature !== false) await assertFeatureFor(societyId, featureOfRelation(input.relation));
-  const unit = await units.lockActive(societyId, input.unitId, t);
+  const unit = opts.already ?? (await units.lockActive(societyId, input.unitId, t));
   const ownerType = isOwnerRelation(input.relation);
   if (!ownerType && unit.unitType === 'PARKING_ONLY')
     throw rule(
