@@ -24,7 +24,8 @@
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "seed": "tsx scripts/seed.ts",
     "prepare": "husky",
-    "providers:rekey": "tsx scripts/providers-rekey.ts"
+    "providers:rekey": "tsx scripts/providers-rekey.ts",
+    "dev:totp": "tsx scripts/totp.ts"
   },
   "lint-staged": {
     "*.{ts,js,cjs,mjs}": [
