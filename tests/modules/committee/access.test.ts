@@ -61,6 +61,29 @@ describe('route registry (section 13)', () => {
   });
 });
 
+describe('route registry of 10.2 (sections 2.1, 8.7 to 8.9)', () => {
+  it('activation and change routes need settings.members.edit, both entitlements; activate and apply also step-up and idempotency', () => {
+    const routes = listRoutes(app).filter(r => r.path.startsWith('/committee/terms/:id/'));
+    const found = Object.fromEntries(routes.map(r => [`${r.method} ${r.path}`, r]));
+    const expected: Record<string, [boolean, boolean]> = {
+      'GET /committee/terms/:id/activation-preview': [false, false],
+      'POST /committee/terms/:id/activate': [true, true],
+      'POST /committee/terms/:id/changes/preview': [false, false],
+      'POST /committee/terms/:id/changes': [true, true],
+    };
+    for (const [k, [idempotent, stepUp]] of Object.entries(expected)) {
+      expect(found[k], k).toBeDefined();
+      expect(found[k], k).toMatchObject({
+        kind: 'society',
+        permissions: ['settings.members.edit'],
+        features: ['governance.committee_terms', 'governance.office_bearers'],
+        idempotent,
+        stepUp,
+      });
+    }
+  });
+});
+
 describe('T10-30 permissions (section 2.1)', () => {
   it('a committee member (settings.members view only) can read and gets 403 PERMISSION_DENIED on every write', async () => {
     const { w, d } = await withDraft();

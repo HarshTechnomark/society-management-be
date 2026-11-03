@@ -282,6 +282,11 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'PATCH /committee/terms/:id',
       'DELETE /committee/terms/:id',
       'PATCH /committee/terms/:id/seats/:seatId',
+      // module 10 (10.2): activation preview, activate, changes preview and changes are 404 COMMITTEE_TERM_NOT_FOUND for another society's term (tests/modules/committee/activation.test.ts and changes.test.ts, T10-29)
+      'GET /committee/terms/:id/activation-preview',
+      'POST /committee/terms/:id/activate',
+      'POST /committee/terms/:id/changes/preview',
+      'POST /committee/terms/:id/changes',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
