@@ -38,6 +38,9 @@ export class Tenancy extends Model<InferAttributes<Tenancy>, InferCreationAttrib
   declare securityDepositPaise: number | string;
   declare maintenancePayer: 'OWNER' | 'TENANT';
   declare occupantCount: number;
+  /** Part 2: household members to link on approval (BR-09-31), as entered; and whether to invite the tenant. */
+  declare householdJson: unknown;
+  declare inviteTenant: CreationOptional<boolean>;
   declare policeVerificationStatus: string;
   declare policeVerificationRef: string | null;
   declare policeVerifiedOn: string | null;
@@ -80,6 +83,8 @@ export class Tenancy extends Model<InferAttributes<Tenancy>, InferCreationAttrib
         securityDepositPaise: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
         maintenancePayer: { type: DataTypes.STRING(6), allowNull: false, defaultValue: 'OWNER' },
         occupantCount: { type: DataTypes.TINYINT.UNSIGNED, allowNull: false, defaultValue: 1 },
+        householdJson: { type: DataTypes.JSON, allowNull: true, defaultValue: null },
+        inviteTenant: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
         policeVerificationStatus: {
           type: DataTypes.STRING(14),
           allowNull: false,
