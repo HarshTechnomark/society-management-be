@@ -24,7 +24,8 @@
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "seed": "tsx scripts/seed.ts",
     "prepare": "husky",
-    "providers:rekey": "tsx scripts/providers-rekey.ts"
+    "providers:rekey": "tsx scripts/providers-rekey.ts",
+    "dev:totp": "tsx scripts/totp.ts"
   },
   "lint-staged": {
     "*.{ts,js,cjs,mjs}": [
@@ -41,7 +42,9 @@
     "bullmq": "^6.5.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
+    "csv-parse": "^7.0.3",
     "dotenv": "^18.0.9",
+    "exceljs": "^4.4.0",
     "express": "4",
     "helmet": "^8.3.0",
     "ioredis": "^6.0.0",

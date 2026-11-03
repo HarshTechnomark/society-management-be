@@ -56,6 +56,12 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    'units',
+    'location_nodes',
+    'buildings',
+    'society_settings',
+    'onboarding_steps',
+    'holidays',
     'platform_ticket_messages',
     'platform_tickets',
     'platform_notifications',
@@ -101,7 +107,7 @@ export async function resetAll(): Promise<void> {
   await flushAcl();
   await clearInbox();
   // module 07 caches: settings, dashboard, status page, dismissals and fan-out marks, request metrics, provider day counters
-  for (const prefix of ['ps:', 'pd:', 'status:', 'pn:', 'm:', 'ph:', 'pfa:'])
+  for (const prefix of ['ps:', 'pd:', 'status:', 'pn:', 'm:', 'ph:', 'pfa:', 'ss:'])
     await kv()
       .cacheDelPrefix(prefix)
       .catch(() => undefined);
