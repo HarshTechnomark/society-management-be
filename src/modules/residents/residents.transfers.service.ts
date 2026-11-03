@@ -535,9 +535,24 @@ export async function listTransfers(societyId: number, q: ListTransfersQuery, un
 export async function getTransfer(societyId: number, id: number) {
   const x = await OwnershipTransfer.findOne({ where: { id, societyId } });
   if (!x) throw transferNotFound();
-  const owners = await openOwnerLinks(societyId, x.unitId);
+  const snapshot = x.sellersJson;
+  const owners = snapshot
+    ? await UnitResident.findAll({
+        where: { societyId, id: { [Op.in]: snapshot.map(s => s.linkId) } },
+      })
+    : await openOwnerLinks(societyId, x.unitId);
+  const primaryOf = new Map(owners.map(o => [o.id!, o.isPrimary]));
+  const sellerRows = snapshot
+    ? snapshot.map(s => ({ ...s, isPrimary: primaryOf.get(s.linkId) ?? false }))
+    : owners.map(o => ({
+        linkId: o.id!,
+        residentId: o.residentId,
+        relation: o.relation,
+        sharePercent: o.sharePercent,
+        isPrimary: o.isPrimary,
+      }));
   const people = await Resident.findAll({
-    where: { societyId, id: { [Op.in]: owners.map(o => o.residentId) } },
+    where: { societyId, id: { [Op.in]: sellerRows.map(o => o.residentId) } },
     attributes: ['id', 'name'],
     paranoid: false,
   });
@@ -548,8 +563,8 @@ export async function getTransfer(societyId: number, id: number) {
   });
   return {
     ...(await oneDto(societyId, x)),
-    sellers: owners.map(o => ({
-      linkId: o.id!,
+    sellers: sellerRows.map(o => ({
+      linkId: o.linkId,
       residentId: o.residentId,
       name: names.get(o.residentId) ?? '',
       relation: o.relation,

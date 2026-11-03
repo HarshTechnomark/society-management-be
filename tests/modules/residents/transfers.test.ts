@@ -499,6 +499,27 @@ describe('complete (BR-09-66, 67)', () => {
     expect(again.body.code).toBe('INVALID_STATE');
   });
 
+  it('after completion the detail lists the old owner as seller and the new owner only as buyer', async () => {
+    const ctx = await setup();
+    const d = await approvedTransfer(ctx);
+    const r = await ctx.c(
+      'post',
+      `/ownership-transfers/${d.id}/complete`,
+      { version: await ver(d.id) },
+      { headers: key() },
+    );
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const g = await ctx.c('get', `/ownership-transfers/${d.id}`);
+    expect(g.status, JSON.stringify(g.body)).toBe(200);
+    const sellers = g.body.data.sellers as { residentId: number; linkId: number }[];
+    expect(sellers.map(x => x.residentId)).toEqual([ctx.seller.residentId]);
+    expect(sellers[0]!.linkId).toBe(ctx.seller.linkId);
+    expect(sellers.some(x => x.residentId === d.buyers[0]!.residentId)).toBe(false);
+    expect(g.body.data.buyers.map((b: { residentId: number }) => b.residentId)).toEqual([
+      d.buyers[0]!.residentId,
+    ]);
+  });
+
   it('completion before the effective date is TRANSFER_DATE_INVALID', async () => {
     const ctx = await setup();
     const d = await approvedTransfer(ctx, { effectiveDate: '2026-11-10' });
