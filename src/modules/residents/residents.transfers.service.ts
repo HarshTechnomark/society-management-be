@@ -43,6 +43,7 @@ import {
   callerResident,
   num,
   ownerOnly,
+  primaryOwnerResidentId,
   readSettings,
   transferNotFound,
   unitLabel,
@@ -62,12 +63,7 @@ import {
   societyToday,
   staleVersion,
 } from './residents.shared';
-import {
-  computeFees,
-  defaultPremium,
-  type FeeInput,
-  type FeeSettings,
-} from './residents.transfers.fees';
+import { computeFees, defaultPremium, type FeeInput, type FeeSettings } from './residents.transfers.fees';
 import { missingDocuments } from './residents.transfers.docs';
 
 /**
@@ -363,11 +359,12 @@ async function attachTransferDocs(
 ): Promise<void> {
   if (!items?.length) return;
   const primary = x.buyersJson.find(b => b.isPrimary)?.residentId ?? null;
+  const seller = await primaryOwnerResidentId(societyId, x.unitId, t);
   const membership = items.filter(i => i.docType === 'MEMBERSHIP_APPLICATION');
   const rest = items.filter(i => i.docType !== 'MEMBERSHIP_APPLICATION');
   for (const [group, residentId] of [
     [membership, primary],
-    [rest, null],
+    [rest, seller],
   ] as [DocInput[], number | null][])
     if (group.length)
       await attachDocuments(ctx, societyId, t, {

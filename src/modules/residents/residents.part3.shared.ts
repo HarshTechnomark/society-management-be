@@ -77,6 +77,24 @@ export function assertOwnUnit(ctx: Ctx, unitId: number): void {
   if (!(ctx.unitIds ?? []).includes(unitId)) throw unitNotFound();
 }
 
+/** The primary open owner of a unit: the person whose record carries documents of an admin-raised request. */
+export async function primaryOwnerResidentId(
+  societyId: number,
+  unitId: number,
+  t?: Transaction,
+): Promise<number> {
+  const link = await UnitResident.findOne({
+    where: { societyId, unitId, toDate: null, relation: { [Op.in]: [...OWNER_RELATIONS] } },
+    order: [
+      ['isPrimary', 'DESC'],
+      ['id', 'ASC'],
+    ],
+    transaction: t,
+  });
+  if (!link) throw residentNotFound();
+  return link.residentId;
+}
+
 /** User ids of the primary owner of a unit (fallback recipient when an admin raised a request). */
 export async function primaryOwnerUserIds(societyId: number, unitId: number, t?: Transaction) {
   const link = await UnitResident.findOne({

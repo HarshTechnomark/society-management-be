@@ -28,6 +28,7 @@ import {
   ownerLinkOf,
   ownerOnly,
   permitNotFound,
+  primaryOwnerResidentId,
   primaryOwnerUserIds,
   readSettings,
   unitLabel,
@@ -350,7 +351,7 @@ export async function createPermit(ctx: Ctx, societyId: number, input: CreatePer
       throw err;
     }
     await attachDocuments(ctx, societyId, t, {
-      residentId: requester?.id ?? null,
+      residentId: requester?.id ?? (await primaryOwnerResidentId(societyId, input.unitId, t)),
       unitId: input.unitId,
       refType: 'renovation_permit',
       refId: p.id!,
@@ -542,7 +543,7 @@ export async function resubmitPermit(
     if (missing.length) throw docsRequired(missing);
     if (input.fileIds?.length)
       await attachDocuments(ctx, societyId, t, {
-        residentId: p.requestedByResidentId,
+        residentId: p.requestedByResidentId ?? (await primaryOwnerResidentId(societyId, p.unitId, t)),
         unitId: p.unitId,
         refType: 'renovation_permit',
         refId: p.id!,
