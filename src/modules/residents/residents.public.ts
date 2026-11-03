@@ -130,10 +130,20 @@ export function registerResidents(): void {
   registerResidentsPart2();
   registerPart3Jobs();
   registerPart3Approvals();
+  // Module 13 deposit callbacks for renovation permits go through part 2's dispatcher.
+  registerDepositHandlerFor('renovation_permit', {
+    onPaid: (ctx, input, t) => onRenovationDepositPaid(ctx, ctx.society!.id, input, t),
+    onRefunded: (ctx, input, t) => onRenovationDepositRefunded(ctx, ctx.society!.id, input, t),
+  });
 }
 
 // ---- module 09 part 2: join requests, tenancies, move requests
-import { registerResidentsPart2, onDepositPaid, onDepositRefunded } from './residents.part2.jobs';
+import {
+  registerResidentsPart2,
+  registerDepositHandler as registerDepositHandlerFor,
+  onDepositPaid,
+  onDepositRefunded,
+} from './residents.part2.jobs';
 import { listForGate } from './residents.moves.service';
 import { tenancyExpiry } from './residents.tenancies.service';
 
