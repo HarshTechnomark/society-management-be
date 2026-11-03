@@ -893,6 +893,8 @@ export async function activateTenancyTx(
   });
   for (const l of links) {
     if (l.isResiding) continue;
+    // a move-in before the agreement start moves the link start back, so the tenancy can end on or after the move-in
+    if (moveInDate < l.fromDate) l.fromDate = moveInDate;
     l.isResiding = true;
     l.version += 1;
     await l.save({ transaction: t });
@@ -1078,11 +1080,13 @@ export async function endTenancy(
     if (!(LIVE_TENANCY as readonly string[]).includes(row.status))
       throw invalidState('Only a live tenancy can be ended');
     const today = await societyToday(societyId);
-    if (row.status !== 'APPROVED' && (input.endedOn > today || input.endedOn < row.agreementStart))
+    const earliestEnd =
+      row.moveInDate && row.moveInDate < row.agreementStart ? row.moveInDate : row.agreementStart;
+    if (row.status !== 'APPROVED' && (input.endedOn > today || input.endedOn < earliestEnd))
       throw rule(
         422,
         'TENANCY_DATES_INVALID',
-        'The end date is between the agreement start and today',
+        'The end date is between the move-in (or agreement start) and today',
         'endedOn',
       );
     const open = await MoveRequest.count({

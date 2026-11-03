@@ -273,6 +273,31 @@ describe('activate, renew, end (BR-09-31, 35, 36, T09-15)', () => {
     expect(await AuditLog.count({ where: { action: 'residents.tenancy.ended' } })).toBe(1);
   });
 
+  it('a tenancy moved in before its agreement start can end from the move-in date', async () => {
+    const s = await residentsSociety();
+    await ownerOf(s);
+    const t = await activeTenancy(s, { start: '2026-11-10', end: '2027-09-30' });
+    const act = await s.c('post', `/tenancies/${t.id}/activate`, {
+      version: t.version,
+      moveInDate: '2026-11-01',
+    });
+    expect(act.status, JSON.stringify(act.body)).toBe(200);
+    const early = await s.c('post', `/tenancies/${t.id}/end`, {
+      version: act.body.data.version,
+      endedOn: '2026-10-31',
+      endReason: 'MOVED_OUT',
+    });
+    expect(early.body.code).toBe('TENANCY_DATES_INVALID');
+    const r = await s.c('post', `/tenancies/${t.id}/end`, {
+      version: act.body.data.version,
+      endedOn: '2026-11-01',
+      endReason: 'MOVED_OUT',
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const links = await UnitResident.findAll({ where: { tenancyId: t.id } });
+    expect(links.every(l => l.fromDate === '2026-11-01' && l.toDate === '2026-11-01')).toBe(true);
+  });
+
   it('an APPROVED tenancy that never moved in ends as TERMINATED; an open move blocks the end', async () => {
     const s = await residentsSociety();
     await ownerOf(s);
