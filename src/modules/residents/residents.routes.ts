@@ -11,6 +11,7 @@ import { tag } from '../access-control/access-control.registry';
 import { residentController as c } from './residents.controller';
 import { residentSchemas as s } from './residents.validation';
 import { FEATURE as F } from './residents.constants';
+import { part3Routes } from './residents.part3.routes';
 
 /**
  * Module 09 routes, part 1 (section 8.1): residents, unit links, documents, import and export, flats, timeline and
@@ -373,3 +374,6 @@ r.get(
   validate({ params: s.docParam, query: s.download }),
   c.myDocUrl,
 );
+
+// ---- part 3: renovation permits and ownership transfers (own router)
+r.use(part3Routes);

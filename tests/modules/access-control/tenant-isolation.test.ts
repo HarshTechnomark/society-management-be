@@ -228,6 +228,28 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /onboarding/steps/:stepKey/complete',
       'POST /onboarding/steps/:stepKey/skip',
       'POST /onboarding/steps/:stepKey/reopen',
+      // module 09 part 3: another society's renovation permit or ownership transfer id is 404 PERMIT_NOT_FOUND / TRANSFER_NOT_FOUND on every route, and a resident of another flat gets 404 on the /me routes (tests/modules/residents/renovations.test.ts, transfers.test.ts, T09-46)
+      'GET /renovation-permits/:id',
+      'PATCH /renovation-permits/:id',
+      'POST /renovation-permits/:id/start',
+      'POST /renovation-permits/:id/extend',
+      'POST /renovation-permits/:id/violations',
+      'POST /renovation-permits/:id/suspend',
+      'POST /renovation-permits/:id/resume',
+      'POST /renovation-permits/:id/work-done',
+      'POST /renovation-permits/:id/inspect',
+      'POST /renovation-permits/:id/cancel',
+      'PATCH /me/renovation-permits/:id',
+      'POST /me/renovation-permits/:id/work-done',
+      'POST /me/renovation-permits/:id/cancel',
+      'GET /ownership-transfers/:id',
+      'PATCH /ownership-transfers/:id',
+      'POST /ownership-transfers/:id/submit',
+      'POST /ownership-transfers/:id/complete',
+      'POST /ownership-transfers/:id/cancel',
+      'PATCH /me/ownership-transfers/:id',
+      'POST /me/ownership-transfers/:id/submit',
+      'POST /me/ownership-transfers/:id/cancel',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
