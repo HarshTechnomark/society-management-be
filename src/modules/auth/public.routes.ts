@@ -34,6 +34,8 @@ export const PUBLIC_ROUTES: Rule[] = [
   { method: 'GET', path: /^\/public\/invitations\/[^/]+$/ },
   { method: 'POST', path: /^\/public\/invitations\/[^/]+\/decline$/ },
   { method: 'POST', path: /^\/dev\/payments\/[^/]+\/pay$/ },
+  { method: 'GET', path: '/dev/approvals' },
+  { method: 'POST', path: /^\/dev\/approvals\/\d+\/(approve|reject)$/ },
   { method: 'POST', path: /^\/webhooks\// },
 ];
 
