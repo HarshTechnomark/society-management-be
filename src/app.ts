@@ -21,6 +21,7 @@ import { platformOpsRoutes } from './modules/platform-ops/platform-ops.routes';
 import { societySetupRoutes } from './modules/society-setup/society-setup.routes';
 import { residentsRoutes } from './modules/residents/residents.routes';
 import { residentsPart2Routes } from './modules/residents/residents.part2.routes';
+import { committeeRoutes } from './modules/committee/committee.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -29,6 +30,7 @@ import './modules/societies/societies.templates';
 import './modules/platform-ops/platform-ops.templates';
 import './modules/society-setup/society-setup.templates';
 import './modules/residents/residents.templates';
+import './modules/committee/committee.templates';
 
 /**
  * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > appContext > csrf > auth > routes > error handler.
@@ -84,6 +86,8 @@ export function createApp(): Express {
   // module 09: residents, unit links, documents, directory, pets, emergency profiles (join requests, tenancies, moves, permits and transfers follow in parts 2 and 3)
   api.use(residentsRoutes);
   api.use(residentsPart2Routes); // module 09 part 2: tenancies, join requests, move requests
+  // module 10: committee terms and seats (10.1); activation, changes, hand-over and the resident page follow in 10.2 and 10.3
+  api.use(committeeRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 
