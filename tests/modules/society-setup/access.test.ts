@@ -10,6 +10,7 @@ import {
   closeDb,
   sequelize,
 } from '../../../src/models';
+import { putPlaceholderFile } from '../../../src/modules/society-setup/society-setup.ports';
 import { drainQueues } from '../../../src/lib/queue';
 import { listRoutes } from '../../../src/modules/access-control/access-control.registry';
 import { flushAcl } from '../../../src/modules/access-control/access-control.cache';
@@ -37,9 +38,9 @@ const mine = (r: { path: string }) =>
   /^\/(society|buildings|units|locations|holidays|onboarding)(\/|$)/.test(r.path);
 
 describe('route table of module 08', () => {
-  it('registers the 40 routes of part 1 with the permissions, features, step-up and idempotency of section 8.1', () => {
+  it('registers the 44 routes of section 8.1 with the permissions, features, step-up and idempotency of section 8.1', () => {
     const ours = routes.filter(mine);
-    expect(ours).toHaveLength(40); // the 44 routes of section 8.1 minus import and export (part 2)
+    expect(ours).toHaveLength(44);
     const find = (m: string, p: string) => ours.find(r => r.method === m && r.path === p)!;
     expect(ours.every(r => r.kind === 'society')).toBe(true);
     expect(find('PATCH', '/society')).toMatchObject({
@@ -76,6 +77,21 @@ describe('route table of module 08', () => {
       stepUp: true,
     });
     expect(find('POST', '/units/bulk-update').permissions).toEqual(['residents.units.edit']);
+    expect(find('POST', '/units/imports')).toMatchObject({
+      permissions: ['residents.units.import'],
+      features: ['property.spreadsheet_import'],
+      idempotent: true,
+    });
+    expect(find('GET', '/units/imports/:importId').permissions).toEqual(['residents.units.import']);
+    expect(find('POST', '/units/imports/:importId/commit')).toMatchObject({
+      permissions: ['residents.units.import'],
+      idempotent: true,
+    });
+    expect(find('POST', '/units/export')).toMatchObject({
+      permissions: ['residents.units.export'],
+      noSupportAccess: true,
+      idempotent: true,
+    });
     expect(find('POST', '/units/generator/preview')).toMatchObject({
       permissions: ['residents.units.create'],
       features: ['property.bulk_unit_generator'],
@@ -100,7 +116,7 @@ describe('route table of module 08', () => {
         .filter(r => r.noSupportAccess)
         .map(r => `${r.method} ${r.path}`)
         .sort(),
-    ).toEqual(['DELETE /buildings/:id', 'DELETE /holidays/:id']);
+    ).toEqual(['DELETE /buildings/:id', 'DELETE /holidays/:id', 'POST /units/export']);
     for (const r of ours.filter(x => x.path.startsWith('/onboarding'))) {
       expect(r.features, `${r.method} ${r.path}`).toEqual([]);
       expect(r.noSupportAccess).toBe(false);
@@ -136,7 +152,25 @@ describe('T08-33 tenant isolation', () => {
       { holidayDate: '2026-11-08', name: 'Diwali' },
       { headers: idemKey() },
     );
+    const bFile = putPlaceholderFile({
+      societyId: b.society.id!,
+      ownerUserId: b.user.id!,
+      name: 'b.csv',
+      content: Buffer.from('Building,Flat No,Floor\nB,201,1\n'),
+    });
+    const bImport = await b.c(
+      'post',
+      '/units/imports',
+      { fileId: bFile, mode: 'CREATE_ONLY' },
+      { headers: idemKey() },
+    );
+    await drainQueues();
+    const bImportId = bImport.body.data.importId;
     const cases: [string, string, unknown, string][] = [
+      ['get', `/units/imports/${bImportId}`, undefined, 'IMPORT_NOT_FOUND'],
+      ['post', `/units/imports/${bImportId}/commit`, { commitPolicy: 'VALID_ROWS_ONLY' }, 'IMPORT_NOT_FOUND'],
+      ['post', '/units/imports', { fileId: bFile, mode: 'CREATE_ONLY' }, 'FILE_NOT_FOUND'],
+      ['post', '/units/export', { buildingId: bb.id }, 'BUILDING_NOT_FOUND'],
       ['get', `/buildings/${bb.id}`, undefined, 'BUILDING_NOT_FOUND'],
       ['get', `/buildings/${bb.id}/grid`, undefined, 'BUILDING_NOT_FOUND'],
       ['patch', `/buildings/${bb.id}`, { version: 1, name: 'Stolen' }, 'BUILDING_NOT_FOUND'],
@@ -252,6 +286,7 @@ describe('T08-34 permissions', () => {
       ['delete', `/units/${u.id}`, undefined],
       ['post', '/units/bulk-update', { unitIds: [u.id], set: { bhk: '2BHK' } }],
       ['patch', `/buildings/${b.id}`, { version: 1, name: 'Renamed' }],
+      ['post', '/units/imports', { fileId: 1, mode: 'CREATE_ONLY' }],
     ] as const) {
       const r = await treasurer.c(m, path, body, { headers: idemKey() });
       expect(r.status, `${m} ${path}`).toBe(403);
@@ -345,6 +380,7 @@ describe('T08-35 plan checks', () => {
         ],
       ],
       ['property.common_areas_registry', [['get', '/locations']]],
+      ['property.spreadsheet_import', [['get', '/units/imports/1']]],
     ];
     for (const [key, list] of cases) {
       await featureOff(society.id!, key);
@@ -375,6 +411,9 @@ describe('T08-36 society state (BR-08-48)', () => {
       ['patch', `/units/${u.id}`, { version: 1, notes: 'x' }],
       ['post', `/units/${u.id}/archive`, { version: 1, reason: 'Merged into 102' }],
       ['post', '/units/bulk-update', { unitIds: [u.id], set: { bhk: '2BHK' } }],
+      ['post', '/units/imports', { fileId: 1, mode: 'CREATE_ONLY' }],
+      ['post', '/units/imports/1/commit', { commitPolicy: 'ALL_OR_NOTHING' }],
+      ['post', '/units/export', {}],
       ['post', '/locations', { parentId: null, nodeType: 'AREA', areaType: 'GARDEN', name: 'Garden' }],
       ['post', '/holidays', { holidayDate: '2026-11-08', name: 'Diwali' }],
       ['post', '/onboarding/steps/BILLING/complete', {}],

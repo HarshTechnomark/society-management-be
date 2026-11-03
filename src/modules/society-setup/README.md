@@ -1,11 +1,11 @@
-# Module 08: Society setup and onboarding (backend, part 1)
+# Module 08: Society setup and onboarding (backend)
 
 Spec: `Society_Management_Build_Modules/Markdown_for_AI/08_Society_Setup_Onboarding.md`.
 
 Part 1 (this branch) builds the tables, the settings registry, the profile, buildings, units, the bulk generator, locations,
 holidays and the onboarding checklist, with their routes, the service API for other modules, the registrations and the demo
 seed. **Part 2** adds the unit import (CSV and XLSX), its validation report and Redis state, the unit export job and the
-go-live welcome-invite job (see "Left for part 2").
+go-live welcome-invite job (see "Part 2: import, export, jobs").
 
 ## What it owns
 
@@ -114,21 +114,38 @@ listBetween`, `onboarding.progressPercent | isLive | registerCheck | ensureSteps
 - Demo seed: `limit.flats` is set by resetting the counter written by the module 04 seed to 0 and then consuming through the
   generator (so `onFlatCountChanged` also runs); the final counters are 72 and 30 as in the spec.
 
-## Left for part 2 (clean extension points)
+## Part 2: import, export, jobs
 
-- `society-setup.imports.service.ts`, the import state and report writer (Redis keys `ss:import:*`, lock
-  `ss:import-lock:<societyId>`), `POST /units/imports`, `GET /units/imports/:importId`, `POST /units/imports/:importId/commit`,
-  `POST /units/export` (with `routeMeta({ noSupportAccess: true })` and a rate limit of 10 per hour) and their schemas.
-  Mount them in `society-setup.routes.ts` before `/units/:id`; entitlement keys `FEATURE.spreadsheetImport` and
-  `FEATURE.exportStructure` and the queue name `SOCIETY_SETUP_QUEUE` are already in `society-setup.types.ts`; the audit
-  actions `importCommitted` and `unitExported` are declared. The CSV-injection helper is not written yet.
-- `society-setup.jobs.ts` with `registerSocietySetupJobs()`, to be called at the end of `registerSocietySetup()` (marked with a
-  comment): `validate-import`, `commit-import`, `export-units`, `go-live-invites`.
-- Go-live invites: call `onboarding.registerGoLiveHook(async (ctx, societyId, t) => enqueueAfterCommit(t, ...))` with
-  `jobId = go-live:<societyId>`. The hook runs inside the go-live transaction after the GO_LIVE row is DONE.
-- Templates `setup.import.validated`, `setup.import.committed`, `setup.import.failed` and `setup.export.ready` go into
-  `society-setup.templates.ts`; realtime `setup.import.updated` and `setup.export.ready` go to `user:<id>`.
-- `exports`: `societies.exports` is already covered for the six tables; the unit export file writer is part 2.
+- Files: `imports.parse` (CSV with `csv-parse`, XLSX with `exceljs`, first sheet, formulas as cached value), `imports.rules`
+  (header synonyms, row rules, one `planImport` for the dry run and the commit), `imports.state` (JSON per import under
+  `ss:import:<id>`, rows under `ss:import:<id>:rows`, 24 h; lock `ss:import-lock:<societyId>` through the new
+  `kv().setIfAbsent`; Redis or memory depending on `REDIS_URL`; only the memory side is tested), `imports.service`
+  (routes and the `validate-import` and `commit-import` jobs), `export.service` (`export-units`), `csv` (injection helper
+  shared by export and report), `jobs` (`registerSocietySetupJobs()`, called by `registerSocietySetup()` and so by the API,
+  the worker and the seed).
+- A job exits unless the state has the status it expects. The final status and result are written with one `SET`.
+- `limit.flats`: the dry run marks rows beyond the remaining limit `LIMIT_EXCEEDED` in file order; the commit keeps them
+  refused and calls `adjustFlats` once.
+- Go-live invites: the go-live hook queues `go-live-invites` with `jobId go-live:<societyId>` after commit. The job calls
+  `setupPorts().residents.sendWelcomeInvites(ctx, societyId)`. **Module 09 does not exist yet**: the default port only
+  records the call (`welcomeInviteCalls`) and logs. Module 09 replaces it and must be idempotent.
+- Notifications: `setup.import.validated` (PUSH), `setup.import.committed`, `setup.import.failed` (EMAIL),
+  `setup.export.ready` (in-app only, module 16). Realtime to `user:<id>`: `setup.import.updated`
+  (`{ importId, status, counts }`), `setup.export.ready` (`{ fileId }`).
+- Rate limit of the export route: 10 per hour per user (`setup-export`). `noSupportAccess` is set on it.
+
+### What the real module 01 files service must provide
+
+- `files.getImportFile(societyId, userId, fileId)` (see `society-setup.ports.ts`): `404 FILE_NOT_FOUND` for an unknown file,
+  another society's file or a file the caller did not upload; `422 FILE_NOT_LINKABLE` unless the purpose is `IMPORT_FILE`;
+  `409 IMPORT_FILE_NOT_READY` unless the scan status is `CLEAN`; the bytes (at most 20 MB) and the original name.
+- `files.storeSystemFile` for the `EXPORT_FILE` of the export and of the import error report (owner = requester).
+- `GET /files/:id/download-url` (answers `{ url, expiresAt }`). Until then module 08 registers a placeholder of the same
+  path outside production (`can('residents.units.import', 'residents.units.export')`, the file must belong to the society).
+- Development only: `POST /api/v1/dev/files?societyId=&ownerUserId=&name=[&purpose=IMPORT_FILE]` with the raw bytes as body
+  stores a CLEAN file in the memory store and answers `{ fileId }`; tests use `putPlaceholderFile` (it can also put a file in
+  as not scanned). Files vanish on restart.
+- Files of module 01 cleanup: the upload and the report are unlinked files deleted 24 hours later (spec 16).
 
 ## Tests
 
@@ -137,5 +154,4 @@ listBetween`, `onboarding.progressPercent | isLive | registerCheck | ensureSteps
 14), `profile` (US-08-01, BR-08-1 to 6), `buildings`, `units` (T08-10 to 15, 37), `generator` (T08-07 to 09, US-08-02, 05),
 `locations` (T08-26, 27, US-08-09), `holidays` (T08-32, US-08-10), `onboarding` (T08-28 to 31, 37, US-08-08), `access`
 (T08-33 to 36, support access, route table), `registrations` (export provider, purge, T08-38, ports, seed), `schema`.
-Not covered here: T08-21 to 25 (import and export, part 2), T08-39 and 40 (frontend end to end). The tenant-isolation test
-lists the module 08 routes with ids; the permission matrix covers them automatically.
+`imports` (T08-21 to 25, every import, export and go-live-invite rule). Not covered here: T08-39 and 40 (frontend end to end). The tenant-isolation test lists the module 08 routes with ids; the permission matrix covers them automatically.

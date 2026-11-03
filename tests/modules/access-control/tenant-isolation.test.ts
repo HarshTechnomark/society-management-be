@@ -169,13 +169,16 @@ describe('tenant isolation (T03-33, section 13)', () => {
       // module 07 part 2: a banner the user cannot see (another audience) is 404 ANNOUNCEMENT_NOT_FOUND and another society's audit row is 404 AUDIT_LOG_NOT_FOUND (tests/modules/platform-ops/announcements.test.ts and audit.test.ts)
       'POST /platform-announcements/:id/dismiss',
       'GET /audit-logs/:id',
-      // module 08: another society's building, unit, location or holiday id is 404 with the module code on every route (tests/modules/society-setup/access.test.ts, T08-33); the stepKey of the onboarding routes is a fixed key, not an id
+      // module 08: another society's building, unit, location, holiday or import id is 404 with the module code on every route (tests/modules/society-setup/access.test.ts, T08-33); the stepKey of the onboarding routes is a fixed key, not an id
       'GET /buildings/:id',
       'GET /buildings/:id/grid',
       'PATCH /buildings/:id',
       'POST /buildings/:id/archive',
       'POST /buildings/:id/restore',
       'DELETE /buildings/:id',
+      'GET /units/imports/:importId',
+      'POST /units/imports/:importId/commit',
+      'GET /files/:id/download-url',
       'GET /units/:id',
       'PATCH /units/:id',
       'POST /units/:id/archive',
