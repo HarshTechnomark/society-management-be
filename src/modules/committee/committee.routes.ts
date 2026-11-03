@@ -4,6 +4,8 @@ import { idempotency } from '../../middlewares/idempotency.middleware';
 import { requireFeature as feature } from '../../middlewares/entitlement.middleware';
 import { societyMiddleware } from '../../middlewares/society.middleware';
 import { requirePermission as can } from '../../middlewares/permission.middleware';
+import { requireRecentAuth } from '../../middlewares/recentAuth.middleware';
+import { tag } from '../access-control/access-control.registry';
 import { committeeController as c } from './committee.controller';
 import { committeeSchemas as s } from './committee.validation';
 import { FEATURE as F } from './committee.constants';
@@ -17,6 +19,7 @@ import { FEATURE as F } from './committee.constants';
  */
 const society = () => societyMiddleware();
 const read = { mode: 'read' } as const;
+const stepUp = () => tag(requireRecentAuth(), { stepUp: true });
 
 export const committeeRoutes = Router();
 const r = committeeRoutes;
@@ -70,4 +73,47 @@ r.patch(
   feature(F.terms),
   validate({ params: s.seatParam, body: s.seatPatch }),
   c.patchSeat,
+);
+
+// 10.2 (8.7 to 8.9): activation and mid-term changes. Order: society marker, permission, both entitlements, validate, step-up
+// (activate and changes only), idempotency (the same two).
+r.get(
+  '/committee/terms/:id/activation-preview',
+  society(),
+  can('settings.members.edit'),
+  feature(F.terms),
+  feature(F.officeBearers),
+  validate({ params: s.idParam }),
+  c.activationPreview,
+);
+r.post(
+  '/committee/terms/:id/activate',
+  society(),
+  can('settings.members.edit'),
+  feature(F.terms),
+  feature(F.officeBearers),
+  validate({ params: s.idParam, body: s.activate }),
+  stepUp(),
+  idempotency(),
+  c.activate,
+);
+r.post(
+  '/committee/terms/:id/changes/preview',
+  society(),
+  can('settings.members.edit'),
+  feature(F.terms),
+  feature(F.officeBearers),
+  validate({ params: s.idParam, body: s.changesPreview }),
+  c.changesPreview,
+);
+r.post(
+  '/committee/terms/:id/changes',
+  society(),
+  can('settings.members.edit'),
+  feature(F.terms),
+  feature(F.officeBearers),
+  validate({ params: s.idParam, body: s.changesApply }),
+  stepUp(),
+  idempotency(),
+  c.applyChanges,
 );

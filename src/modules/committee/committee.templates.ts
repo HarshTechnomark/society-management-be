@@ -18,4 +18,20 @@ registerTemplates({
       text: `A draft committee "${d.termName}" was created from the election results.\nSet the designations and review it: ${d.link}`,
     },
   })),
+
+  'committee.term_activated': t(['EMAIL', 'PUSH'], d => ({
+    link: String(d.link),
+    email: {
+      subject: `${d.termName} has taken charge at ${d.societyName}`,
+      text: `The committee "${d.termName}" has taken charge. Its term ends on ${d.endDate}.\nSee the committee: ${d.link}`,
+    },
+  })),
+  'committee.new_committee_announced': t(['PUSH'], d => ({
+    link: String(d.link),
+    sms: `${d.termName} is now the managing committee of ${d.societyName}.`,
+  })),
+  'committee.seat_assigned': t(['PUSH'], d => ({
+    link: String(d.link),
+    sms: `You are now ${d.designationLabel} of the committee at ${d.societyName}.`,
+  })),
 });

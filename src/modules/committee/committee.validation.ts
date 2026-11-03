@@ -122,6 +122,68 @@ const seatPatch = z
   .strict()
   .refine(b => Object.keys(b).some(k => k !== 'version'), 'Nothing to change');
 
+const hash = z.string().regex(/^[0-9a-f]{64}$/, 'Not a preview hash');
+const activate = z
+  .object({
+    version,
+    previewHash: hash,
+    tookChargeOn: ymd.optional(),
+    resolutionRef: text(3, 100),
+    reason: text(5, 500),
+    announceToResidents: z.boolean().optional(),
+  })
+  .strict();
+
+const change = z
+  .object({
+    op: z.enum(['ADD', 'REDESIGNATE', 'VACATE']),
+    seatId: z
+      .string()
+      .regex(/^S[1-9]\d{0,2}$/)
+      .optional(),
+    userId: id.optional(),
+    designation: z.enum(DESIGNATIONS).optional(),
+    joinMode: z.enum(['ELECTED', 'CO_OPTED', 'NOMINATED', 'APPOINTED']).optional(),
+    unitId: id.optional(),
+    portfolios: portfolios.optional(),
+    publicEmail: publicEmail.optional(),
+    replaceExistingRole: z.boolean().optional(),
+    resolutionRef: text(3, 100).optional(),
+    exitReason: z.enum(['RESIGNED', 'REMOVED', 'DECEASED', 'DISQUALIFIED']).optional(),
+    note: z.string().max(300).optional(),
+  })
+  .strict()
+  .superRefine((c, ctx) => {
+    const need: Record<string, (keyof typeof c)[]> = {
+      ADD: ['userId', 'designation', 'joinMode', 'unitId'],
+      REDESIGNATE: ['seatId', 'designation'],
+      VACATE: ['seatId', 'exitReason'],
+    };
+    const allowed: Record<string, (keyof typeof c)[]> = {
+      ADD: [...need.ADD!, 'portfolios', 'publicEmail', 'replaceExistingRole', 'resolutionRef'],
+      REDESIGNATE: need.REDESIGNATE!,
+      VACATE: [...need.VACATE!, 'note'],
+    };
+    for (const k of need[c.op]!)
+      if (c[k] === undefined) ctx.addIssue({ code: 'custom', path: [k], message: `Required for ${c.op}` });
+    for (const k of Object.keys(c) as (keyof typeof c)[])
+      if (k !== 'op' && !allowed[c.op]!.includes(k))
+        ctx.addIssue({ code: 'custom', path: [k], message: `Not allowed for ${c.op}` });
+    if (c.op === 'ADD' && (c.joinMode === 'CO_OPTED' || c.joinMode === 'NOMINATED') && !c.resolutionRef)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['resolutionRef'],
+        message: 'The resolution reference is required',
+      });
+  });
+const changesBase = {
+  version,
+  effectiveDate: ymd.optional(),
+  changes: z.array(change).min(1).max(10),
+};
+const changesPreview = z.object(changesBase).strict();
+const changesApply = z.object({ ...changesBase, previewHash: hash, reason: text(5, 500) }).strict();
+
 const termList = z.object({
   status: z.enum(TERM_STATUSES).optional(),
   source: z.enum(TERM_SOURCES).optional(),
@@ -138,5 +200,8 @@ export const committeeSchemas = {
   termPatch,
   termDelete,
   seatPatch,
+  activate,
+  changesPreview,
+  changesApply,
   termList,
 };

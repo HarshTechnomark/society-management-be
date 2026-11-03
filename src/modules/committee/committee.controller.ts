@@ -1,6 +1,8 @@
 import type { Request, RequestHandler, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { created, noContent, ok, okList } from '../../utils/response';
+import * as activation from './committee.activation';
+import * as changes from './committee.changes';
 import * as queries from './committee.queries';
 import * as svc from './committee.service';
 
@@ -35,6 +37,23 @@ export const committeeController = {
       res,
       await svc.patchSeat(req.ctx, sid(req), v(req).params.id, v(req).params.seatId, v(req).body),
       'Seat saved',
+    ),
+  ),
+  activationPreview: h(async (req, res) =>
+    ok(res, await activation.activationPreview(req.ctx, sid(req), v(req).params.id)),
+  ),
+  activate: h(async (req, res) => {
+    const r = await activation.activate(req.ctx, sid(req), v(req).params.id, v(req).body);
+    ok(res, r.data, r.message);
+  }),
+  changesPreview: h(async (req, res) =>
+    ok(res, await changes.changesPreview(req.ctx, sid(req), v(req).params.id, v(req).body)),
+  ),
+  applyChanges: h(async (req, res) =>
+    ok(
+      res,
+      await changes.applyChanges(req.ctx, sid(req), v(req).params.id, v(req).body),
+      'Committee changes saved',
     ),
   ),
 };

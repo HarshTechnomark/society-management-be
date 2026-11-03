@@ -1,6 +1,7 @@
 import { users } from '../auth/auth.public';
 import { authAccess } from '../access-control/access-control.public';
 import { residents } from '../residents/residents.public';
+import type { PlanBlocker } from './committee.planner';
 import { rule } from './committee.shared';
 
 /** BR-10-7 and BR-10-8: who may hold a seat. Reads module 03 memberships and module 09 unit links; writes nothing. */
@@ -93,4 +94,56 @@ export async function assertUnitFits(
     throw rule('COMMITTEE_HOLDER_INELIGIBLE', 'The flat is not one the person owns', 'unitId', {
       seatIds: [seatId],
     });
+}
+
+/**
+ * The same checks as `assertHoldersEligible`, for the previews of 10.2: returns blockers (`HOLDER_NOT_MEMBER`,
+ * `HOLDER_NOT_ACTIVE`, `HOLDER_INELIGIBLE`, each with the seat and user ids) instead of throwing, all kinds at once.
+ */
+export async function holderBlockers(
+  societyId: number,
+  holders: HolderToCheck[],
+  ownersOnly: boolean,
+): Promise<PlanBlocker[]> {
+  const out: PlanBlocker[] = [];
+  const state = new Map<number, MembershipState>();
+  for (const h of holders)
+    if (h.userId !== null && !state.has(h.userId))
+      state.set(h.userId, await membershipState(societyId, h.userId));
+  const stateOf = (h: HolderToCheck): MembershipState => (h.userId === null ? 'NONE' : state.get(h.userId)!);
+  const pick = (code: string, message: string, hit: HolderToCheck[]) => {
+    if (hit.length)
+      out.push({
+        code,
+        message,
+        seatIds: hit.map(h => h.seatId),
+        userIds: hit.filter(h => h.userId !== null).map(h => h.userId!),
+      });
+  };
+  pick(
+    'HOLDER_NOT_MEMBER',
+    'These people are not members of the society yet. Residents join through the residents register first.',
+    holders.filter(h => stateOf(h) === 'NONE'),
+  );
+  pick(
+    'HOLDER_NOT_ACTIVE',
+    'These people are suspended or have not accepted their invitation',
+    holders.filter(h => stateOf(h) === 'NOT_ACTIVE'),
+  );
+  const live = holders.filter(h => stateOf(h) === 'ACTIVE');
+  const links = new Map<number, { unitId: number; relation: string }[]>();
+  for (const h of live)
+    if (!links.has(h.userId!)) links.set(h.userId!, await residents.getActiveUnitLinks(societyId, h.userId!));
+  pick(
+    'HOLDER_INELIGIBLE',
+    ownersOnly
+      ? 'Only owners can sit on the committee, and the flat must be one the person owns'
+      : 'The flat must be one the person is linked to',
+    live.filter(h => {
+      const mine = links.get(h.userId!) ?? [];
+      const usable = ownersOnly ? mine.filter(l => l.relation === 'OWNER') : mine;
+      return h.unitId === null || !usable.some(l => l.unitId === h.unitId);
+    }),
+  );
+  return out;
 }
