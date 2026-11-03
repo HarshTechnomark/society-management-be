@@ -7,7 +7,6 @@ import { AppError, NotFoundError } from '../../utils/errors';
 import type { Ctx } from '../../types/context';
 import { revokeHouseholdGrants } from '../access-control/access-control.public';
 import { units } from '../society-setup/society-setup.public';
-import type { UnitDto } from '../society-setup/society-setup.types';
 import {
   AUDIT,
   ENTITY,
@@ -67,8 +66,6 @@ export interface LinkOptions {
   allowMinorOwner?: boolean;
   /** Import: shares are validated by the caller once all owner rows of the unit are in. */
   skipShareCheck?: boolean;
-  /** Skip the date window of `fromDate` (the seed and the import write old start dates). */
-  already?: UnitDto;
 }
 
 const featureOfRelation = (r: LinkRelation) =>
@@ -176,7 +173,7 @@ export async function createLink(
   opts: LinkOptions = {},
 ): Promise<UnitResident> {
   if (opts.checkFeature !== false) await assertFeatureFor(societyId, featureOfRelation(input.relation));
-  const unit = opts.already ?? (await units.lockActive(societyId, input.unitId, t));
+  const unit = await units.lockActive(societyId, input.unitId, t);
   const ownerType = isOwnerRelation(input.relation);
   if (!ownerType && unit.unitType === 'PARKING_ONLY')
     throw rule(
@@ -252,6 +249,8 @@ export async function createLink(
     }
   }
 
+  const firstEver =
+    (await UnitResident.count({ where: { societyId, residentId: input.residentId }, transaction: t })) === 0;
   let link: UnitResident;
   try {
     link = await UnitResident.create(
@@ -287,7 +286,6 @@ export async function createLink(
     }
     throw err;
   }
-  const firstEver = links.length === 0 || !links.some(l => l.residentId === input.residentId);
   if (resident.status !== 'ACTIVE') {
     resident.status = 'ACTIVE';
     resident.version += 1;

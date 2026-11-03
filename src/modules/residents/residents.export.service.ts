@@ -66,7 +66,7 @@ export async function exportResidents(
         reveal ? r.email : maskMail(r.email),
       ];
       const tail = [r.userId !== null, kyc.get(id) ?? 'NONE'];
-      if (!own.length) rows.push([...base(), '', '', '', '', '', '', ...tail]);
+      if (!own.length) rows.push([...base(), '', '', '', '', '', '', '', ...tail]);
       for (const d of own)
         rows.push([
           ...base(),

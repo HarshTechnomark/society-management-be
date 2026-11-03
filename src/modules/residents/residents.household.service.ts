@@ -173,7 +173,7 @@ export async function addMember(ctx: Ctx, societyId: number, input: AddMemberInp
             hint: 'ASK_ADMIN',
           },
         );
-      return sequelize.transaction(async t => {
+      const done = await sequelize.transaction(async t => {
         const l = await createLink(
           ctx,
           societyId,
@@ -183,8 +183,13 @@ export async function addMember(ctx: Ctx, societyId: number, input: AddMemberInp
         let invitation: InviteResult | null = null;
         if (input.invite)
           invitation = await inviteResidentTx(ctx, societyId, existing.id!, { email: input.email }, t);
-        return { link: (await linkDtos(societyId, [l]))[0]!, residentId: existing.id!, invitation };
+        return { l, invitation };
       });
+      return {
+        link: (await linkDtos(societyId, [done.l]))[0]!,
+        residentId: existing.id!,
+        invitation: done.invitation,
+      };
     }
   }
   const created = await createResident(

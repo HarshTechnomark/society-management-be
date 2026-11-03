@@ -122,7 +122,7 @@ export async function createResident(
 ): Promise<CreatedResident> {
   if (input.invite && (!input.mobile || !input.link))
     throw rule(422, 'INVITE_NOT_POSSIBLE', 'To invite, add a mobile number and a flat', 'invite');
-  return sequelize.transaction(async t => {
+  const done = await sequelize.transaction(async t => {
     await checkNri(societyId, input, null, t);
     if (input.mobile) {
       const dup = await Resident.findOne({ where: { societyId, mobile: input.mobile }, transaction: t });
@@ -219,17 +219,19 @@ export async function createResident(
     }
     touchReports(t, societyId);
     const fresh = (await Resident.findByPk(resident.id!, { transaction: t }))!;
-    return {
-      id: fresh.id!,
-      name: fresh.name,
-      mobile: fresh.mobile,
-      status: fresh.status,
-      version: fresh.version,
-      links: await linkDtos(societyId, linkRows),
-      invitation,
-      warnings,
-    };
+    return { fresh, linkRows, invitation, warnings };
   });
+  // read after the commit: the share shown for a sole owner depends on the owner links of the flat
+  return {
+    id: done.fresh.id!,
+    name: done.fresh.name,
+    mobile: done.fresh.mobile,
+    status: done.fresh.status,
+    version: done.fresh.version,
+    links: await linkDtos(societyId, done.linkRows),
+    invitation: done.invitation,
+    warnings: done.warnings,
+  };
 }
 
 // ------------------------------------------------------------------ list (8.2)
@@ -605,12 +607,12 @@ export async function ownResident(ctx: Ctx, societyId: number): Promise<Resident
 
 /** `POST /residents/:id/links` (8.8): one link for an existing resident, with the response of the link. */
 export async function addLinkToResident(ctx: Ctx, societyId: number, residentId: number, input: LinkFields) {
-  return sequelize.transaction(async t => {
+  const l = await sequelize.transaction(async t => {
     const r = await Resident.findOne({ where: { id: residentId, societyId }, transaction: t });
     if (!r) throw residentNotFound();
-    const l = await createLink(ctx, societyId, { ...input, residentId }, t);
-    return (await linkDtos(societyId, [l]))[0]!;
+    return createLink(ctx, societyId, { ...input, residentId }, t);
   });
+  return (await linkDtos(societyId, [l]))[0]!;
 }
 
 /** The owner links of a unit with their people, for the answers of the shares and promote routes. */

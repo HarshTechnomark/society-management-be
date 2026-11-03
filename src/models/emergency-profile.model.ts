@@ -56,7 +56,8 @@ export class EmergencyProfile extends Model<
 
   static initModel(sequelize: Sequelize): void {
     const text = (n: number) => ({ type: DataTypes.STRING(n), allowNull: true, defaultValue: null });
-    const mobile = { type: DataTypes.CHAR(10), allowNull: true, defaultValue: null };
+    // a fresh definition per attribute: Sequelize writes the field name into the object it is given
+    const mobile = () => ({ type: DataTypes.CHAR(10), allowNull: true, defaultValue: null });
     EmergencyProfile.init(
       {
         id: idColumn,
@@ -70,13 +71,13 @@ export class EmergencyProfile extends Model<
         preferredHospital: text(120),
         contact1Name: text(120),
         contact1Relation: text(40),
-        contact1Mobile: mobile,
+        contact1Mobile: mobile(),
         contact2Name: text(120),
         contact2Relation: text(40),
-        contact2Mobile: mobile,
+        contact2Mobile: mobile(),
         contact3Name: text(120),
         contact3Relation: text(40),
-        contact3Mobile: mobile,
+        contact3Mobile: mobile(),
         consentGivenAt: dateColumn(),
         consentTextVersion: text(10),
         consentByUserId: fkColumn(true),
