@@ -67,7 +67,8 @@ export const portCalls: PortCall[] = [];
 
 /** Placeholder file store (memory) until the module 01 files service exists; `GET /api/v1/dev/files/:id` serves it outside production. */
 export const placeholderFiles = new Map<number, StoredFile>();
-let fileSeq = 0;
+// Outside tests the ids start from the clock, so a restart never reuses an id that a database row still points to.
+let fileSeq = process.env.NODE_ENV === 'test' ? 0 : Math.floor(Date.now() / 1000);
 /** A fresh id from the same sequence `storeSystemFile` uses (module 08 puts import files into the memory store with it). */
 export const nextPlaceholderFileId = (): number => ++fileSeq;
 
