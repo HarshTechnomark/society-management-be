@@ -13,13 +13,14 @@ import { setupSchemas as s } from './society-setup.validation';
 import { ALL_EDIT_PERMISSIONS, ALL_VIEW_PERMISSIONS } from './society-setup.settings-registry';
 import { needsStepUp } from './society-setup.settings.service';
 import { changesLegalField } from './society-setup.profile.service';
+import { env } from '../../lib/env';
 import { FEATURE as F } from './society-setup.types';
 
 /**
  * Module 08 routes (section 8.1), part 1: profile, settings, buildings, units, generator, locations, holidays and
  * onboarding. Order on a route: society marker, permission, entitlement, validate, step-up, idempotency, controller.
  * Fixed paths (`/units/generator/*`, `/units/bulk-update`, `/holidays/suggestions`, `/holidays/bulk`) come before `/:id`.
- * No route is allow-listed for a suspended or closed society (BR-08-48). Part 2 adds `/units/imports*` and `/units/export`.
+ * No route is allow-listed for a suspended or closed society (BR-08-48). Import and export (8.15 to 8.18) are mounted before `/units/:id`.
  */
 const society = () => societyMiddleware();
 const stepUp = (): RequestHandler => tag(requireRecentAuth(), { stepUp: true });
@@ -38,7 +39,7 @@ const stepUpIf = (pred: (req: Request) => Promise<boolean> | boolean): RequestHa
     { stepUp: true },
   );
 };
-/** A support grant never deletes (module 05 section 6.4 and module 08 section 13); unit delete is out of reach by permission. */
+/** A support grant never deletes, imports or exports (module 05 section 6.4 and module 08 section 13); routes whose permission support can hold carry the marker. */
 const noSupport = (): RequestHandler => routeMeta({ noSupportAccess: true });
 const read = { mode: 'read' } as const;
 
@@ -161,6 +162,55 @@ r.post(
   feature(F.registry),
   validate({ body: s.bulkUpdate }),
   c.bulkUpdate,
+);
+r.post(
+  '/units/imports',
+  society(),
+  can('residents.units.import'),
+  feature(F.spreadsheetImport),
+  validate({ body: s.importStart }),
+  idempotency(),
+  c.startImport,
+);
+r.get(
+  '/units/imports/:importId',
+  society(),
+  can('residents.units.import'),
+  feature(F.spreadsheetImport, read),
+  validate({ params: s.importParam }),
+  c.getImport,
+);
+r.post(
+  '/units/imports/:importId/commit',
+  society(),
+  can('residents.units.import'),
+  feature(F.spreadsheetImport),
+  validate({ params: s.importParam, body: s.importCommit }),
+  idempotency(),
+  c.commitImport,
+);
+/**
+ * Placeholder for module 01 `GET /files/:id/download-url` (the import error report and the export file); the real files
+ * service replaces it. Registered outside production only.
+ */
+if (env().NODE_ENV !== 'production')
+  r.get(
+    '/files/:id/download-url',
+    society(),
+    can('residents.units.import', 'residents.units.export'),
+    validate({ params: s.idParam }),
+    c.fileDownloadUrl,
+  );
+r.post(
+  '/units/export',
+  noSupport(),
+  society(),
+  can('residents.units.export'),
+  feature(F.exportStructure),
+  validate({ body: s.unitExport }),
+  rateLimit({ name: 'setup-export', limit: 10, windowSeconds: 3600, key: req => String(req.ctx.user?.id) }),
+  idempotency(),
+  c.exportUnits,
 );
 r.post(
   '/units/generator/preview',

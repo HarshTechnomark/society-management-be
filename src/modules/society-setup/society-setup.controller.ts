@@ -9,6 +9,9 @@ import * as generator from './society-setup.generator.service';
 import * as locations from './society-setup.locations.service';
 import * as holidays from './society-setup.holidays.service';
 import * as onboarding from './society-setup.onboarding.service';
+import * as imports from './society-setup.imports.service';
+import { placeholderDownloadUrl } from './society-setup.ports';
+import * as unitExport from './society-setup.export.service';
 
 const h = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHandler => asyncHandler(fn);
 const v = (req: Request) => req.valid;
@@ -16,6 +19,24 @@ const pid = (req: Request): number => req.valid.params.id;
 const sid = (req: Request): number => req.ctx.society!.id;
 
 export const setupController = {
+  // ---- unit import and export (8.15 to 8.18)
+  startImport: h(async (req, res) =>
+    ok(res, await imports.startImport(req.ctx, sid(req), v(req).body), 'Import started', 202),
+  ),
+  getImport: h(async (req, res) => ok(res, await imports.getImport(sid(req), v(req).params.importId))),
+  commitImport: h(async (req, res) =>
+    ok(
+      res,
+      await imports.commitImport(req.ctx, sid(req), v(req).params.importId, v(req).body.commitPolicy),
+      'Import committing',
+      202,
+    ),
+  ),
+  fileDownloadUrl: h(async (req, res) => ok(res, await placeholderDownloadUrl(sid(req), pid(req)))),
+  exportUnits: h(async (req, res) =>
+    ok(res, await unitExport.requestExport(req.ctx, sid(req), v(req).body), 'Export queued', 202),
+  ),
+
   // ---- profile and settings (8.2 to 8.5)
   getProfile: h(async (req, res) => ok(res, await profile.getProfile(req.ctx, sid(req)))),
   updateProfile: h(async (req, res) =>

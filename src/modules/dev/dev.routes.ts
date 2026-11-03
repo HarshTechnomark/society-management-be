@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { clearInbox, listInbox } from '../../lib/inbox';
 import { placeholderExports } from '../access-control/access-control.ports';
 import { placeholderFiles } from '../societies/societies.ports';
+import { putPlaceholderFile } from '../society-setup/society-setup.ports';
 import { AppError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
@@ -48,6 +49,33 @@ devRoutes.get('/files/:id', (req, res, next) => {
   res.setHeader('Content-Disposition', `attachment; filename="${f.name}"`);
   res.send(f.content);
 });
+
+/**
+ * Development upload until module 01's files service exists: the raw request body becomes a CLEAN file in the memory
+ * store (`?societyId=&ownerUserId=&name=&purpose=IMPORT_FILE`, at most 20 MB) and the answer is `{ fileId }`.
+ * The dev routes carry no session, so the society and the uploader are named in the query. Never mounted in production.
+ */
+devRoutes.post(
+  '/files',
+  express.raw({ type: () => true, limit: '20mb' }),
+  asyncHandler(async (req, res) => {
+    const q = req.query as Record<string, string | undefined>;
+    const societyId = Number(q.societyId);
+    const ownerUserId = Number(q.ownerUserId);
+    const name = (q.name ?? '').trim();
+    if (!Number.isInteger(societyId) || !Number.isInteger(ownerUserId) || !name || !Buffer.isBuffer(req.body))
+      throw new AppError(400, 'VALIDATION_FAILED', 'societyId, ownerUserId and name are required');
+    const fileId = putPlaceholderFile({
+      societyId,
+      ownerUserId,
+      name: name.slice(0, 200),
+      purpose: (q.purpose ?? 'IMPORT_FILE').toUpperCase(),
+      contentType: req.get('content-type') ?? 'application/octet-stream',
+      content: req.body,
+    });
+    ok(res, { fileId }, 'File stored (development only)', 201);
+  }),
+);
 
 /** Non-production only: what the checkout would do on the fake gateway. Pay a platform order (module 01 section 10). */
 devRoutes.post(

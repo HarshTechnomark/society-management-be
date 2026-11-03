@@ -14,6 +14,7 @@ import * as holidaysSvc from './society-setup.holidays.service';
 import * as onboardingSvc from './society-setup.onboarding.service';
 import { societySetupExportProvider } from './society-setup.exports';
 import { PURGE_TABLES, purgeSocietySetup } from './society-setup.purge';
+import { registerSocietySetupJobs } from './society-setup.jobs';
 import { FLATS_LIMIT } from './society-setup.types';
 import './society-setup.templates';
 
@@ -91,5 +92,5 @@ export function registerSocietySetup(): void {
   entitlements.registerUsageProvider(FLATS_LIMIT, unitsSvc.count);
   registerExportProvider(societySetupExportProvider);
   registerPurgeHandler({ module: 'society-setup', order: 8, tables: PURGE_TABLES, purge: purgeSocietySetup });
-  // part 2 adds `registerSocietySetupJobs()` here (import validation and commit, export, go-live invites)
+  registerSocietySetupJobs(); // import validation and commit, unit export, go-live invites
 }
