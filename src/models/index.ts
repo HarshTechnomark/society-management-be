@@ -59,6 +59,7 @@ import { RenovationPermit } from './renovation-permit.model';
 import { OwnershipTransfer } from './ownership-transfer.model';
 import { Pet } from './pet.model';
 import { EmergencyProfile } from './emergency-profile.model';
+import { CommitteeTerm } from './committee-term.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -138,6 +139,7 @@ const models = {
   OwnershipTransfer,
   Pet,
   EmergencyProfile,
+  CommitteeTerm,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -310,6 +312,9 @@ OwnershipTransfer.belongsTo(Resident, { as: 'initiatedBy', foreignKey: 'initiate
 Pet.belongsTo(Unit, { foreignKey: 'unitId' });
 Pet.belongsTo(Resident, { as: 'owner', foreignKey: 'ownerResidentId' });
 EmergencyProfile.belongsTo(Resident, { foreignKey: 'residentId' });
+CommitteeTerm.belongsTo(Society, { foreignKey: 'societyId' });
+CommitteeTerm.belongsTo(CommitteeTerm, { as: 'predecessor', foreignKey: 'predecessorTermId' });
+CommitteeTerm.hasOne(CommitteeTerm, { as: 'successor', foreignKey: 'predecessorTermId' });
 
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
@@ -373,6 +378,7 @@ export {
   OwnershipTransfer,
   Pet,
   EmergencyProfile,
+  CommitteeTerm,
 };
 
 export async function closeDb(): Promise<void> {
