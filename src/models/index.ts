@@ -363,6 +363,16 @@ export {
   OnboardingStep,
   Holiday,
   LocationNode,
+  Resident,
+  UnitResident,
+  Tenancy,
+  ResidentDocument,
+  JoinRequest,
+  MoveRequest,
+  RenovationPermit,
+  OwnershipTransfer,
+  Pet,
+  EmergencyProfile,
 };
 
 export async function closeDb(): Promise<void> {

@@ -19,6 +19,7 @@ import { societiesRoutes } from './modules/societies/societies.routes';
 import { platformBillingRoutes } from './modules/platform-billing/platform-billing.routes';
 import { platformOpsRoutes } from './modules/platform-ops/platform-ops.routes';
 import { societySetupRoutes } from './modules/society-setup/society-setup.routes';
+import { residentsRoutes } from './modules/residents/residents.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -26,6 +27,7 @@ import './modules/access-control/access-control.templates';
 import './modules/societies/societies.templates';
 import './modules/platform-ops/platform-ops.templates';
 import './modules/society-setup/society-setup.templates';
+import './modules/residents/residents.templates';
 
 /**
  * Express assembly. Order of the request pipeline: requestId > helmet/cors/cookies > appContext > csrf > auth > routes > error handler.
@@ -78,6 +80,8 @@ export function createApp(): Express {
   api.use(platformOpsRoutes);
   // module 08: society profile, settings, buildings, units, generator, locations, holidays, onboarding
   api.use(societySetupRoutes);
+  // module 09: residents, unit links, documents, directory, pets, emergency profiles (join requests, tenancies, moves, permits and transfers follow in parts 2 and 3)
+  api.use(residentsRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 
