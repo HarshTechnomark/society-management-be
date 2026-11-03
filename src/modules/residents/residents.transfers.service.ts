@@ -143,11 +143,12 @@ async function feeSettings(societyId: number) {
 }
 
 // ------------------------------------------------------------------ DTO
-async function buyerDtos(societyId: number, buyers: TransferBuyer[]) {
+async function buyerDtos(societyId: number, buyers: TransferBuyer[], t?: Transaction) {
   const rows = await Resident.findAll({
     where: { societyId, id: { [Op.in]: buyers.map(b => b.residentId) } },
     attributes: ['id', 'name'],
     paranoid: false,
+    transaction: t,
   });
   const names = new Map(rows.map(r => [r.id!, r.name]));
   return buyers.map(b => ({
@@ -167,7 +168,13 @@ const feesOf = (x: OwnershipTransfer) => ({
   totalFeesPaise: num(x.totalFeesPaise),
 });
 
-export async function transferDto(societyId: number, x: OwnershipTransfer, label: string, missing: string[]) {
+export async function transferDto(
+  societyId: number,
+  x: OwnershipTransfer,
+  label: string,
+  missing: string[],
+  t?: Transaction,
+) {
   return {
     id: x.id!,
     status: x.status,
@@ -178,7 +185,7 @@ export async function transferDto(societyId: number, x: OwnershipTransfer, label
     deedRegistrationNo: x.deedRegistrationNo,
     deedDate: x.deedDate,
     considerationPaise: num(x.considerationPaise),
-    buyers: await buyerDtos(societyId, x.buyersJson),
+    buyers: await buyerDtos(societyId, x.buyersJson, t),
     fees: feesOf(x),
     duesPolicy: x.duesPolicy,
     endTenancy: x.endTenancy,
@@ -194,7 +201,7 @@ export async function transferDto(societyId: number, x: OwnershipTransfer, label
 
 async function oneDto(societyId: number, x: OwnershipTransfer, t?: Transaction) {
   const miss = await missingDocuments(societyId, [x as never], t);
-  return transferDto(societyId, x, await unitLabel(societyId, x.unitId), miss.get(x.id!) ?? []);
+  return transferDto(societyId, x, await unitLabel(societyId, x.unitId), miss.get(x.id!) ?? [], t);
 }
 
 // ------------------------------------------------------------------ rules (BR-09-61, 62, 64)

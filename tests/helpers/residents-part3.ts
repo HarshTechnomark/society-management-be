@@ -7,7 +7,7 @@ import { registerResidents, setResidentPorts } from '../../src/modules/residents
 import { createResident } from '../../src/modules/residents/residents.service';
 import { resetPart3Placeholders } from '../../src/modules/residents/residents.part3.ports';
 import { as, login, memberUser } from './access';
-import { makeBuilding, makeUnit, resetSetup, setupSociety } from './society-setup';
+import { makeBuilding, resetSetup, setupSociety } from './society-setup';
 import { settings } from '../../src/modules/society-setup/society-setup.public';
 
 export { idemKey } from './society-setup';

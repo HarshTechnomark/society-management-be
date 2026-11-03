@@ -28,7 +28,6 @@ import {
 } from '../../helpers/residents-part3';
 import { as, login, memberUser } from '../../helpers/access';
 import { flushAcl } from '../../../src/modules/access-control/access-control.cache';
-import { Resident } from '../../../src/models';
 
 afterAll(async () => {
   await drainQueues();
@@ -149,7 +148,7 @@ describe('renovation permit create (BR-09-50 to 54)', () => {
   });
 
   it('BR-09-52 and 53 documents: contractor ID always, structural certificate for structural work', async () => {
-    const { society, unit, adm, owner } = await setup();
+    const { society, unit, adm } = await setup();
     const none = await adm(
       'post',
       '/renovation-permits',
@@ -171,7 +170,7 @@ describe('renovation permit create (BR-09-50 to 54)', () => {
   });
 
   it('BR-09-52 one open permit per unit', async () => {
-    const { society, unit, adm, owner } = await setup();
+    const { society, unit, adm } = await setup();
     const b = () => body(society.id!, adm.userId, unit.id);
     expect((await adm('post', '/renovation-permits', b(), { headers: key() })).status).toBe(201);
     const again = await adm('post', '/renovation-permits', b(), { headers: key() });
@@ -180,7 +179,7 @@ describe('renovation permit create (BR-09-50 to 54)', () => {
   });
 
   it('BR-09-54 a deposit goes through module 13 first; paid moves it to approval', async () => {
-    const { society, unit, adm, owner } = await setup();
+    const { society, unit, adm } = await setup();
     await setSetting(society.id!, 'residents.renovationDepositPaise', 1_000_000);
     await setSetting(society.id!, 'residents.renovationFeePaise', 200_000);
     const r = await adm('post', '/renovation-permits', body(society.id!, adm.userId, unit.id), {
@@ -225,7 +224,7 @@ const sys = (societyId: number) => ({ ...systemCtx('inbox'), society: { id: soci
 
 describe('module 14 placeholder approve and reject', () => {
   it('approve runs onApproved once; a second call changes nothing', async () => {
-    const { society, unit, adm, owner } = await setup();
+    const { society, unit, adm } = await setup();
     const r = await adm('post', '/renovation-permits', body(society.id!, adm.userId, unit.id), {
       headers: key(),
     });
@@ -238,7 +237,7 @@ describe('module 14 placeholder approve and reject', () => {
   });
 
   it('reject sets REJECTED with the reason and refunds a paid deposit in full', async () => {
-    const { society, unit, adm, owner } = await setup();
+    const { society, unit, adm } = await setup();
     await setSetting(society.id!, 'residents.renovationDepositPaise', 500_000);
     const r = await adm('post', '/renovation-permits', body(society.id!, adm.userId, unit.id), {
       headers: key(),
