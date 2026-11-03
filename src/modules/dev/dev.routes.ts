@@ -8,6 +8,11 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
 import { paymentGateway } from '../../adapters';
 import { FakePaymentGateway } from '../../adapters/payments/payment-gateway';
+import { systemCtx, type Ctx } from '../../types/context';
+import { approveRequest, rejectRequest } from '../residents/residents.public';
+import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
+import { approvalStore } from '../residents/residents.part3.ports';
+import { approvalStub } from '../residents/residents.part2.ports';
 
 /** Non-production only: the last messages the fake adapters recorded (module 01 section 8.9). */
 export const devRoutes = Router();
@@ -92,5 +97,59 @@ devRoutes.post(
     };
     const p = gw.payOrder(orderId, body);
     ok(res, { gatewayPaymentId: p.paymentId, orderId, status: p.status, amountPaise: p.amountPaise });
+  }),
+);
+
+// ---------------------------------------------------------------- module 14 stand-in (development only)
+// Module 14 (approvals) does not exist yet. Requests that module 09 raises through its placeholder (renovation permits,
+// ownership transfers, and join requests or moves when the placeholder is in manual mode) wait here until someone decides.
+
+const approvalCtx = (societyId: number): Ctx =>
+  ({ ...systemCtx('dev-approvals'), society: { id: societyId } }) as Ctx;
+
+/** The requests still waiting for a decision. */
+devRoutes.get(
+  '/approvals',
+  asyncHandler(async (_req, res) => {
+    const part3 = [...approvalStore.values()]
+      .filter(a => a.status === 'PENDING')
+      .map(a => ({ id: a.id, type: a.type, entityId: a.entityId, societyId: a.societyId, status: a.status }));
+    const part2 = [...approvalStub.requests.values()]
+      .filter(a => a.status === 'PENDING')
+      .map(a => ({ id: a.id, type: a.type, entityId: a.entityId, societyId: a.societyId, status: a.status }));
+    ok(res, [...part2, ...part3]);
+  }),
+);
+
+async function decide(id: number, decision: 'approve' | 'reject', reason: string) {
+  const p3 = approvalStore.get(id);
+  if (p3) {
+    if (p3.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
+    const ctx = approvalCtx(p3.societyId);
+    return decision === 'approve' ? approvePart3Request(id, ctx) : rejectPart3Request(id, reason, ctx);
+  }
+  const p2 = approvalStub.requests.get(id);
+  if (p2) {
+    if (p2.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
+    const ctx = approvalCtx(p2.societyId);
+    return decision === 'approve' ? approveRequest(id, ctx) : rejectRequest(id, reason, ctx);
+  }
+  throw new AppError(404, 'NOT_FOUND', 'Approval request not found');
+}
+
+devRoutes.post(
+  '/approvals/:id/approve',
+  asyncHandler(async (req, res) => {
+    await decide(Number(req.params.id), 'approve', '');
+    ok(res, { id: Number(req.params.id), status: 'APPROVED' });
+  }),
+);
+
+devRoutes.post(
+  '/approvals/:id/reject',
+  asyncHandler(async (req, res) => {
+    const reason = String((req.body as { reason?: string } | undefined)?.reason ?? 'Rejected in development');
+    await decide(Number(req.params.id), 'reject', reason);
+    ok(res, { id: Number(req.params.id), status: 'REJECTED' });
   }),
 );

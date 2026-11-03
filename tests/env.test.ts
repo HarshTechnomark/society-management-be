@@ -7,6 +7,7 @@ const base = {
   JWT_REFRESH_PEPPER: 'b'.repeat(32),
   AUTH_TOKEN_PEPPER: 'c'.repeat(32),
   TOTP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
+  RESIDENT_DATA_KEY: Buffer.alloc(32, 2).toString('base64'),
   WEBAUTHN_RP_ID: 'localhost',
   WEBAUTHN_RP_NAME: 'SocietyApp',
 };

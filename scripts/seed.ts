@@ -24,6 +24,8 @@ import {
 import { registerPlatformOps } from '../src/modules/platform-ops/platform-ops.public';
 import { seedSocietySetup } from '../seeders/society-setup';
 import { registerSocietySetup } from '../src/modules/society-setup/society-setup.public';
+import { registerResidents } from '../src/modules/residents/residents.public';
+import { seedResidents } from '../seeders/residents';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -38,6 +40,7 @@ async function main(): Promise<void> {
   registerSocieties();
   registerPlatformOps();
   registerSocietySetup();
+  registerResidents();
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
@@ -78,6 +81,10 @@ async function main(): Promise<void> {
     const ss = await seedSocietySetup();
     out(
       `society-setup: seeded ${ss.societies.join(', ') || 'none'} (${ss.units} units), skipped ${ss.skipped.join(', ') || 'none'}`,
+    );
+    const rs = await seedResidents();
+    out(
+      `residents: seeded ${rs.societies.join(', ') || 'none'} (${rs.residents} residents, ${rs.links} links, ${rs.tenancies} tenancies, ${rs.pets} pets), skipped ${rs.skipped.join(', ') || 'none'}`,
     );
     const pb = await seedPlatformBilling();
     out(

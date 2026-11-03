@@ -1,0 +1,62 @@
+'use strict';
+/** Module 09 section 7.8. Part 1 creates the table (links point at it); the transfer service is part 3. */
+module.exports = {
+  async up(qi) {
+    await qi.sequelize.query(`
+      CREATE TABLE ownership_transfers (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        societyId BIGINT UNSIGNED NOT NULL,
+        unitId BIGINT UNSIGNED NOT NULL,
+        transferType VARCHAR(18) NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'DRAFT',
+        effectiveDate DATE NOT NULL,
+        deedRegistrationNo VARCHAR(60) NULL,
+        deedDate DATE NULL,
+        considerationPaise BIGINT NOT NULL DEFAULT 0,
+        buyersJson JSON NOT NULL,
+        sellersJson JSON NULL,
+        transferPremiumPaise BIGINT NOT NULL DEFAULT 0,
+        shareTransferFeePaise BIGINT NOT NULL DEFAULT 0,
+        entranceFeePaise BIGINT NOT NULL DEFAULT 0,
+        newBuyerCount TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        totalFeesPaise BIGINT NOT NULL DEFAULT 0,
+        feesRaisedAt DATETIME(3) NULL,
+        duesPolicy VARCHAR(16) NOT NULL DEFAULT 'MUST_CLEAR',
+        endTenancy TINYINT(1) NOT NULL DEFAULT 0,
+        balanceAtSubmitPaise BIGINT NOT NULL DEFAULT 0,
+        initiatedByResidentId BIGINT UNSIGNED NULL,
+        approvalRequestId BIGINT UNSIGNED NULL,
+        submittedAt DATETIME(3) NULL,
+        decidedAt DATETIME(3) NULL,
+        decisionReason VARCHAR(500) NULL,
+        completedAt DATETIME(3) NULL,
+        completedBy BIGINT UNSIGNED NULL,
+        shareCertificateHandoffAt DATETIME(3) NULL,
+        cancelledAt DATETIME(3) NULL,
+        cancelReason VARCHAR(500) NULL,
+        notes VARCHAR(1000) NULL,
+        openSlot TINYINT GENERATED ALWAYS AS (IF(status IN ('DRAFT','PENDING_APPROVAL','APPROVED'), 1, NULL)) STORED,
+        version INT UNSIGNED NOT NULL DEFAULT 1,
+        createdBy BIGINT UNSIGNED NULL,
+        updatedBy BIGINT UNSIGNED NULL,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_ot_open (unitId, openSlot),
+        KEY ix_ot_status (societyId, status, effectiveDate),
+        KEY ix_ot_unit (societyId, unitId, createdAt),
+        KEY ix_ot_initiator (initiatedByResidentId),
+        CONSTRAINT fk_ot_society FOREIGN KEY (societyId) REFERENCES societies (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_ot_unit FOREIGN KEY (unitId) REFERENCES units (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_ot_initiator FOREIGN KEY (initiatedByResidentId) REFERENCES residents (id) ON DELETE RESTRICT,
+        CONSTRAINT ck_ot_type CHECK (transferType IN ('SALE','GIFT','INHERITANCE','NOMINATION','COURT_ORDER','FAMILY_SETTLEMENT')),
+        CONSTRAINT ck_ot_status CHECK (status IN ('DRAFT','PENDING_APPROVAL','APPROVED','COMPLETED','REJECTED','CANCELLED')),
+        CONSTRAINT ck_ot_policy CHECK (duesPolicy IN ('MUST_CLEAR','CARRY_WITH_UNIT')),
+        CONSTRAINT ck_ot_end_tenancy CHECK (endTenancy IN (0,1)),
+        CONSTRAINT ck_ot_total CHECK (totalFeesPaise = transferPremiumPaise + shareTransferFeePaise + entranceFeePaise * newBuyerCount)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
+  },
+  async down(qi) {
+    await qi.sequelize.query('DROP TABLE IF EXISTS ownership_transfers');
+  },
+};

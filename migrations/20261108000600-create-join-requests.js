@@ -1,0 +1,61 @@
+'use strict';
+/** Module 09 section 7.5. Part 1 creates the table; join requests are part 2. `approvalRequestId` has no foreign key (module 14 is built later). */
+module.exports = {
+  async up(qi) {
+    await qi.sequelize.query(`
+      CREATE TABLE join_requests (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        societyId BIGINT UNSIGNED NOT NULL,
+        userId BIGINT UNSIGNED NOT NULL,
+        unitId BIGINT UNSIGNED NOT NULL,
+        relation VARCHAR(12) NOT NULL,
+        familyRelation VARCHAR(12) NULL,
+        householdOf VARCHAR(6) NULL,
+        name VARCHAR(120) NOT NULL,
+        mobile CHAR(10) NOT NULL,
+        email VARCHAR(254) NULL,
+        dateOfBirth DATE NULL,
+        message VARCHAR(300) NULL,
+        agreementStart DATE NULL,
+        agreementEnd DATE NULL,
+        status VARCHAR(14) NOT NULL,
+        confirmerResidentId BIGINT UNSIGNED NULL,
+        confirmerDecidedAt DATETIME(3) NULL,
+        ownerDecisionNote VARCHAR(300) NULL,
+        approvalRequestId BIGINT UNSIGNED NULL,
+        decidedAt DATETIME(3) NULL,
+        decisionReason VARCHAR(500) NULL,
+        residentId BIGINT UNSIGNED NULL,
+        expiresAt DATETIME(3) NOT NULL,
+        pendingSlot BIGINT UNSIGNED GENERATED ALWAYS AS (IF(status IN ('PENDING_OWNER','PENDING_ADMIN'), userId, NULL)) STORED,
+        version INT UNSIGNED NOT NULL DEFAULT 1,
+        createdBy BIGINT UNSIGNED NULL,
+        updatedBy BIGINT UNSIGNED NULL,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_jr_pending (societyId, pendingSlot),
+        KEY ix_jr_status (societyId, status, createdAt),
+        KEY ix_jr_user (userId, createdAt),
+        KEY ix_jr_expiry (status, expiresAt),
+        KEY ix_jr_confirmer (societyId, confirmerResidentId, status),
+        KEY ix_jr_unit (unitId),
+        KEY ix_jr_resident (residentId),
+        CONSTRAINT fk_jr_society FOREIGN KEY (societyId) REFERENCES societies (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_jr_user FOREIGN KEY (userId) REFERENCES users (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_jr_unit FOREIGN KEY (unitId) REFERENCES units (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_jr_confirmer FOREIGN KEY (confirmerResidentId) REFERENCES residents (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_jr_resident FOREIGN KEY (residentId) REFERENCES residents (id) ON DELETE RESTRICT,
+        CONSTRAINT ck_jr_relation CHECK (relation IN ('OWNER','CO_OWNER','TENANT','FAMILY','CARETAKER')),
+        CONSTRAINT ck_jr_family_relation CHECK (familyRelation IS NULL OR familyRelation IN ('SPOUSE','CHILD','PARENT','SIBLING','GRANDPARENT','GRANDCHILD','RELATIVE','OTHER')),
+        CONSTRAINT ck_jr_family CHECK ((relation = 'FAMILY') = (familyRelation IS NOT NULL)),
+        CONSTRAINT ck_jr_household CHECK (householdOf IS NULL OR householdOf IN ('OWNER','TENANT')),
+        CONSTRAINT ck_jr_household_req CHECK ((relation IN ('FAMILY','CARETAKER')) = (householdOf IS NOT NULL)),
+        CONSTRAINT ck_jr_dates CHECK ((relation = 'TENANT') = (agreementStart IS NOT NULL AND agreementEnd IS NOT NULL)),
+        CONSTRAINT ck_jr_status CHECK (status IN ('PENDING_OWNER','PENDING_ADMIN','APPROVED','REJECTED','EXPIRED','WITHDRAWN'))
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
+  },
+  async down(qi) {
+    await qi.sequelize.query('DROP TABLE IF EXISTS join_requests');
+  },
+};
