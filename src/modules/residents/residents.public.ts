@@ -31,6 +31,16 @@ import {
   visitorApproverUserIds,
 } from './residents.queries';
 import './residents.templates';
+import './residents.part3.templates';
+import { registerPart3Approvals } from './residents.part3.approvals-hook';
+import { registerPart3Jobs } from './residents.part3.jobs';
+import {
+  isWorkDay,
+  listForGate as permitsForGate,
+  onRenovationDepositPaid,
+  onRenovationDepositRefunded,
+  passValidAt,
+} from './residents.renovations.service';
 
 export const residents = {
   listForUnit,
@@ -117,4 +127,24 @@ export function registerResidents(): void {
   registerExportProvider(residentsExportProvider);
   registerPurgeHandler({ module: 'residents', order: 9, tables: PURGE_TABLES, purge: purgeResidents });
   registerResidentsJobs();
+  registerPart3Jobs();
+  registerPart3Approvals();
 }
+
+// ---- part 3: renovation permits and ownership transfers
+export const renovationPermits = {
+  listForGate: permitsForGate,
+  passValidAt,
+  isWorkDay,
+  /** Module 13 calls these for `refType = 'renovation_permit'` (part 2 routes `move_request` in `residentsHooks`). */
+  onDepositPaid: onRenovationDepositPaid,
+  onDepositRefunded: onRenovationDepositRefunded,
+};
+export { setResidentPart3Ports } from './residents.part3.ports';
+export type { ResidentPart3Ports } from './residents.part3.ports';
+export { permitApprovals } from './residents.renovations.service';
+export { transferApprovals } from './residents.transfers.service';
+export {
+  approve as approvePart3Request,
+  reject as rejectPart3Request,
+} from './residents.part3.approvals-hook';
