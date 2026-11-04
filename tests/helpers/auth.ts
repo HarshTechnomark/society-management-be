@@ -63,6 +63,7 @@ export async function resetAll(): Promise<void> {
     'billing_run_items',
     'invoices',
     'billing_runs',
+    // module 11.1: late fee policies, rule versions, rules, split rules, charge heads (children first)
     'late_fee_policies',
     'billing_rule_versions',
     'billing_rules',
