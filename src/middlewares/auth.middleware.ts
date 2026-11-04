@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import { Session, User } from '../models';
 import { nowMs, now } from '../lib/clock';
 import { AppError } from '../utils/errors';
@@ -88,3 +88,34 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * For public routes that may act for a signed-in person when one is present (the development approvals page): the user
+ * and session of a valid `sa_access` cookie, or `null`. Read-only: it never revokes, bumps or refuses, so a missing,
+ * expired or revoked session simply means "no session" and the route keeps its public behaviour.
+ */
+export async function readOptionalSession(
+  req: Request,
+): Promise<{ user: NonNullable<Request['ctx']['user']>; activeSocietyId: number | null } | null> {
+  const token = req.cookies?.[COOKIES.access] as string | undefined;
+  if (!token || !req.ctx.clientApp) return null;
+  const claims = verifyAccessToken(token, req.ctx.clientApp);
+  if (!claims) return null;
+  const session = await Session.findByPk(Number(claims.sid));
+  if (!session || session.userId !== Number(claims.sub) || session.revokedAt) return null;
+  const t = now();
+  if (t >= session.absoluteExpiresAt || isExpiredIdle(session, t)) return null;
+  const user = await User.findByPk(session.userId);
+  if (!user || (user.status !== 'ACTIVE' && user.status !== 'PENDING_DELETION')) return null;
+  return {
+    user: {
+      id: user.id!,
+      name: user.name,
+      mobile: user.mobile,
+      email: user.email,
+      platformRoleId: user.platformRoleId,
+      status: user.status,
+    },
+    activeSocietyId: session.activeSocietyId,
+  };
+}

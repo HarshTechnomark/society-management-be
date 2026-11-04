@@ -1,4 +1,4 @@
-import express, { Router } from 'express';
+import express, { Router, type Request } from 'express';
 import { clearInbox, listInbox } from '../../lib/inbox';
 import { placeholderExports } from '../access-control/access-control.ports';
 import { placeholderFiles } from '../societies/societies.ports';
@@ -16,6 +16,9 @@ import { approvalStub } from '../residents/residents.part2.ports';
 import { placeholderApprovalRequests } from '../billing/billing.ports';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
+import { APPROVAL_TYPES } from '../billing/billing.constants';
+import { readOptionalSession } from '../../middlewares/auth.middleware';
+import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
 /** Non-production only: the last messages the fake adapters recorded (module 01 section 8.9). */
 export const devRoutes = Router();
@@ -110,6 +113,41 @@ devRoutes.post(
 const approvalCtx = (societyId: number): Ctx =>
   ({ ...systemCtx('dev-approvals'), society: { id: societyId } }) as Ctx;
 
+/**
+ * Who decides. The dev routes need no session, but a browser sends its cookies: when they carry a valid session whose active
+ * society is the request's society and the person is an ACTIVE member there, the decision is made as that person (so the
+ * maker-checker rule applies and the approver is recorded). Otherwise (scripts, tests, another society) the system decides.
+ */
+async function deciderCtx(req: Request, societyId: number): Promise<Ctx> {
+  const s = await readOptionalSession(req);
+  if (!s || !societyId || s.activeSocietyId !== societyId) return approvalCtx(societyId);
+  const [access, society] = await Promise.all([
+    computeAccess(societyId, s.user.id),
+    getSocietyInfo(societyId),
+  ]);
+  if (access.status !== 'ACTIVE' || !society) return approvalCtx(societyId);
+  return {
+    requestId: req.ctx.requestId,
+    ip: req.ctx.ip,
+    userAgent: req.ctx.userAgent,
+    clientApp: req.ctx.clientApp,
+    user: s.user,
+    society,
+    membership: {
+      id: access.memberId!,
+      roleId: access.roleId!,
+      roleKey: access.roleKey!,
+      roleScope: access.roleScope!,
+      status: 'ACTIVE',
+      requiresMfa: access.requiresMfa,
+    },
+    permissions: new Set(access.permissions),
+    unitLinks: access.unitLinks,
+    unitIds: access.unitLinks.map(l => l.unitId),
+    actorRoleKey: access.roleKey!,
+  };
+}
+
 type ApprovalSource = 'residents' | 'billing';
 const sourceOf = (v: unknown): ApprovalSource => (v === 'billing' ? 'billing' : 'residents');
 
@@ -134,29 +172,53 @@ devRoutes.get(
   }),
 );
 
-async function decideBilling(id: number, decision: 'approve' | 'reject', reason: string) {
+interface BillingApprovalHook {
+  approve: (id: number, ctx: Ctx) => Promise<unknown>;
+  reject: (id: number, reason: string, ctx: Ctx) => Promise<unknown>;
+}
+/**
+ * Billing approval types and the hook that decides each. Module 11.4 adds its note types here after merging
+ * (`CREDIT_NOTE`, `INVOICE_CANCEL`, `WRITE_OFF`); any other type is refused with 422.
+ */
+const BILLING_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
+  [APPROVAL_TYPES.runPublish]: runApprovals,
+  [APPROVAL_TYPES.ruleChange]: ruleApprovals,
+  [APPROVAL_TYPES.lateFeePolicyChange]: ruleApprovals,
+};
+
+async function decideBilling(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderApprovalRequests.get(id);
   if (!r) throw new AppError(404, 'NOT_FOUND', 'Approval request not found');
   if (r.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
-  const ctx = approvalCtx(r.societyId ?? 0);
-  const hook = r.type === 'BILLING_RUN_PUBLISH' ? runApprovals : ruleApprovals;
+  const hook = BILLING_APPROVAL_HOOKS[r.type];
+  if (!hook) throw new AppError(422, 'UNKNOWN_APPROVAL_TYPE', `No development approval hook for ${r.type}`);
+  const ctx = await deciderCtx(req, r.societyId ?? 0);
+  // BR-14 maker-checker for every billing type (the runs hook checks it too; the rules hook does not)
+  if (decision === 'approve' && ctx.user && ctx.user.id === r.requestedBy)
+    throw new AppError(409, 'MAKER_CHECKER_VIOLATION', 'The person who requested this cannot approve it');
   const out = decision === 'approve' ? await hook.approve(id, ctx) : await hook.reject(id, reason, ctx);
   r.status = decision === 'approve' ? 'APPROVED' : 'REJECTED';
   return out;
 }
 
-async function decide(id: number, decision: 'approve' | 'reject', reason: string, source: ApprovalSource) {
-  if (source === 'billing') return decideBilling(id, decision, reason);
+async function decide(
+  req: Request,
+  id: number,
+  decision: 'approve' | 'reject',
+  reason: string,
+  source: ApprovalSource,
+) {
+  if (source === 'billing') return decideBilling(req, id, decision, reason);
   const p3 = approvalStore.get(id);
   if (p3) {
     if (p3.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
-    const ctx = approvalCtx(p3.societyId);
+    const ctx = await deciderCtx(req, p3.societyId);
     return decision === 'approve' ? approvePart3Request(id, ctx) : rejectPart3Request(id, reason, ctx);
   }
   const p2 = approvalStub.requests.get(id);
   if (p2) {
     if (p2.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
-    const ctx = approvalCtx(p2.societyId);
+    const ctx = await deciderCtx(req, p2.societyId);
     return decision === 'approve' ? approveRequest(id, ctx) : rejectRequest(id, reason, ctx);
   }
   throw new AppError(404, 'NOT_FOUND', 'Approval request not found');
@@ -165,7 +227,7 @@ async function decide(id: number, decision: 'approve' | 'reject', reason: string
 devRoutes.post(
   '/approvals/:id/approve',
   asyncHandler(async (req, res) => {
-    await decide(Number(req.params.id), 'approve', '', sourceOf(req.query.source));
+    await decide(req, Number(req.params.id), 'approve', '', sourceOf(req.query.source));
     ok(res, { id: Number(req.params.id), status: 'APPROVED' });
   }),
 );
@@ -174,7 +236,7 @@ devRoutes.post(
   '/approvals/:id/reject',
   asyncHandler(async (req, res) => {
     const reason = String((req.body as { reason?: string } | undefined)?.reason ?? 'Rejected in development');
-    await decide(Number(req.params.id), 'reject', reason, sourceOf(req.query.source));
+    await decide(req, Number(req.params.id), 'reject', reason, sourceOf(req.query.source));
     ok(res, { id: Number(req.params.id), status: 'REJECTED' });
   }),
 );
