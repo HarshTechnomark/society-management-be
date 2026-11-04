@@ -20,7 +20,8 @@ import { unitLedger } from '../../../src/modules/billing/billing.ledger.service'
 import { ensureSeeded } from '../../../src/modules/billing/billing.heads.service';
 import { issueDebitNote } from '../../../src/modules/billing/billing.notes.debit';
 import { approve, reject, requestChanges } from '../../../src/modules/billing/billing.notes.approvals-hook';
-import { makeUser } from '../../helpers/auth';
+import { listRoutes } from '../../../src/modules/access-control/access-control.registry';
+import { app, makeUser } from '../../helpers/auth';
 import { resetLogins } from '../../helpers/access';
 import { memberOf } from '../../helpers/society-setup';
 import { setSetting } from '../../helpers/billing-runs';
@@ -473,7 +474,9 @@ describe('billing notes list and detail (8.19)', () => {
     );
     expect(d.status, JSON.stringify(d.body)).toBe(201);
     const list = async (q: Record<string, unknown>) =>
-      (await w.c('get', '/billing/notes', undefined, { query: q })).body.data.map((n: any) => n.id);
+      (await w.c('get', '/billing/notes', undefined, { query: q as Record<string, string> })).body.data.map(
+        (n: any) => n.id,
+      );
     expect((await list({})).sort()).toEqual([n1.id, pendingNote.id, d.body.data.id].sort());
     expect(await list({ noteType: 'DEBIT' })).toEqual([d.body.data.id]);
     expect(await list({ status: 'PENDING_APPROVAL' })).toEqual([pendingNote.id]);
@@ -1138,8 +1141,6 @@ describe('credit and cancel by source for other modules (BR-11-50a, BR-11-50b, T
 
 describe('every note route has the marker, permission, entitlement and idempotency the spec says', () => {
   it('matches section 2 and 8', async () => {
-    const { listRoutes } = await import('../../../src/modules/access-control/access-control.registry');
-    const { app } = await import('../../helpers/auth');
     const routes = listRoutes(app).filter(
       r => r.path.startsWith('/invoices') || r.path.startsWith('/billing/notes'),
     );

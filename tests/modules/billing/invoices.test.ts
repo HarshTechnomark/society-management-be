@@ -16,8 +16,12 @@ import { billingPortCalls, setBillingPorts } from '../../../src/modules/billing/
 import { invoices } from '../../../src/modules/billing/billing.invoices.service';
 import { billingPorts } from '../../../src/modules/billing/billing.ports';
 import { events, makeUser } from '../../helpers/auth';
+import { systemCtx } from '../../../src/types/context';
+import { approve } from '../../../src/modules/billing/billing.runs.approvals-hook';
+import { rawInvoice } from '../../helpers/maint-billing';
+import { featureOff, memberOf } from '../../helpers/society-setup';
 import { resetLogins } from '../../helpers/access';
-import { memberOf } from '../../helpers/society-setup';
+
 import { addTenant, createAndCompute, makeResident, setSetting } from '../../helpers/billing-runs';
 import {
   ctxFor,
@@ -487,7 +491,6 @@ describe('allocation, reversal, disputed flag (T11-25, T11-26, section 6.4)', ()
   it('applyAllocation works with a system context that has no society (module 12 jobs)', async () => {
     const w = await invoiceWorld();
     const inv = await makeInvoice(w);
-    const { systemCtx } = await import('../../../src/types/context');
     const r = await sequelize.transaction(t => invoices.applyAllocation(systemCtx('job'), inv.id, 1000, t));
     expect(r.paidPaise).toBe(1000);
   });
@@ -570,7 +573,6 @@ describe('readers for other modules (section 8.24)', () => {
   it('billedForMonth sums regular and supplementary invoices of the period month, not cancelled ones, not ad-hoc', async () => {
     const w = await invoiceWorld();
     await makeInvoice(w);
-    const { rawInvoice } = await import('../../helpers/maint-billing');
     const sid = w.society.id!;
     const mk = (no: string, total: number, o: Record<string, unknown>) =>
       rawInvoice(sid, w.units[1]!.id, {
@@ -636,7 +638,7 @@ describe('invoice list, export and detail (8.11, 8.12)', () => {
     return { w, a, b, c: c.body.data };
   }
   const list = (w: RunSociety, query: Record<string, unknown> = {}) =>
-    w.c('get', '/invoices', undefined, { query });
+    w.c('get', '/invoices', undefined, { query: query as Record<string, string> });
 
   it('lists with the 8.11 item shape, newest first, with pagination', async () => {
     const { w, a } = await seeded();
@@ -798,7 +800,6 @@ describe('invoice list, export and detail (8.11, 8.12)', () => {
 describe('advance auto-adjust and PDF at issue (F18, BR-11-37)', () => {
   it('after each committed batch of a run issue, module 12 queueAdvanceApply gets the flats and a render-pdf job renders every bill', async () => {
     const w = await invoiceWorld();
-    const { approve } = await import('../../../src/modules/billing/billing.runs.approvals-hook');
     const run = await createAndCompute(w.c);
     const d = (await w.c('get', `/billing/runs/${run.id}`)).body.data;
     const p = await w.c(
@@ -885,7 +886,6 @@ describe('access, isolation and plan (T11-40, T11-43, T11-47)', () => {
   it('the plan feature of each route is checked (402 FEATURE_NOT_IN_PLAN when the society lacks it)', async () => {
     const w = await invoiceWorld();
     const inv = await makeInvoice(w);
-    const { featureOff } = await import('../../helpers/society-setup');
     await featureOff(w.society.id!, 'billing.credit_notes');
     await featureOff(w.society.id!, 'billing.supplementary_and_ad_hoc_invoices');
     const c = await w.c(
