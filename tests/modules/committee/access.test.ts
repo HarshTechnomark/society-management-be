@@ -84,6 +84,34 @@ describe('route registry of 10.2 (sections 2.1, 8.7 to 8.9)', () => {
   });
 });
 
+describe('route registry of 10.3 (sections 2.1, 8.10 to 8.13)', () => {
+  it('the checklist, seat meter and resident routes carry the permission and entitlement of section 8', () => {
+    const routes = listRoutes(app).filter(
+      r => /\/handover|seat-usage|^\/me\/committee/.test(r.path) && r.kind === 'society',
+    );
+    const found = Object.fromEntries(routes.map(r => [`${r.method} ${r.path}`, r]));
+    const expected: Record<string, [string, string[], boolean]> = {
+      'GET /committee/terms/:id/handover': ['settings.members.view', ['governance.committee_terms'], false],
+      'POST /committee/terms/:id/handover/items': [
+        'settings.members.edit',
+        ['governance.committee_terms'],
+        true,
+      ],
+      'PATCH /committee/terms/:id/handover/items/:itemId': [
+        'settings.members.view',
+        ['governance.committee_terms'],
+        false,
+      ],
+      'GET /committee/seat-usage': ['settings.members.view', [], false],
+      'GET /me/committee': ['resident.home.view', ['governance.committee_terms'], false],
+      'GET /me/committee/history': ['resident.home.view', ['governance.committee_terms'], false],
+    };
+    expect(Object.keys(found).sort()).toEqual(Object.keys(expected).sort());
+    for (const [k, [perm, features, idempotent]] of Object.entries(expected))
+      expect(found[k], k).toMatchObject({ permissions: [perm], features, idempotent });
+  });
+});
+
 describe('T10-30 permissions (section 2.1)', () => {
   it('a committee member (settings.members view only) can read and gets 403 PERMISSION_DENIED on every write', async () => {
     const { w, d } = await withDraft();

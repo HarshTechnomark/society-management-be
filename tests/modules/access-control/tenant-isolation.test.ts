@@ -287,6 +287,10 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /committee/terms/:id/activate',
       'POST /committee/terms/:id/changes/preview',
       'POST /committee/terms/:id/changes',
+      // module 10 (10.3): the hand-over checklist routes are 404 COMMITTEE_TERM_NOT_FOUND for another society's term (tests/modules/committee/handover.test.ts, T10-29)
+      'GET /committee/terms/:id/handover',
+      'POST /committee/terms/:id/handover/items',
+      'PATCH /committee/terms/:id/handover/items/:itemId',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

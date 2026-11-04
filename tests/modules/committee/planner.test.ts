@@ -5,6 +5,10 @@ import {
   bannerFor,
   daysBetween,
   daysLeftOf,
+  handoverReminderDay,
+  reminderThreshold,
+  sameFlags,
+  seatFlags,
   duplicateProblem,
   isOverdueOf,
   missingOfficeBearers,
@@ -180,5 +184,62 @@ describe('read model and banner (8.1)', () => {
     const seats = [left('S1', 'TERM_ENDED'), left('S2', 'RESIGNED')];
     expect(occupying('ENDED', seats).map(x => x.seatId)).toEqual(['S1']);
     expect(occupying('DRAFT', [s('S3', 'MEMBER')])).toEqual([]);
+  });
+});
+
+describe('reminder thresholds (T10-04, BR-10-24)', () => {
+  const days = [90, 30, 7];
+  it('days left 95, 90, 45, 29 and 6 with the last threshold sent give none, 90, none, 30, 7', () => {
+    let last: number | null = null;
+    const seq = [95, 90, 45, 29, 6].map(left => {
+      const d = reminderThreshold(left, days, last);
+      if (d !== null) last = d;
+      return d;
+    });
+    expect(seq).toEqual([null, 90, null, 30, 7]);
+  });
+  it('only the smallest qualifying threshold is sent (a late start does not burst)', () => {
+    expect(reminderThreshold(20, days, null)).toBe(30);
+    expect(reminderThreshold(5, days, null)).toBe(7);
+    expect(reminderThreshold(5, days, 7)).toBeNull();
+    expect(reminderThreshold(5, days, 30)).toBe(7);
+  });
+  it('threshold 0 means the end date has passed and applies once, whatever was sent before', () => {
+    expect(reminderThreshold(0, days, 7)).toBeNull();
+    expect(reminderThreshold(-1, days, 7)).toBe(0);
+    expect(reminderThreshold(-1, days, null)).toBe(0);
+    expect(reminderThreshold(-30, days, 0)).toBeNull();
+  });
+  it('honours the society reminder days (any order)', () => {
+    expect(reminderThreshold(40, [10, 45], null)).toBe(45);
+    expect(reminderThreshold(8, [10, 45], 45)).toBe(10);
+  });
+  it('hand-over reminders: the largest reached day not yet sent', () => {
+    expect(handoverReminderDay(14, [15, 30], null)).toBeNull();
+    expect(handoverReminderDay(15, [15, 30], null)).toBe(15);
+    expect(handoverReminderDay(16, [15, 30], 15)).toBeNull();
+    expect(handoverReminderDay(31, [15, 30], null)).toBe(30);
+    expect(handoverReminderDay(31, [15, 30], 30)).toBeNull();
+  });
+});
+
+describe('seat flags (BR-10-25)', () => {
+  const active = { membership: 'ACTIVE' as const, hasOwnerLink: true };
+  it('a matching role, an active member and an owner link give no flag', () => {
+    expect(seatFlags('TREASURER', { ...active, roleKey: 'treasurer' }, true)).toEqual([]);
+    expect(seatFlags('VICE_CHAIRMAN', { ...active, roleKey: 'committee_member' }, true)).toEqual([]);
+  });
+  it('flags a role mismatch, a suspension and a missing owner link in canonical order', () => {
+    expect(seatFlags('CHAIRMAN', { ...active, roleKey: 'owner' }, true)).toEqual(['ROLE_MISMATCH']);
+    expect(
+      seatFlags('MEMBER', { membership: 'SUSPENDED', roleKey: 'owner', hasOwnerLink: false }, true),
+    ).toEqual(['ROLE_MISMATCH', 'MEMBERSHIP_SUSPENDED', 'NOT_OWNER']);
+    expect(
+      seatFlags('MEMBER', { ...active, hasOwnerLink: false, roleKey: 'committee_member' }, false),
+    ).toEqual([]);
+  });
+  it('compares flag sets regardless of order', () => {
+    expect(sameFlags(['NOT_OWNER', 'ROLE_MISMATCH'], ['ROLE_MISMATCH', 'NOT_OWNER'])).toBe(true);
+    expect(sameFlags([], ['NOT_OWNER'])).toBe(false);
   });
 });

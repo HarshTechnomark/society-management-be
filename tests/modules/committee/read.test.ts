@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { CommitteeTerm, Society, closeDb } from '../../../src/models';
 import { drainQueues } from '../../../src/lib/queue';
+import { DEFAULT_HANDOVER_TEMPLATE } from '../../../src/modules/committee/committee.constants';
 import { committee } from '../../../src/modules/committee/committee.public';
 import { committeeExportProvider } from '../../../src/modules/committee/committee.exports';
 import { purgeCommittee } from '../../../src/modules/committee/committee.purge';
@@ -514,7 +515,7 @@ describe('demo seed (section 7.6)', () => {
     const rajesh = await memberUser(sky, 'chairman', { name: 'Rajesh Kulkarni', mobile: '9820011111' });
     await memberUser(sky, 'treasurer', { name: 'Meera Iyer', mobile: '9820022222' });
     await memberUser(sky, 'secretary', { name: 'Arjun Shah', mobile: '9820033333' });
-    await memberUser(green, 'chairman', { name: 'Suresh Pillai', mobile: '9820066666' });
+    const sureshP = await memberUser(green, 'chairman', { name: 'Suresh Pillai', mobile: '9820066666' });
     await memberUser(green, 'treasurer', { name: 'Ritu Agarwal', mobile: '9820077777' });
     await join(green, rajesh, 'secretary');
     await seedSocietySetup();
@@ -522,7 +523,7 @@ describe('demo seed (section 7.6)', () => {
     expect(r.created).toEqual([
       'sky-heights: Managing Committee 2024–2029',
       'sky-heights: Managing Committee 2019–2024',
-      'green-park: Managing Committee 2025–2030',
+      'green-park: Managing Committee 2025–2026',
     ]);
     expect((await seedCommittee()).created).toEqual([]);
     expect(await CommitteeTerm.count()).toBe(3);
@@ -559,7 +560,55 @@ describe('demo seed (section 7.6)', () => {
       ['Shalini Rao', 'TREASURER', true],
     ]);
     const gp = (await CommitteeTerm.findOne({ where: { societyId: green.id!, status: 'ACTIVE' } }))!;
-    expect(gp).toMatchObject({ strength: 3, startDate: '2025-07-01', endDate: '2030-06-30' });
+    // Green Park carries the 10.3 demo: ends in 24 days, half-done hand-over, one attention flag
+    expect(gp).toMatchObject({
+      name: 'Managing Committee 2025–2026',
+      strength: 3,
+      startDate: '2025-07-01',
+      endDate: '2026-11-25',
+    });
     expect(gp.members.map(s => s.name)).toEqual(['Suresh Pillai', 'Rajesh Kulkarni', 'Ritu Agarwal']);
+    expect(gp.members.map(s => s.flags)).toEqual([[], [], ['MEMBERSHIP_SUSPENDED']]);
+    const count = (st: string) => gp.handoverChecklist.filter(i => i.status === st).length;
+    expect([count('DONE'), count('NOT_APPLICABLE'), count('PENDING')]).toEqual([5, 1, 4]);
+    const gpc = as(await login(sureshP, { societyId: green.id! }));
+    const gov = (await gpc('get', '/committee')).body.data;
+    expect(gov.current).toMatchObject({ daysLeft: 24, attentionCount: 1, handover: { total: 10, done: 5 } });
+    expect(gov.banner).toEqual({ code: 'TERM_ENDING', daysLeft: 24 });
+  });
+
+  it('tunes a Green Park term seeded by 10.1 once and leaves everything else alone', async () => {
+    const green = (await subSociety({ plan: 'STARTER', flats: 30, name: 'Green Park CHS' })).society;
+    await Society.update({ slug: 'green-park' }, { where: { id: green.id! } });
+    const suresh = await memberUser(green, 'chairman', { name: 'Suresh Pillai', mobile: '9820066666' });
+    const ritu = await memberUser(green, 'treasurer', { name: 'Ritu Agarwal', mobile: '9820077777' });
+    await seedSocietySetup();
+    const old = await rawTerm(green.id!, {
+      name: 'Managing Committee 2025–2030',
+      startDate: '2025-07-01',
+      endDate: '2030-06-30',
+      members: [
+        seated('S1', { user: suresh }, 'Suresh Pillai', 'CHAIRMAN'),
+        seated('S2', { user: ritu }, 'Ritu Agarwal', 'TREASURER'),
+      ],
+      handoverChecklist: DEFAULT_HANDOVER_TEMPLATE.map((it, i) => ({
+        itemId: `H${i + 1}`,
+        title: it.title,
+        ownerDesignation: it.ownerDesignation,
+        status: 'PENDING' as const,
+        note: null,
+        evidenceFileIds: [],
+        updatedByUserId: null,
+        updatedAt: null,
+      })),
+    });
+    const r = await seedCommittee();
+    expect(r.created).toContain('green-park: Managing Committee 2025–2026 (tuned)');
+    const row = (await CommitteeTerm.findByPk(old.id!))!;
+    expect([row.name, row.endDate, row.version]).toEqual(['Managing Committee 2025–2026', '2026-11-25', 2]);
+    expect(row.handoverChecklist.filter(i => i.status !== 'PENDING')).toHaveLength(6);
+    expect(row.members.find(s => s.designation === 'TREASURER')!.flags).toEqual(['MEMBERSHIP_SUSPENDED']);
+    expect((await seedCommittee()).created).toEqual([]);
+    expect((await CommitteeTerm.findByPk(old.id!))!.version).toBe(2);
   });
 });
