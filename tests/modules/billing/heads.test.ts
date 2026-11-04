@@ -62,6 +62,10 @@ describe('charge heads: seed (7.13, US-11-01)', () => {
     expect(by.COLLECTION.ledgerAccountCode).toBe('COLLECTION_FUND');
     expect(by.INTEREST).toMatchObject({ isSystem: true, gstTreatment: 'FOLLOW_SOURCE' });
     expect(by.OPENING_ARREARS).toMatchObject({ isSystem: true, ledgerAccountCode: '3900' });
+    // names are user-facing: no notes about other modules
+    expect(by.DEPOSIT_ACCESS_CARD.name).toBe('Access card deposit');
+    expect(by.EV_CHARGING.name).toBe('EV charging');
+    expect(r.body.data.filter((h: any) => /module/i.test(h.name))).toEqual([]);
     expect(Object.keys(by.MAINTENANCE).sort()).toEqual(
       [
         'id',

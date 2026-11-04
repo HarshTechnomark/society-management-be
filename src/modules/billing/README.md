@@ -46,6 +46,9 @@ single parent, note reason by type). No generated columns exist in section 7. De
   `unitLabel`/`billToName` kept beside them. FKs to `societies` (RESTRICT) and between the module's own tables are all there.
 - `charge_heads`: "sacCode required when taxed" is **not** a CHECK, because section 7.13 seeds every head with a NULL sacCode. It is the
   service check `422 GST_SETTINGS_INVALID` at publish and ad-hoc creation.
+- Seeded head names (7.13) are user-facing: the spec's notes such as "(module 13)" are dropped from the names (keys unchanged).
+  Data migration `20261116000100-clean-seeded-charge-head-names` renames existing heads that still carry the old seeded text (a head
+  a society renamed is left alone); `down` restores the old text.
 - `billing_notes`: CREDIT reasons are `BILLING_ERROR, WAIVER, DISPUTE_RESOLUTION, CANCELLATION, WRITE_OFF, SOURCE_REFUND, OTHER`
   (the spec's "first seven + OTHER" is read as the seven non-debit reasons); DEBIT reasons are as written.
 - Unit, resident, file and approval columns are plain ids (the spec's "logical" columns).
