@@ -1,7 +1,9 @@
+import { Op } from 'sequelize';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditLog, Invoice, closeDb } from '../../../src/models';
 import { setNow } from '../../../src/lib/clock';
 import { drainQueues } from '../../../src/lib/queue';
+import { placeholderFiles } from '../../../src/modules/societies/societies.ports';
 import { touchDues } from '../../../src/modules/billing/billing.dues.cache';
 import { efficiencyOf } from '../../../src/modules/billing/billing.dues.queries';
 import { runLateFeesForSociety } from '../../../src/modules/billing/billing.latefee.service';
@@ -239,8 +241,21 @@ describe('demo seed (seeders/billing-dues.ts)', () => {
     await w.society.update({ slug: 'sky-heights' });
     const first = await seedBillingDues();
     expect(first.created).toHaveLength(1);
+    const inv = (await Invoice.findOne({
+      where: { societyId: w.society.id!, invoiceNo: { [Op.like]: '%DEMO-OVERDUE' } },
+    }))!;
+    // the bill PDF is rendered by the seed, so it can be downloaded
+    expect(inv.pdfStatus).toBe('READY');
+    expect(placeholderFiles.get(Number(inv.pdfFileId))).toMatchObject({ purpose: 'INVOICE_PDF' });
+    const url = await w.c('get', `/invoices/${inv.id}/pdf-url`);
+    expect(url.status, JSON.stringify(url.body)).toBe(200);
     const again = await seedBillingDues();
     expect(again).toEqual({ created: [], skipped: ['sky-heights'] });
+    // an invoice seeded before the PDF step (still PENDING) is rendered on the next run
+    await Invoice.update({ pdfStatus: 'PENDING', pdfFileId: null }, { where: { id: inv.id } });
+    expect(await seedBillingDues()).toEqual({ created: ['sky-heights PDF'], skipped: [] });
+    expect((await Invoice.findByPk(inv.id))!.pdfStatus).toBe('READY');
+    expect(await seedBillingDues()).toEqual({ created: [], skipped: ['sky-heights'] });
     const d = await w.c('get', '/billing/defaulters');
     expect(d.body.data.items).toHaveLength(1);
     expect(d.body.data.items[0]).toMatchObject({ overduePaise: 1_250_000, daysOverdue: 105 });

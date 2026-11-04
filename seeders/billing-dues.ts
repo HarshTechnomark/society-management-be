@@ -1,6 +1,7 @@
 import { ChargeHead, Invoice, InvoiceLine, Society, Unit, sequelize } from '../src/models';
 import { istDate, now } from '../src/lib/clock';
 import { addDaysYmd } from '../src/modules/billing/billing.calc.period';
+import { renderPdfFor } from '../src/modules/billing/billing.pdf.service';
 import { unitLedger } from '../src/modules/billing/billing.ledger.service';
 import { residents } from '../src/modules/residents/residents.public';
 import { financialYearOf } from '../src/utils/numberSequences';
@@ -10,6 +11,8 @@ import { systemCtx } from '../src/types/context';
  * Module 11.5 demo seed (not run in production): one overdue invoice of 12,500 rupees in Sky Heights CHS, 120 days old, so the
  * defaulter list and the dues dashboard have a row. It is written straight into the tables (an ad-hoc invoice with the
  * number `INV/<year>/DEMO-OVERDUE`, one maintenance line, one ledger debit; no journal, no run). Idempotent by the invoice number.
+ * The bill PDF is rendered in the seed with the `billing:render-pdf` function; an existing invoice whose PDF is still PENDING
+ * (seeded before this step existed) is rendered on the next run.
  */
 export interface BillingDuesSeedReport {
   created: string[];
@@ -26,8 +29,14 @@ export async function seedBillingDues(): Promise<BillingDuesSeedReport> {
   const today = istDate(now());
   const fy = financialYearOf(addDaysYmd(today, -120));
   const invoiceNo = `INV/${fy}/DEMO-OVERDUE`;
-  if (await Invoice.findOne({ where: { societyId, invoiceNo }, attributes: ['id'] })) {
-    report.skipped.push('sky-heights');
+  const existing = await Invoice.findOne({
+    where: { societyId, invoiceNo },
+    attributes: ['id', 'pdfStatus'],
+  });
+  if (existing) {
+    if (existing.pdfStatus === 'PENDING' && (await renderPdfFor('invoice', Number(existing.id))) === 'READY')
+      report.created.push('sky-heights PDF');
+    else report.skipped.push('sky-heights');
     return report;
   }
   const head = await ChargeHead.findOne({ where: { societyId, key: 'MAINTENANCE' } });
@@ -46,7 +55,7 @@ export async function seedBillingDues(): Promise<BillingDuesSeedReport> {
     if (!billTo) continue;
     const invoiceDate = addDaysYmd(today, -120);
     const total = 1_250_000;
-    await sequelize.transaction(async t => {
+    const invoiceId = await sequelize.transaction(async t => {
       const inv = await Invoice.create(
         {
           societyId,
@@ -152,7 +161,9 @@ export async function seedBillingDues(): Promise<BillingDuesSeedReport> {
         },
         t,
       );
+      return inv.id!;
     });
+    await renderPdfFor('invoice', invoiceId);
     report.created.push(`sky-heights ${f.label}`);
     return report;
   }
