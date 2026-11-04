@@ -1,11 +1,11 @@
-import { QueryTypes } from 'sequelize';
-import { Unit, sequelize } from '../../models';
+import { Op, QueryTypes } from 'sequelize';
+import { BillingNote, Invoice, OpeningBalance, Unit, sequelize } from '../../models';
 import { istDate, now } from '../../lib/clock';
 import { financialYearOf } from '../../utils/numberSequences';
 import { NotFoundError, ValidationError } from '../../utils/errors';
 import { csvCell } from '../society-setup/society-setup.csv';
 import type { LedgerEntryType, LedgerRefType } from './billing.constants';
-import { STATEMENT_MAX_DAYS, type StatementDto } from './billing.ledger.types';
+import { STATEMENT_MAX_DAYS, type StatementDto, type StatementEntryDto } from './billing.ledger.types';
 
 /**
  * Statement of account of a flat (section 8.20, BR-11-59): entries ordered by `entryDate`, then `id`; the running balance
@@ -100,11 +100,68 @@ export const rupeeText = (paise: number): string => {
   return `${paise < 0 ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
 };
 
+type RefEntry = Pick<StatementEntryDto, 'id' | 'refType' | 'refId'>;
+const OPENING_REFS: string[] = ['opening_balance', 'opening_balance_reversal'];
+const ids = (entries: RefEntry[], types: string[]) => [
+  ...new Set(entries.filter(e => types.includes(e.refType)).map(e => e.refId)),
+];
+
 /**
- * The statement as CSV: `Date,Type,Reference,Narration,Debit,Credit,Balance` with an opening and a closing row. Text cells go
+ * Document numbers for the CSV "Reference" column, by entry id: the invoice number for `invoice`, the note number for
+ * `billing_note`, the opening balance invoice number for `opening_balance` (and its reversal). Entries without a document
+ * number (a payment, an advance-only opening row) are left out and keep the `<refType> <refId>` text.
+ */
+export async function statementReferences(
+  societyId: number,
+  entries: RefEntry[],
+): Promise<Map<number, string>> {
+  const invoiceIds = ids(entries, ['invoice']);
+  const noteIds = ids(entries, ['billing_note']);
+  const openingIds = ids(entries, OPENING_REFS);
+  const [notes, openings] = await Promise.all([
+    noteIds.length
+      ? BillingNote.findAll({ where: { societyId, id: { [Op.in]: noteIds } }, attributes: ['id', 'noteNo'] })
+      : [],
+    openingIds.length
+      ? OpeningBalance.findAll({
+          where: { societyId, id: { [Op.in]: openingIds } },
+          attributes: ['id', 'invoiceId'],
+        })
+      : [],
+  ]);
+  const openingInvoice = new Map(
+    openings.filter(o => o.invoiceId).map(o => [Number(o.id), Number(o.invoiceId)]),
+  );
+  const allInvoiceIds = [...new Set([...invoiceIds, ...openingInvoice.values()])];
+  const invoices = allInvoiceIds.length
+    ? await Invoice.findAll({
+        where: { societyId, id: { [Op.in]: allInvoiceIds } },
+        attributes: ['id', 'invoiceNo'],
+      })
+    : [];
+  const invoiceNo = new Map(invoices.map(i => [Number(i.id), i.invoiceNo]));
+  const noteNo = new Map(notes.filter(n => n.noteNo).map(n => [Number(n.id), n.noteNo!]));
+  const out = new Map<number, string>();
+  for (const e of entries) {
+    const no =
+      e.refType === 'invoice'
+        ? invoiceNo.get(e.refId)
+        : e.refType === 'billing_note'
+          ? noteNo.get(e.refId)
+          : OPENING_REFS.includes(e.refType)
+            ? invoiceNo.get(openingInvoice.get(e.refId) ?? 0)
+            : undefined;
+    if (no) out.set(e.id, no);
+  }
+  return out;
+}
+
+/**
+ * The statement as CSV: `Date,Type,Reference,Narration,Debit,Credit,Balance` with an opening and a closing row; Reference is
+ * the document number from `statementReferences` when there is one. Text cells go
  * through the module 08 injection-safe helper (a cell starting with `= + - @` gets a leading `'`); amounts are plain numbers.
  */
-export function statementCsv(s: StatementDto): Buffer {
+export function statementCsv(s: StatementDto, refs: Map<number, string> = new Map()): Buffer {
   const line = (cells: string[]) => cells.join(',');
   const text = (v: string) => csvCell(v);
   const lines = [
@@ -114,7 +171,7 @@ export function statementCsv(s: StatementDto): Buffer {
       line([
         e.entryDate,
         text(e.entryType),
-        text(`${e.refType} ${e.refId}`),
+        text(refs.get(e.id) ?? `${e.refType} ${e.refId}`),
         text(e.narration),
         e.debitPaise ? rupeeText(e.debitPaise) : '',
         e.creditPaise ? rupeeText(e.creditPaise) : '',

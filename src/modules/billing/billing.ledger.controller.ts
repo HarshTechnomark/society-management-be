@@ -32,7 +32,8 @@ export const ledgerController = {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).send(statement.statementCsv(s));
+    const refs = await statement.statementReferences(sid(req), s.entries);
+    return res.status(200).send(statement.statementCsv(s, refs));
   }),
 
   openingList: h(async (req, res) => {

@@ -6,6 +6,7 @@ import { unitLedger } from '../../../src/modules/billing/billing.public';
 import { app } from '../../helpers/auth';
 import { adminOf } from '../../helpers/residents';
 import { ledgerSociety, resetLedger, societyCtx } from '../../helpers/billing-ledger';
+import { rawInvoice, rawNote, rawOpening } from '../../helpers/maint-billing';
 
 afterAll(async () => {
   await drainQueues();
@@ -239,6 +240,68 @@ describe('statement of account (section 8.20, BR-11-59)', () => {
       where: { societyId: w.society.id!, action: 'billing.statement.exported' },
     });
     expect(log).not.toBeNull();
+  });
+
+  it('CSV Reference is the document number (bill, note, opening balance bill); other entries keep the ref text', async () => {
+    const w = await ledgerSociety();
+    const u = w.unit(1).id;
+    const sid = w.society.id!;
+    const inv = await rawInvoice(sid, u, { invoiceNo: 'INV/2026-27/000777' } as never);
+    const note = await rawNote(sid, Number(inv.id), u, {
+      noteNo: 'CN/2026-27/000003',
+      noteDate: '2026-10-05',
+      status: 'ISSUED',
+    } as never);
+    const obInv = await rawInvoice(sid, u, {
+      invoiceNo: 'INV/2025-26/OB-000001',
+      invoiceType: 'OPENING',
+    } as never);
+    const ob = await rawOpening(sid, { unitId: u, invoiceId: Number(obInv.id), status: 'POSTED' } as never);
+    const advance = await rawOpening(sid, { unitId: u, importRowNo: 3, status: 'POSTED' } as never);
+    const post = (o: Record<string, unknown>) =>
+      sequelize.transaction(t =>
+        unitLedger.post(
+          societyCtx(w.society),
+          { unitId: u, debitPaise: 0, creditPaise: 0, date: '2026-10-05', narration: 'Entry', ...o } as never,
+          t,
+        ),
+      );
+    await post({
+      entryType: 'OPENING_BALANCE',
+      refType: 'opening_balance',
+      refId: Number(ob.id),
+      debitPaise: 100,
+    });
+    await post({ entryType: 'INVOICE', refType: 'invoice', refId: Number(inv.id), debitPaise: 200 });
+    await post({
+      entryType: 'CREDIT_NOTE',
+      refType: 'billing_note',
+      refId: Number(note.id),
+      creditPaise: 50,
+    });
+    await post({
+      entryType: 'OPENING_BALANCE',
+      refType: 'opening_balance',
+      refId: Number(advance.id),
+      creditPaise: 10,
+    });
+    await post({ entryType: 'PAYMENT', refType: 'payment', refId: 4242, creditPaise: 40 });
+    const r = await w.c('get', url(u), undefined, {
+      query: { from: '2026-10-01', to: '2026-10-31', format: 'csv' },
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const refs = (r.text as string)
+      .trim()
+      .split('\r\n')
+      .slice(2, -1)
+      .map(l => l.split(',')[2]);
+    expect(refs).toEqual([
+      'INV/2025-26/OB-000001',
+      'INV/2026-27/000777',
+      'CN/2026-27/000003',
+      `opening_balance ${advance.id}`,
+      'payment 4242',
+    ]);
   });
 
   it('CSV downloads are limited to 10 an hour per user', async () => {
