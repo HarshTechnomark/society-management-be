@@ -291,6 +291,10 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /committee/terms/:id/handover',
       'POST /committee/terms/:id/handover/items',
       'PATCH /committee/terms/:id/handover/items/:itemId',
+      // module 11 (11.2): another society's unit is 404 UNIT_NOT_FOUND on the statement and another society's opening balance row is 404 OPENING_BALANCE_NOT_FOUND on reverse and delete (tests/modules/billing/statement.test.ts and opening.test.ts, T11-40)
+      'GET /billing/units/:unitId/statement',
+      'POST /billing/opening-balances/:id/reverse',
+      'DELETE /billing/opening-balances/:id',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

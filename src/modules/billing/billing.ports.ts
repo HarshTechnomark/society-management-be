@@ -105,6 +105,8 @@ export interface PaymentsPort {
     input: { unitId: number; amountPaise: number; asOfDate: YmdString; openingBalanceId: number },
     t: Transaction,
   ): Promise<{ advanceId: number }>;
+  /** After commit: module 12 applies the advances of these flats to their open invoices (`payments:apply-advances`). Safe default: no-op. */
+  queueAdvanceApply(societyId: number, unitIds: number[]): Promise<void>;
   /** Called before a credit note larger than the outstanding and on cancellation (BR-11-42). Safe default: no-op. */
   onInvoiceCancelled(ctx: Ctx, invoiceId: number, t: Transaction): Promise<void>;
   listAllocationsForInvoice(
@@ -193,6 +195,8 @@ export const defaultBillingPorts: BillingPorts = {
       record('payments.creditOpeningAdvance', input, t);
       return { advanceId: ++fakeSeq };
     },
+    queueAdvanceApply: async (societyId, unitIds) =>
+      record('payments.queueAdvanceApply', { societyId, unitIds }),
     onInvoiceCancelled: async (_ctx, invoiceId, t) => record('payments.onInvoiceCancelled', { invoiceId }, t),
     listAllocationsForInvoice: async () => [],
     chequeReturnCount: async () => 0,
