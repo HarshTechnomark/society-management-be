@@ -1,15 +1,18 @@
-import { BillingNote } from '../../models';
+import { BillingNote, ChargeHead, type Invoice } from '../../models';
 import type { Ctx } from '../../types/context';
+import { ensureSeeded } from './billing.heads.service';
+import { issueDebitNote } from './billing.notes.debit';
 import type { Transaction } from './billing.types';
 
 /**
- * The write step of the late fee job: one issued debit note with reason `INTEREST` or `LATE_FEE` (BR-11-55). The note service of
- * sub-module 11.4 builds the lines, tax (`FOLLOW_SOURCE` heads), round-off, number, ledger entry and journal; this file only
- * adds the idempotency check by `dedupeKey` and lets tests inject a fake.
+ * The write step of the late fee job: one issued debit note with reason `INTEREST` or `LATE_FEE` (BR-11-55) through the shared
+ * debit note core of sub-module 11.4 (`issueDebitNote`: lines, tax of `FOLLOW_SOURCE` heads, round-off, number, ledger entry,
+ * journal, audit, realtime, notification). This file adds the idempotency check by `dedupeKey` and sets the job markers.
  */
 export interface LateFeeNoteInput {
   societyId: number;
-  invoiceId: number;
+  /** The invoice, locked `FOR UPDATE` by the caller (after its unit row). */
+  invoice: Invoice;
   reasonCode: 'INTEREST' | 'LATE_FEE';
   /** Interest or flat fee before round-off. */
   amountPaise: number;
@@ -19,20 +22,19 @@ export interface LateFeeNoteInput {
   lateFeePolicyId: number | null;
   remarks: string;
 }
-export type LateFeeNoteIssuer = (
-  ctx: Ctx,
-  input: LateFeeNoteInput,
-  t: Transaction,
-) => Promise<{ noteId: number; noteNo: string; totalPaise: number }>;
 
-let issuer: LateFeeNoteIssuer = async () => {
-  throw new Error('not implemented: debit note issue for the late fee job');
-};
-/** Replaces the issuer (the real note service at start-up, a fake in tests); returns the previous one. */
-export function setLateFeeNoteIssuer(next: LateFeeNoteIssuer): LateFeeNoteIssuer {
-  const prev = issuer;
-  issuer = next;
-  return prev;
+async function systemHead(
+  societyId: number,
+  key: 'INTEREST' | 'LATE_FEE',
+  t: Transaction,
+): Promise<ChargeHead> {
+  let head = await ChargeHead.findOne({ where: { societyId, key }, transaction: t });
+  if (!head) {
+    await ensureSeeded(societyId, t);
+    head = await ChargeHead.findOne({ where: { societyId, key }, transaction: t });
+  }
+  if (!head) throw new Error(`system charge head ${key} is missing`);
+  return head;
 }
 
 export const debitNotes = {
@@ -53,6 +55,37 @@ export const debitNotes = {
         noteNo: existing.noteNo ?? '',
         totalPaise: Number(existing.totalPaise),
       };
-    return { created: true, ...(await issuer(ctx, input, t)) };
+    const head = await systemHead(input.societyId, input.reasonCode, t);
+    const note = await issueDebitNote(
+      ctx,
+      input.societyId,
+      input.invoice,
+      {
+        reasonCode: input.reasonCode,
+        remarks: input.remarks,
+        lines: [
+          {
+            head,
+            kind: input.reasonCode,
+            description:
+              input.reasonCode === 'INTEREST'
+                ? `Interest on ${input.invoice.invoiceNo} (${input.interestFromDate} to ${input.interestToDate})`
+                : `Late fee on ${input.invoice.invoiceNo}`,
+            amountPaise: input.amountPaise,
+          },
+        ],
+        dedupeKey: input.dedupeKey,
+        interestFromDate: input.interestFromDate,
+        interestToDate: input.interestToDate,
+        lateFeePolicyId: input.lateFeePolicyId,
+      },
+      t,
+    );
+    return {
+      created: true,
+      noteId: Number(note.id),
+      noteNo: note.noteNo ?? '',
+      totalPaise: Number(note.totalPaise),
+    };
   },
 };

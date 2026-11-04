@@ -1,10 +1,8 @@
-import { BillingNote, Invoice, InvoiceLine, LateFeePolicy } from '../../src/models';
-import { roundHalfUp } from '../../src/lib/money';
+import { Invoice, InvoiceLine, LateFeePolicy } from '../../src/models';
 import { setNow } from '../../src/lib/clock';
 import { systemCtx } from '../../src/types/context';
 import { sequelize } from '../../src/models';
 import { unitLedger } from '../../src/modules/billing/billing.ledger.service';
-import { setLateFeeNoteIssuer } from '../../src/modules/billing/billing.latefee.notes';
 import type { InvoiceType, InvoiceStatus } from '../../src/modules/billing/billing.constants';
 import { registerBillingDues } from '../../src/modules/billing/billing.latefee.jobs';
 import { addOwner, resetRuns, runSociety, type RunSociety } from './billing-runs';
@@ -53,6 +51,8 @@ export async function makeInvoice(w: DuesWorld, s: InvoiceSpec): Promise<Invoice
   const paid = s.paidPaise ?? 0;
   const head = w.heads[s.headKey ?? 'MAINTENANCE']!;
   const n = ++seq;
+  const due = s.dueDate ?? '2026-09-10';
+  const invoiceDate = s.invoiceDate ?? (due < '2026-09-01' ? due : '2026-09-01');
   const periodStart = s.periodStart === undefined ? '2026-09-01' : s.periodStart;
   const inv = await Invoice.create({
     societyId: w.society.id!,
@@ -68,8 +68,8 @@ export async function makeInvoice(w: DuesWorld, s: InvoiceSpec): Promise<Invoice
     billToName: s.billTo.name,
     periodStart,
     periodEnd: periodStart ? `${periodStart.slice(0, 7)}-30` : null,
-    invoiceDate: s.invoiceDate ?? '2026-09-01',
-    dueDate: s.dueDate ?? '2026-09-10',
+    invoiceDate,
+    dueDate: due,
     description: null,
     refType: null,
     refId: null,
@@ -148,7 +148,7 @@ export async function makeInvoice(w: DuesWorld, s: InvoiceSpec): Promise<Invoice
         refId: inv.id!,
         debitPaise: total,
         creditPaise: 0,
-        date: s.invoiceDate ?? '2026-09-01',
+        date: invoiceDate,
         narration: `Bill ${inv.invoiceNo}`,
       },
       t,
@@ -190,59 +190,3 @@ export const interestPolicy = (societyId: number, o: Partial<LateFeePolicy> = {}
     graceDays: 15,
     ...o,
   });
-
-let noteSeq = 0;
-/** Stand-in for the 11.4 note service: an issued debit note whose total is the amount rounded to the rupee, applied to the invoice. */
-export function useFakeNoteIssuer(): () => void {
-  const prev = setLateFeeNoteIssuer(async (_ctx, input, t) => {
-    const total = roundHalfUp(input.amountPaise, 100) * 100;
-    const inv = (await Invoice.findByPk(input.invoiceId, { transaction: t, lock: t.LOCK.UPDATE }))!;
-    const note = await BillingNote.create(
-      {
-        societyId: input.societyId,
-        noteType: 'DEBIT',
-        noteNo: `DN/2026-27/${String(++noteSeq).padStart(6, '0')}`,
-        financialYear: '2026-27',
-        invoiceId: input.invoiceId,
-        unitId: inv.unitId,
-        billToResidentId: inv.billToResidentId,
-        billToName: inv.billToName,
-        reasonCode: input.reasonCode,
-        status: 'ISSUED',
-        approvalType: null,
-        approvalRequestId: null,
-        noteDate: '2026-11-01',
-        subtotalPaise: input.amountPaise,
-        cgstPaise: 0,
-        sgstPaise: 0,
-        taxPaise: 0,
-        roundOffPaise: total - input.amountPaise,
-        totalPaise: total,
-        appliedToInvoicePaise: 0,
-        excessToAdvancePaise: 0,
-        interestFromDate: input.interestFromDate,
-        interestToDate: input.interestToDate,
-        lateFeePolicyId: input.lateFeePolicyId,
-        dedupeKey: input.dedupeKey,
-        remarks: input.remarks,
-        rejectedReason: null,
-        issuedAt: new Date(),
-        pdfFileId: null,
-        pdfStatus: 'PENDING',
-        createdBy: null,
-        updatedBy: null,
-        version: 1,
-      } as never,
-      { transaction: t },
-    );
-    await inv.update(
-      {
-        debitedPaise: Number(inv.debitedPaise) + total,
-        outstandingPaise: Number(inv.outstandingPaise) + total,
-      },
-      { transaction: t },
-    );
-    return { noteId: note.id!, noteNo: note.noteNo!, totalPaise: total };
-  });
-  return () => void setLateFeeNoteIssuer(prev);
-}

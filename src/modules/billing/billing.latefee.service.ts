@@ -16,6 +16,7 @@ import {
   type InterestPolicy,
   type LateFeeInvoice,
 } from './billing.latefee.calc';
+import { lockInvoice, lockUnitRow } from './billing.invoices.shared';
 import { policyFor } from './billing.latefee-policy.service';
 import { debitNotes } from './billing.latefee.notes';
 import { societyToday } from './billing.setup.shared';
@@ -146,12 +147,15 @@ async function chargeInvoice(
   today: string,
 ): Promise<Outcome> {
   return sequelize.transaction(async t => {
-    const inv = await Invoice.findOne({
+    // lock order (section 13): the unit row, then the invoice
+    const peek = await Invoice.findOne({
       where: { id: invoiceId, societyId },
+      attributes: ['unitId'],
       transaction: t,
-      lock: t.LOCK.UPDATE,
     });
-    if (!inv) return 'NOT_FOUND';
+    if (!peek) return 'NOT_FOUND';
+    await lockUnitRow(societyId, Number(peek.unitId), t);
+    const inv = await lockInvoice(societyId, invoiceId, t);
     if (policy.policyType === 'FLAT') {
       const hasIb = (await interestBearingInvoiceIds(societyId, [invoiceId])).has(invoiceId);
       const plan = planFlatFee(factsOf(inv, hasIb), policy, today);
@@ -161,7 +165,7 @@ async function chargeInvoice(
         ctx,
         {
           societyId,
-          invoiceId,
+          invoice: inv,
           reasonCode: 'LATE_FEE',
           amountPaise: plan.feePaise,
           dedupeKey,
@@ -172,8 +176,8 @@ async function chargeInvoice(
         },
         t,
       );
-      await inv.reload({ transaction: t });
-      await inv.update({ lateFeeChargedAt: today }, { transaction: t });
+      inv.lateFeeChargedAt = today;
+      await inv.save({ transaction: t });
       return note.created ? 'LATE_FEE' : 'ALREADY_CHARGED';
     }
     const events = (await balanceEventsFor(societyId, [inv])).get(invoiceId) ?? [];
@@ -183,7 +187,7 @@ async function chargeInvoice(
       ctx,
       {
         societyId,
-        invoiceId,
+        invoice: inv,
         reasonCode: 'INTEREST',
         amountPaise: plan.interestPaise,
         dedupeKey: interestDedupeKey(invoiceId, plan.to),
@@ -194,8 +198,8 @@ async function chargeInvoice(
       },
       t,
     );
-    await inv.reload({ transaction: t });
-    await inv.update({ interestPostedToDate: plan.to }, { transaction: t });
+    inv.interestPostedToDate = plan.to;
+    await inv.save({ transaction: t });
     return note.created ? 'INTEREST' : 'ALREADY_CHARGED';
   });
 }

@@ -1,5 +1,5 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BillingNote, Invoice, Society, closeDb } from '../../../src/models';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { BillingNote, Invoice, InvoiceLine, Society, UnitLedgerEntry, closeDb } from '../../../src/models';
 import { drainQueues, enqueue, tickScheduler } from '../../../src/lib/queue';
 import { BILLING_QUEUE, JOBS } from '../../../src/modules/billing/billing.constants';
 import { billingPortCalls } from '../../../src/modules/billing/billing.ports';
@@ -16,22 +16,13 @@ import { runLateFeesAll, runLateFeesForSociety } from '../../../src/modules/bill
 import { setNow } from '../../../src/lib/clock';
 import { lifecycleColumns } from '../../helpers/access';
 import { featureOff } from '../../helpers/society-setup';
-import {
-  duesWorld,
-  interestPolicy,
-  makeInvoice,
-  makePolicy,
-  resetDues,
-  useFakeNoteIssuer,
-} from '../../helpers/billing-dues';
+import { duesWorld, interestPolicy, makeInvoice, makePolicy, resetDues } from '../../helpers/billing-dues';
 
 afterAll(async () => {
   await drainQueues();
   await closeDb();
 });
 beforeEach(resetDues);
-let restore: (() => void) | undefined;
-afterEach(() => restore?.());
 
 const ev = (date: string, dOutstanding: number, dNonInterestBearing = 0, dPaid = 0): BalanceEvent => ({
   date,
@@ -168,7 +159,6 @@ describe('late fee calculation (pure, BR-11-52 to BR-11-55)', () => {
 
 describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   it('US-11-08: 800,000 due 10 Sep, 21 % with 15 grace days: debit note of 9,200 on 1 Oct; a second run the same day adds none', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(1);
     await interestPolicy(w.society.id!);
     const i = await makeInvoice(w, { unit: w.units[0]!, billTo: w.owners['A-101']! });
@@ -181,13 +171,24 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
     const fresh = (await Invoice.findByPk(i.id!))!;
     expect(fresh.interestPostedToDate).toBe('2026-09-30');
     expect(Number(fresh.outstandingPaise)).toBe(809_200);
+    expect(Number(fresh.debitedPaise)).toBe(9200);
+    expect(Number(fresh.nonInterestBearingPaise)).toBe(9200);
+    expect(Number(notes[0]!.roundOffPaise)).toBe(-5);
+    const lines = await InvoiceLine.findAll({ where: { billingNoteId: notes[0]!.id! } });
+    expect(lines.map(l => [l.lineKind, Number(l.amountPaise)])).toEqual([
+      ['INTEREST', 9205],
+      ['ROUND_OFF', -5],
+    ]);
+    const ledger = await UnitLedgerEntry.findOne({
+      where: { refType: 'billing_note', refId: notes[0]!.id! },
+    });
+    expect([ledger!.entryType, Number(ledger!.debitPaise)]).toEqual(['DEBIT_NOTE', 9200]);
     const again = await runLateFeesForSociety(w.society.id!, { today: '2026-10-01' });
     expect(again.interestNotes).toBe(0);
     expect(await BillingNote.count({ where: { invoiceId: i.id! } })).toBe(1);
   });
 
   it('the dedupe key alone stops a repeat even when the invoice marker is behind', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(1);
     await interestPolicy(w.society.id!);
     const i = await makeInvoice(w, { unit: w.units[0]!, billTo: w.owners['A-101']! });
@@ -202,7 +203,6 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   });
 
   it('T11-32 an invoice paid within grace gets no note; a disputed one is skipped; a cancelled one too', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(3);
     await interestPolicy(w.society.id!);
     const [a, b, c] = w.units;
@@ -221,7 +221,6 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   });
 
   it('interest below the minimum accumulates into the next month (window not advanced)', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(1);
     await interestPolicy(w.society.id!, { graceDays: 0 });
     const i = await makeInvoice(w, {
@@ -241,7 +240,6 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   });
 
   it('FLAT policy: one debit note with reason LATE_FEE per invoice, never twice (LFEE dedupe)', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(2);
     await makePolicy(w.society.id!, { policyType: 'FLAT', flatFeePaise: 50_000, graceDays: 5 });
     const a = await makeInvoice(w, { unit: w.units[0]!, billTo: w.owners['A-101']! });
@@ -256,7 +254,6 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   });
 
   it('a society without a policy, with policy NONE, or without the plan feature is not charged', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(1);
     await makeInvoice(w, { unit: w.units[0]!, billTo: w.owners['A-101']! });
     expect((await runLateFeesForSociety(w.society.id!, { today: '2026-10-01' })).skipped.POLICY_NONE).toBe(1);
@@ -269,7 +266,6 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   });
 
   it('T11-47 BR-11-56: a SUSPENDED society is skipped; the next run covers the whole pending window', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(1);
     await interestPolicy(w.society.id!, { graceDays: 0 });
     const i = await makeInvoice(w, { unit: w.units[0]!, billTo: w.owners['A-101']! });
@@ -283,7 +279,6 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   });
 
   it('the job runs only on day 1 at 02:00 IST and touches the dues cache once per society', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(2);
     await interestPolicy(w.society.id!);
     await makeInvoice(w, { unit: w.units[0]!, billTo: w.owners['A-101']! });
@@ -300,7 +295,6 @@ describe('billing:late-fees job (T11-31, T11-32, US-11-08)', () => {
   });
 
   it('the job can be enqueued on demand', async () => {
-    restore = useFakeNoteIssuer();
     const w = await duesWorld(1);
     await interestPolicy(w.society.id!);
     await makeInvoice(w, { unit: w.units[0]!, billTo: w.owners['A-101']! });
