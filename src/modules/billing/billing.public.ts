@@ -17,6 +17,7 @@ import { assertBillingPortsReady, registerMeterSource } from './billing.ports';
 import { PURGE_TABLES, deleteRetainedBilling, purgeBilling } from './billing.purge';
 import { invoices } from './billing.invoices.service';
 import { unitLedger } from './billing.ledger.service';
+import { registerLedgerHooks } from './billing.ledger.hooks';
 
 export { unitLedger, invoices };
 /** Module 21 registers its readings here at start-up (BR-11-17). */
@@ -48,4 +49,6 @@ export function registerBilling(): void {
   registerPurgeHandler({ module: 'billing', order: 110, tables: PURGE_TABLES, purge: purgeBilling });
   registerRetentionExpiryHandler({ module: 'billing', order: 110, deleteRetained: deleteRetainedBilling });
   registerQueue(BILLING_QUEUE, 'Billing: runs, issue, PDFs, late fees, reminders', 4);
+  // 11.2: real unitLedger.balance for module 09 duesPaise, module 08 BILLING check and UNIT_HAS_BALANCE guard
+  registerLedgerHooks();
 }

@@ -1,8 +1,21 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { UnitLedgerEntry, closeDb, sequelize } from '../../../src/models';
+import {
+  BillingRule,
+  BillingRuleVersion,
+  BillingRun,
+  BillingRunItem,
+  ChargeHead,
+  UnitLedgerEntry,
+  closeDb,
+  sequelize,
+} from '../../../src/models';
+import { residentPorts } from '../../../src/modules/residents/residents.ports';
+import { setResidentPorts } from '../../../src/modules/residents/residents.public';
+import { billingUnitGuard } from '../../../src/modules/billing/billing.ledger.hooks';
+import { registerBilling } from '../../../src/modules/billing/billing.public';
 import { drainQueues } from '../../../src/lib/queue';
 import { unitLedger } from '../../../src/modules/billing/billing.public';
-import { systemCtx } from '../../../src/types/context';
+import { systemCtx, type Ctx } from '../../../src/types/context';
 import { ledgerSociety, resetLedger, societyCtx } from '../../helpers/billing-ledger';
 
 afterAll(async () => {
@@ -11,7 +24,7 @@ afterAll(async () => {
 });
 beforeEach(resetLedger);
 
-const post = (ctx: ReturnType<typeof societyCtx>, unitId: number, o: Record<string, unknown>) =>
+const post = (ctx: Ctx, unitId: number, o: Record<string, unknown>) =>
   sequelize.transaction(t =>
     unitLedger.post(
       ctx,
@@ -257,5 +270,183 @@ describe('unitLedger.post and balance (BR-11-57 to BR-11-59)', () => {
       }),
     ).rejects.toThrow('boom');
     expect(await unitLedger.balance(w.society.id!, w.unit(1).id)).toBe(0);
+  });
+});
+
+describe('module 08 and 09 wiring of registerBilling (section 5.13, 9.2)', () => {
+  const ledgerOf = (
+    w: Awaited<ReturnType<typeof ledgerSociety>>,
+    unitId: number,
+    debit: number,
+    credit = 0,
+    refId = 1,
+  ) =>
+    post(societyCtx(w.society), unitId, {
+      refId,
+      debitPaise: debit,
+      creditPaise: credit,
+      ...(credit ? { entryType: 'PAYMENT', refType: 'payment' } : {}),
+    });
+
+  it('module 09 duesPaise is the real ledger balance (the placeholder returned 0)', async () => {
+    const w = await ledgerSociety();
+    setResidentPorts(); // placeholder again: always 0
+    expect(await residentPorts().unitLedger.balance(w.society.id!, w.unit(1).id)).toBe(0);
+    registerBilling();
+    await ledgerOf(w, w.unit(1).id, 538000);
+    await ledgerOf(w, w.unit(2).id, 0, 7000, 2);
+    expect(await residentPorts().unitLedger.balance(w.society.id!, w.unit(1).id)).toBe(538000);
+    expect((await w.c('get', `/residents/units/${w.unit(1).id}`)).body.data.duesPaise).toBe(538000);
+    const list = (await w.c('get', '/residents/units')).body.data as { unitId: number; duesPaise: number }[];
+    expect(list.find(u => u.unitId === w.unit(1).id)!.duesPaise).toBe(538000);
+    expect(list.find(u => u.unitId === w.unit(2).id)!.duesPaise).toBe(-7000);
+    expect(list.find(u => u.unitId === w.unit(3).id)!.duesPaise).toBe(0);
+    const owing = await w.c('get', '/residents/units', undefined, { query: { hasDues: 'true' } });
+    expect(owing.body.data.map((u: any) => u.unitId)).toContain(w.unit(1).id);
+  });
+
+  const archive = (w: Awaited<ReturnType<typeof ledgerSociety>>, i: number) =>
+    w.c('post', `/units/${w.unit(i).id}/archive`, {
+      version: 1,
+      reason: 'Merged with the next flat',
+    });
+
+  it('T11-38 UNIT_HAS_BALANCE blocks the archive of a flat with dues or an advance; a settled flat can go', async () => {
+    const w = await ledgerSociety();
+    await ledgerOf(w, w.unit(1).id, 538000);
+    await ledgerOf(w, w.unit(2).id, 0, 100, 2);
+    for (const i of [1, 2]) {
+      const r = await archive(w, i);
+      expect([r.status, r.body.code]).toEqual([409, 'UNIT_ARCHIVE_BLOCKED']);
+      expect(r.body.errors.map((e: any) => [e.message, e.module])).toContainEqual([
+        'UNIT_HAS_BALANCE',
+        'billing',
+      ]);
+    }
+    // paid in full: balance 0
+    await ledgerOf(w, w.unit(1).id, 0, 538000, 3);
+    expect((await archive(w, 1)).status).toBe(200);
+    expect((await archive(w, 3)).status).toBe(200);
+  });
+
+  it('a READY run item blocks the archive until the run is ISSUED, CANCELLED or FAILED', async () => {
+    const w = await ledgerSociety();
+    const run = await BillingRun.create({
+      societyId: w.society.id!,
+      runLabel: 'BR-2026-11',
+      runType: 'REGULAR',
+      cycle: 'MONTHLY',
+      periodStart: '2026-11-01',
+      periodEnd: '2026-11-30',
+      billDate: '2026-11-01',
+      scopeType: 'ALL_UNITS',
+      status: 'PREVIEW',
+      activeKey: 'REG:2026-11-01',
+      totalPaise: 0,
+      version: 1,
+    } as never);
+    const item = await BillingRunItem.create({
+      societyId: w.society.id!,
+      billingRunId: run.id!,
+      unitId: w.unit(1).id,
+      unitLabel: w.unit(1).label,
+      itemKey: `${w.unit(1).id}:0`,
+      status: 'READY',
+      linesSnapshot: [],
+      version: 1,
+    } as never);
+    const blocked = await archive(w, 1);
+    expect([blocked.status, blocked.body.code]).toEqual([409, 'UNIT_ARCHIVE_BLOCKED']);
+    expect(blocked.body.errors.map((e: any) => e.message)).toContain('UNIT_HAS_BALANCE');
+    const guard = (action: 'ARCHIVE' | 'DELETE') =>
+      sequelize.transaction(t => billingUnitGuard(w.society.id!, w.unit(1).id, action, t));
+    expect(await guard('ARCHIVE')).toBe('UNIT_HAS_BALANCE');
+    expect(await guard('DELETE')).toBe('UNIT_HAS_BALANCE');
+    for (const status of ['ISSUED', 'CANCELLED', 'FAILED']) {
+      await run.update({ status, activeKey: null } as never);
+      expect(await guard('ARCHIVE'), status).toBeNull();
+      await run.update({ status: 'PREVIEW', activeKey: 'REG:2026-11-01' } as never);
+    }
+    await item.update({ status: 'EXCLUDED' } as never);
+    expect(await guard('ARCHIVE')).toBeNull();
+    expect((await archive(w, 1)).status).toBe(200);
+  });
+
+  it('T11-39 the BILLING onboarding check: not done, then done after the first approved rule', async () => {
+    const w = await ledgerSociety();
+    const other = await ledgerSociety();
+    const step = async () =>
+      ((await w.c('get', '/onboarding')).body.data.steps as any[]).find(x => x.stepKey === 'BILLING');
+    expect(await step()).toMatchObject({ checkState: 'FAIL', summary: 'No approved billing rule yet' });
+    const head = await ChargeHead.create({
+      societyId: w.society.id!,
+      key: 'MAINTENANCE',
+      name: 'Maintenance',
+      description: null,
+      headType: 'MAINTENANCE',
+      payerRouting: 'BILL_TO',
+      gstTreatment: 'NONE',
+      sacCode: null,
+      prorate: true,
+      interestBearing: true,
+      ledgerAccountCode: '4100',
+      fundId: null,
+      isSystem: false,
+      status: 'ACTIVE',
+      sortOrder: 1,
+      createdBy: null,
+      updatedBy: null,
+      version: 1,
+    });
+    const rule = await BillingRule.create({
+      societyId: w.society.id!,
+      chargeHeadId: head.id!,
+      name: 'Maintenance',
+      scopeType: 'ALL_UNITS',
+      scopeValues: null,
+      status: 'ACTIVE',
+      sortOrder: 1,
+      createdBy: null,
+      updatedBy: null,
+      version: 1,
+    });
+    const version = (status: string) =>
+      BillingRuleVersion.create({
+        societyId: w.society.id!,
+        billingRuleId: rule.id!,
+        versionNo: status === 'APPROVED' ? 2 : 1,
+        rateType: 'FLAT_PER_UNIT',
+        amountPaise: 350000,
+        ratePerSqftPaise: null,
+        unitTypeRates: null,
+        meterType: null,
+        slabs: null,
+        minimumChargePaise: null,
+        missingReadingPolicy: null,
+        billSplitRuleId: null,
+        percent: null,
+        baseChargeHeadIds: null,
+        effectiveFrom: '2026-04-01',
+        effectiveTo: null,
+        status,
+        reason: 'Initial rate',
+        resolutionRef: null,
+        approvalRequestId: null,
+        approvedBy: null,
+        approvedAt: null,
+        rejectedReason: null,
+        createdBy: null,
+        updatedBy: null,
+      } as never);
+    await version('PENDING_APPROVAL'); // a rule with only a pending version is not approved
+    expect((await step()).summary).toBe('No approved billing rule yet');
+    await version('APPROVED');
+    expect(await step()).toMatchObject({ checkState: 'PASS', summary: '1 billing rule approved' });
+    await rule.update({ status: 'ARCHIVED' });
+    expect((await step()).summary).toBe('No approved billing rule yet');
+    await rule.update({ status: 'ACTIVE' });
+    await head.update({ status: 'ARCHIVED' });
+    expect((await step()).checkState).toBe('FAIL'); // no ACTIVE charge head
+    void other;
   });
 });

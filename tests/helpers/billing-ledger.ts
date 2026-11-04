@@ -4,6 +4,7 @@ import { registerBilling } from '../../src/modules/billing/billing.public';
 import { setBillingPorts } from '../../src/modules/billing/billing.ports';
 import { resetResidents, residentSociety } from './residents';
 import type { Society } from '../../src/models';
+import type { Ctx } from '../../src/types/context';
 
 /** Module 11.2 fixtures: the module 09 reset, then the placeholder billing ports and the module 11 registrations. */
 export async function resetLedger(): Promise<void> {
@@ -17,7 +18,7 @@ export const ledgerSociety = (o: { flats?: number; role?: string } = {}) =>
   residentSociety({ flats: 3, ...o });
 
 /** A request context of a society for the service functions. */
-export const societyCtx = (society: Society, userId?: number) => ({
+export const societyCtx = (society: Society, userId?: number): Ctx => ({
   requestId: 'test',
   ip: '',
   userAgent: '',
