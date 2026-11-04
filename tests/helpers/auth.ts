@@ -56,6 +56,18 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    'opening_balances',
+    'unit_ledger_entries',
+    'invoice_lines',
+    'billing_notes',
+    'billing_run_items',
+    'invoices',
+    'billing_runs',
+    'late_fee_policies',
+    'billing_rule_versions',
+    'billing_rules',
+    'bill_split_rules',
+    'charge_heads',
     'committee_terms',
     'emergency_profiles',
     'pets',
