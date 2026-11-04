@@ -186,3 +186,86 @@ POST; the POST is a write for the society state guard, so a suspended society ge
 `lockTerm`, `seatsForAudit`, `emitChanged` and `announce` (`committee.notify.ts`) are reusable; `committee.public.ts` is where 10.3
 registers its jobs and adds its hooks. `activate` writes `handoverChecklist` with the `H<n>` ids that the checklist routes expect;
 10.3 owns `handoverCompletedAt`, `lastReminderDays` (activation does not touch it) and the seat `flags`.
+
+## 10.3: hand-over checklist, jobs, seat reconciliation, seat usage and the resident pages
+
+Spec sections 3 (F09, F10, F11, F14 to F17, F19), 5 (BR-10-23 to BR-10-29), 8.10 to 8.13, 9.1, 9.3, 9.4 and 10. No new table,
+no migration, no new env variable and no new permission key. One small edit outside the module: `committee.reminderDays`
+(already in the module 08 registry) was added to the `SettingTypes` map so that it reads typed.
+
+### Routes (6)
+
+| Route                                               | Permission                                        | Entitlement                         | Idempotency-Key |
+| --------------------------------------------------- | ------------------------------------------------- | ----------------------------------- | --------------- |
+| `GET /committee/terms/:id/handover`                 | `settings.members.view`                           | `governance.committee_terms` (read) | no              |
+| `POST /committee/terms/:id/handover/items`          | `settings.members.edit`                           | `governance.committee_terms`        | yes             |
+| `PATCH /committee/terms/:id/handover/items/:itemId` | `settings.members.view` + BR-10-27 in the service | `governance.committee_terms`        | no              |
+| `GET /committee/seat-usage`                         | `settings.members.view`                           | none                                | no              |
+| `GET /me/committee`                                 | `resident.home.view`                              | `governance.committee_terms` (read) | no              |
+| `GET /me/committee/history`                         | `resident.home.view`                              | `governance.committee_terms` (read) | no              |
+
+### Files
+
+`committee.handover.ts` (8.10: view, add, update; the checklist is the term's `handoverChecklist` JSON), `committee.jobs.ts` (the
+three jobs and their per-society steps `autoExpireFor`, `sendRemindersFor`, `reconcileSeatsFor`), `committee.staff.ts` (8.11),
+`committee.resident.ts` (8.12 and 8.13). `committee.planner.ts` got the pure `reminderThreshold`, `handoverReminderDay`, `seatFlags`
+and `sameFlags`; `committee.notify.ts` got `officerIds`, `formatYmd` and `sendNow` (jobs have no transaction to wait for);
+`committee.templates.ts` the four templates of section 10 that 10.1 and 10.2 did not need; `committee.ports.ts` the files port.
+
+### Behaviour worth knowing
+
+- **Checklist (BR-10-26, BR-10-27).** Only an ACTIVE or EXPIRED term accepts changes (`409 INVALID_STATE` otherwise, also for add).
+  An update locks the term row, never bumps `version` and sets `updatedByUserId` and `updatedAt` on the item. `handoverCompletedAt`
+  is set when every item is DONE or NOT_APPLICABLE (one `committee.handover.completed` audit row on the flip), cleared when one goes back
+  to PENDING or an item is added. NOT_APPLICABLE needs a note of 5 to 300 characters (`400 VALIDATION_FAILED`). Order of checks on
+  the PATCH: term (404), item (404 `HANDOVER_ITEM_NOT_FOUND`), BR-10-27 (403: `settings.members.edit`, or the SEATED holder of the item's
+  `ownerDesignation`), state (409), note, files (422 `FILE_NOT_LINKABLE`). `canEdit` in the GET is that rule and is false on a
+  DRAFT or ENDED term. `ownerName` is the seated holder of the owner designation (null if nobody sits there).
+- **Evidence files.** Full replacement; only ids that are new on the item go to the port. Placeholder: see below.
+- **Reminders (`members:term-reminders`, 09:00).** For the current term: `reminderThreshold` picks the smallest threshold `d` of
+  `committee.reminderDays` (plus 0 once `endDate < today`) with `daysLeft <= d` and `lastReminderDays` NULL or `> d`; the guarded
+  `UPDATE ... WHERE lastReminderDays IS NULL OR lastReminderDays > d` decides who notifies (affected rows = 1), so a second run, a retry or
+  two workers send nothing twice. `committee.term_expiring` (data `daysLeft`, `endDate` as `DD MMM YYYY`) and `committee.term_expired`
+  (threshold 0, every plan) go to the officers (seated Chairman and Secretary plus `usersWithPermission('settings.members.edit')`). The same job sends
+  `committee.handover_pending` on day 15 and 30 after `tookChargeOn` while `handoverCompletedAt` is NULL and an item is PENDING (guarded by
+  `lastHandoverReminderDay < day`), to the seated holders of the pending items' owner designations and the officers. These two
+  notification kinds write no audit row (section 9.3 lists no action for them).
+- **Auto-expiry (`members:term-auto-expiry`, 00:15).** Only when `iam.committee_term_auto_expiry` is on (Standard and above):
+  `UPDATE ... SET status = 'EXPIRED', expiredAt, version = version + 1 WHERE status = 'ACTIVE' AND endDate < today`; audit
+  `committee.term.expired` (actor `system`) and `committee.changed` (reason `EXPIRED`) only when one row changed. The `version` bump is
+  an addition to section 9.1 so that an admin who opened the term before the job gets `409 STALE_VERSION` instead of editing a stale
+  status. Roles and seats stay. A Starter term stays ACTIVE and shows `isOverdue` and the CARETAKER banner from the dates (module 10.1).
+- **Reconcile (`members:reconcile-seats`, 02:00).** Per SEATED seat of the current term (BR-10-25): no ACTIVE or SUSPENDED membership ->
+  `LEFT`, `MEMBERSHIP_ENDED`, `toDate = today`, flags cleared (no module 03 call); SUSPENDED -> `MEMBERSHIP_SUSPENDED`; role other than
+  `DESIGNATION_ROLE[designation]` -> `ROLE_MISMATCH`; `ownersOnly` and no active OWNER link -> `NOT_OWNER`. Rewrites the term under its row
+  lock only when something changed (`version + 1`, audit `committee.seat.vacated` and `committee.seat.flagged`, actor `system`, realtime
+  reason `CHANGED`). `committee.seat_needs_attention` goes to the officers only when a seat was closed or a flag was newly set or changed to a
+  non-empty set; clearing a flag is silent. Flags never touch roles.
+- **Scheduling.** `registerCommitteeJobs()` (called by `registerCommittee()`, so `server.ts`, `worker.ts` and the seed script have it) registers queue
+  `members` (concurrency 2), three processors and three `dailyAtIst` repeatables (`00:15`, `02:00`, `09:00`). The processors loop over the societies
+  whose status allows ordinary jobs (`isJobAllowed(status, 'normal')`, not CLOSED), like module 09; one society failing is logged and skipped. There
+  is no `core:dispatch-society-jobs` dispatcher in this code base, and every society is IST for the schedule.
+- **Seat meter (8.11).** `used` is the count of ACTIVE or SUSPENDED memberships whose role has `consumesSeat` (module 03 `members.listForSociety`), `limit` is
+  module 04 `getLimit('limit.admin_seats')`. `pendingStaffInvitations` counts PENDING, unexpired invitations to seat-consuming staff roles. The
+  response also carries `staffRoles` (invite presets, F15) and `staff` (the table of the Staff and admins tab); both are additions to the spec shape.
+- **Resident pages (8.12, 8.13).** Seats of the current term in designation order (members by name); a MEMBER with `showOnResidentPage = false` is
+  hidden, the vacancies count the hidden seat as occupied. Mobile masked unless `residents.contacts.view` or the viewer's own. `visible: false` when
+  `committee.showOnResidentApp` is off (history then returns an empty list). History: ENDED terms (including historical), by `endDate` descending,
+  office bearers (not MEMBER) with all their seats, so a redesignation shows both rows.
+
+### Placeholders in 10.3
+
+- Module 01 `files.service.link(ctx, fileIds, 'committee_term', termId, 'HANDOVER_EVIDENCE')`: `committeePorts().files.linkEvidence`. The placeholder
+  accepts a CLEAN file of the society with purpose `HANDOVER_EVIDENCE` from the memory store `placeholderFiles` (module 05) and links nothing; module
+  01 must also let `settings.members.view` holders of the society download these PRIVATE files (7.5).
+- Module 16: the `lib/notify.ts` stand-in. `committee.term_expiring` (EMAIL and PUSH), `committee.term_expired` (EMAIL), `committee.handover_pending`
+  and `committee.seat_needs_attention` (in-app in the spec; declared PUSH here, so they render a link and send nothing) have templates in
+  `committee.templates.ts`. In-app delivery, and the push for the two resident-facing ones, wait for module 16.
+- Module 14 and 22 ports: unchanged from 10.1 and 10.2.
+
+### Demo seed
+
+Green Park CHS now has "Managing Committee 2025–2026" (ACTIVE, strength 3) with the end date 24 days after the seed day (TERM_ENDING banner), a
+half-done checklist (H1 to H5 DONE, H7 NOT_APPLICABLE, four PENDING) and an attention flag `MEMBERSHIP_SUSPENDED` on the treasurer's seat (a stored flag; the
+reconcile job recomputes it from module 03, so it vanishes after the next run). A term seeded by 10.1 ("2025–2030", untouched) is tuned to this once.
+Sky Heights is unchanged (all done except H8).
