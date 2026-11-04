@@ -9,7 +9,7 @@ import {
   qrMatrix,
   type PdfDocument,
 } from '../../../src/modules/billing/billing.pdf.render';
-import { renderPdfFor } from '../../../src/modules/billing/billing.pdf.service';
+import { billPageUrl, renderPdfFor } from '../../../src/modules/billing/billing.pdf.service';
 import { billingPortCalls } from '../../../src/modules/billing/billing.ports';
 import { resetLogins } from '../../helpers/access';
 import { featureOff } from '../../helpers/society-setup';
@@ -157,6 +157,13 @@ describe('the billing:render-pdf job and the URLs (9.1, 8.13)', () => {
     expect(file.name).not.toMatch(/Owner|A-101/);
     expect(text(file.content)).toContain('INV/2026-27/000001');
     expect(text(file.content)).toContain('Owner of A-101');
+    // "Pay online" and the QR code go to the resident app's bill page, not the first (platform) origin
+    const payLink = `https://my.societyapp.in/resident/bills/${inv.id}`;
+    expect(billPageUrl(inv.id)).toBe(payLink);
+    expect(new URL(payLink).host).toBe('my.societyapp.in');
+    expect(text(file.content)).toContain(payLink);
+    expect(text(file.content)).not.toContain('platform.societyapp.in');
+    expect(text(file.content)).not.toContain('/pay/invoices/');
     const r = await urlOf(w, inv.id);
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual({

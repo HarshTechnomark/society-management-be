@@ -21,6 +21,15 @@ export const PDF_ATTEMPTS = 5;
 export const PDF_RETRY_MINUTES = 5;
 const fileName = (no: string) => `${no.replace(/\//g, '-')}.pdf`;
 
+/** The resident app origin: the APP_ORIGINS entry whose first host label is `my`, else the first origin. */
+function residentOrigin(): string {
+  const origins = env().appOrigins;
+  return origins.find(o => new URL(o).hostname.split('.')[0] === 'my') ?? origins[0] ?? '';
+}
+
+/** "Pay online" link and QR code target: the resident bill page (residents sign in and pay there). */
+export const billPageUrl = (invoiceId: number): string => `${residentOrigin()}/resident/bills/${invoiceId}`;
+
 async function societyBlock(societyId: number) {
   const s = await Society.findByPk(societyId);
   return {
@@ -52,7 +61,7 @@ async function documentOfInvoice(inv: Invoice): Promise<PdfDocument> {
     taxed: Number(inv.taxPaise) > 0,
     previousDuesPaise: Number(inv.previousDuesPaise),
     outstandingPaise: Number(inv.outstandingPaise),
-    payLink: `${env().appOrigins[0] ?? ''}/pay/invoices/${inv.id}`,
+    payLink: billPageUrl(Number(inv.id)),
   };
 }
 
