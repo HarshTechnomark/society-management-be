@@ -27,6 +27,8 @@ import { registerLedgerHooks } from './billing.ledger.hooks';
 // 11.5: late fees, reminders, dues and report readers
 import { registerBillingDues } from './billing.latefee.jobs';
 import { billingReports } from './billing.reports';
+// 11.4: invoices, notes and PDFs
+import { registerBillingInvoices } from './billing.pdf.jobs';
 
 export { unitLedger, invoices };
 /** 11.5: read-only report readers for module 24 (section 8.25). */
@@ -70,4 +72,5 @@ export function registerBilling(): void {
   // 11.2: real unitLedger.balance for module 09 duesPaise, module 08 BILLING check and UNIT_HAS_BALANCE guard
   registerLedgerHooks();
   registerBillingDues(); // 11.5: late fee, reminder and reconcile jobs
+  registerBillingInvoices(); // 11.4: render-pdf job, CREDIT_NOTE / WRITE_OFF / INVOICE_CANCEL approval types
 }

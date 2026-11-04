@@ -291,8 +291,20 @@ export async function createAdHoc(
     throw new ValidationError([{ field: 'dueDate', message: 'The due date cannot be in the past' }]);
   let head = await ChargeHead.findOne({ where: { societyId, key: input.chargeHeadKey }, transaction: t });
   if (!head) {
-    await ensureSeeded(societyId, t);
-    head = await ChargeHead.findOne({ where: { societyId, key: input.chargeHeadKey }, transaction: t });
+    // seeded outside the caller's transaction (its own commit), so parallel first calls do not deadlock on the seed rows
+    for (let attempt = 1; attempt <= 3; attempt++)
+      try {
+        await ensureSeeded(societyId);
+        break;
+      } catch (err) {
+        if (attempt === 3 || !/deadlock/i.test(String((err as Error).message))) throw err;
+      }
+    // a locking read sees the heads another transaction has just seeded and committed
+    head = await ChargeHead.findOne({
+      where: { societyId, key: input.chargeHeadKey },
+      transaction: t,
+      lock: t.LOCK.SHARE,
+    });
   }
   if (!head || head.isSystem)
     throw new UnprocessableError(

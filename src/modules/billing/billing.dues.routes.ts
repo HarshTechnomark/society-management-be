@@ -51,5 +51,3 @@ r.post(
   idempotency(),
   c.bulkRemind,
 );
-r.get('/billing/notes', society(), can(P.view), validate({ query: s.notesQuery }), c.notes);
-r.get('/billing/notes/:id', society(), can(P.view), validate({ params: s.idParam }), c.note);

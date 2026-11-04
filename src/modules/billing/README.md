@@ -291,3 +291,36 @@ matrix reads them from the route table. Run: `npx vitest run tests/modules/billi
 - **Reconcile** (`billing:reconcile`, 03:00 IST, tag health): invoice identity, total vs lines, line credits, ledger vs open invoices minus module 12 advance, number gaps per series; mismatches make the job fail with ids only.
 - **Placeholders.** Ports `payments.listAllocationsForInvoice` (now with `allocatedOn`), `payments.chequeReturnCount`, `payments.advanceBalance`, and the new `reports.touch` (module 24); module 16 notifications port; module 01 download URL (`societyPorts().files`).
 - **Tests.** `latefee.test.ts`, `reminders.test.ts`, `dues.test.ts`, `resident.test.ts`, `reports.test.ts` with `tests/helpers/billing-dues.ts`.
+
+## 11.4 Invoices, ad-hoc invoices, credit and debit notes, cancellation, write-off, PDFs
+
+- **Files.** `billing.invoices.*` (`shared`, `build` pure line builder, `detail` list/export/detail/readers, `alloc`, `adhoc`, `effects`, `funds`, `templates`, `service` = the `invoices.*` object,
+  `routes`, `controller`, `validation`), `billing.notes.*` (`shared`, `credit`, `debit`, `cancel`, `queries`, `approvals-hook`), `billing.pdf.*` (`render`, `service`, `jobs`).
+  `billing.invoices.routes.ts` is mounted with one line in `app.ts`; `registerBilling()` calls `registerBillingInvoices()` (the `billing:render-pdf` processor and the approval types).
+  Tests: `tests/modules/billing/{invoices,notes,pdf}.test.ts`, helper `tests/helpers/billing-invoices.ts`.
+- **Routes** (all `/api/v1`, marker order: society, permission, entitlement, validate, step-up, idempotency): `GET /invoices`, `GET /invoices/export` (CSV, 10 an hour, audited), `GET /invoices/:id`,
+  `GET /invoices/:id/pdf-url`, `POST /invoices` (ad hoc), `POST /invoices/:id/credit-notes|debit-notes|cancel|write-off`, and (8.19) `GET /billing/notes`, `GET /billing/notes/:id`,
+  `GET /billing/notes/:id/pdf-url`, `PATCH /billing/notes/:id`, `POST /billing/notes/:id/withdraw`. `remind` and `reminders` are 11.5.
+- **Credit notes.** A credit note line points at the line it credits (`refInvoiceLineId`) and a line's `creditedPaise` is the sum of the absolute amounts of those note lines (pending ones too: that is the
+  reservation). This includes CGST, SGST and round-off lines, so rejecting a note is the exact reverse and a cancellation note simply credits every open line. Tax of a user note is
+  `percentOf(taxable credited, 9 %)` per half, or the remaining tax of the invoice and its debit notes once the whole taxable value is credited; it is spread over the tax lines that still have room.
+  A credit that would exceed what the invoice still owes (only possible through a negative round-off line) is refused with `CREDIT_EXCEEDS_LINE`. A `CANCELLATION` note keeps `roundOffPaise = 0` (the
+  column CHECK) and carries the round-off in a `ROUND_OFF` line and in `totalPaise`. After a write-off a cancellation credits `total + debited - credited` (the difference is taken off the last charge lines).
+- **Issue of a credit note** (`issueCreditNote`): `CN` number, `payments.onInvoiceCancelled` first when the credit exceeds what is owed (then the row is re-read: module 12 calls `reverseAllocation`),
+  `creditedPaise`, `writtenOffPaise`, status, `nonInterestBearingPaise` (BR-11-47 recomputed from the lines), ledger `CREDIT_NOTE`, journal (mirror of the invoice, write-off Dr 5900 / Cr 1300),
+  audit, realtime, PDF job and notification after commit, `payments.queueAdvanceApply` after commit when allocations were released. Module 14 auto-approval (`request` returns `APPROVED`) issues inside the request.
+- **Debit notes.** `issueDebitNote(ctx, societyId, lockedInvoice, input, t)` in `billing.notes.debit.ts` is the shared core (the route and the 11.5 late fee job): `DN` number, GST of BR-11-31 (follows the parent's
+  `gstApplied`), round-off, `debitedPaise`, status (a PAID invoice reopens), ledger, journal, `dedupeKey`, interest window and policy id. The caller locks the unit row and the invoice first.
+- **Approvals (placeholder).** `billing.notes.approvals-hook.ts` registers `CREDIT_NOTE`, `WRITE_OFF` (entity `billing_note`) and `INVOICE_CANCEL` (entity `invoice`) and exports `approve(id, ctx)`, `reject(id, reason, ctx)` and
+  `requestChanges(id, ctx)` like the other hooks (maker-checker enforced). The placeholder `approvals.lockOpenForEntity` now finds a still-pending request it created (`billing.ports.ts`), which is how
+  `INVOICE_CANCEL_PENDING` and `APPROVAL_ALREADY_PENDING` work until module 14 exists. The cancellation reason is kept in the `cancel_requested` audit row only; the approved callback has no payload.
+- **Ad-hoc invoices.** One core (`issueAdHoc`) for `invoices.createAdHoc` and `POST /invoices`: owner heads go to the owner party, others to the module 09 bill-to party on today's date; `MIXED_BILL_TO` on the route; GST per
+  BR-11-31; `COLLECTION` heads take their fund from `registerFundResolver`. `createAdHoc` seeds the standard heads (own commit) when its key is missing. It reads settings and residents outside the caller's transaction, so
+  at most about 20 parallel callers fit the connection pool (T11-23 is tested 10 at a time).
+- **Allocation.** `applyAllocation`/`reverseAllocation` lock the open-request check and the invoice, keep `paid`, `outstanding`, status and `settledOn` consistent and emit `billing.invoice.updated` and `billing.dues.changed`.
+  A cancelled invoice takes no reversal (module 12 releases before the cancellation note is issued).
+- **PDF.** `billing.pdf.render.ts` reuses module 06's writer and `amountInWords`; the QR is drawn with `qrcode-generator` 2.0.4 (pure JavaScript, the only new dependency) and encodes the pay link
+  `<first APP_ORIGINS entry>/pay/invoices/<id>` (a UPI QR needs the society's UPI id from module 12). The job stores `INVOICE_PDF` files through the module 05 placeholder file store (`societies.ports.ts` purpose union extended)
+  and retries 5 times in the job; `FAILED` notifies `finance.billing.edit` holders, and asking for the URL of a failed PDF re-queues it after 5 minutes. The issue job of 11.3 now enqueues the render job and calls
+  `payments.queueAdvanceApply` after each committed batch of 100 items.
+- **Audit and realtime.** As section 9.3 and 9.4; audit keys avoid `code`, `token` and `secret`. Journal vouchers `INVOICE`, `DEBIT_NOTE`, `CREDIT_NOTE`, `WRITE_OFF`, all balanced (module 13 port).

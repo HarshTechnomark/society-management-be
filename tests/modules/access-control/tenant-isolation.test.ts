@@ -320,6 +320,17 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /me/invoices/:id',
       'GET /me/invoices/:id/pdf-url',
       'GET /me/units/:unitId/statement',
+      // module 11 (11.4): another society's invoice id is 404 INVOICE_NOT_FOUND and another society's note id is 404 NOTE_NOT_FOUND on every invoice and note route (tests/modules/billing/invoices.test.ts and notes.test.ts, T11-40)
+      'GET /invoices/:id',
+      'GET /invoices/:id/pdf-url',
+      'POST /invoices/:id/credit-notes',
+      'POST /invoices/:id/debit-notes',
+      'POST /invoices/:id/cancel',
+      'POST /invoices/:id/write-off',
+      'GET /billing/notes/:id',
+      'GET /billing/notes/:id/pdf-url',
+      'PATCH /billing/notes/:id',
+      'POST /billing/notes/:id/withdraw',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

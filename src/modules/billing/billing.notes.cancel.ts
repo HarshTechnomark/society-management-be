@@ -124,7 +124,8 @@ export async function cancelInvoiceNow(
     t,
   );
   emitInvoiceChanged(t, { ...invoice.get(), societyId });
-  if (hadPaid) queueAdvanceApplyAfterCommit(t, societyId, [Number(invoice.unitId)]);
+  // the credit note issue queues it when it released allocations; without a note this call did
+  if (hadPaid && !noteId) queueAdvanceApplyAfterCommit(t, societyId, [Number(invoice.unitId)]);
   notifyBillAfterCommit(
     t,
     'billing.invoice_cancelled',
