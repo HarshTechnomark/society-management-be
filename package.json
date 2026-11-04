@@ -52,6 +52,7 @@
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.6",
     "pino": "^10.4.0",
+    "qrcode-generator": "2.0.4",
     "sequelize": "^6.37.8",
     "zod": "^4.6.7"
   },

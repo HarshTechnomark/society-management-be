@@ -24,6 +24,8 @@ import { policyFor } from './billing.latefee-policy.service';
 import { versionEffectiveOn } from './billing.rules.service';
 import { registerSetupApprovals } from './billing.rules.approvals-hook';
 import { registerLedgerHooks } from './billing.ledger.hooks';
+// 11.4: invoices, notes and PDFs
+import { registerBillingInvoices } from './billing.pdf.jobs';
 
 export { unitLedger, invoices };
 export { chargeHeads };
@@ -63,4 +65,5 @@ export function registerBilling(): void {
   registerSetupApprovals(); // 11.1: BILLING_RULE_CHANGE and LATE_FEE_POLICY_CHANGE
   // 11.2: real unitLedger.balance for module 09 duesPaise, module 08 BILLING check and UNIT_HAS_BALANCE guard
   registerLedgerHooks();
+  registerBillingInvoices(); // 11.4: render-pdf job, CREDIT_NOTE / WRITE_OFF / INVOICE_CANCEL approval types
 }

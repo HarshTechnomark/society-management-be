@@ -17,6 +17,7 @@ import { logger } from '../../lib/logger';
 import type { Ctx } from '../../types/context';
 import { systemCtx } from '../../types/context';
 import { audit } from '../../utils/audit';
+import { enqueueRenderPdf } from './billing.invoices.effects';
 import { UnprocessableError } from '../../utils/errors';
 import { financialYearOf, nextNumber } from '../../utils/numberSequences';
 import { residents } from '../residents/residents.public';
@@ -308,6 +309,7 @@ export async function issueItem(
       });
       emitToRoom(`unit:${item.unitId}`, REALTIME.duesChanged, { unitId: item.unitId });
     });
+    enqueueRenderPdf(t, { kind: 'invoice', id: invoice.id!, societyId });
     afterCommit.push(() =>
       notifyIssued(societyId, item.unitId, item.billToResidentId!, item.billToRelation!, invoiceDate, {
         invoiceNo,
@@ -403,6 +405,10 @@ export async function issueRun(runId: number): Promise<void> {
     });
     for (let i = 0; i < ids.length; i += ISSUE_BATCH_ITEMS) {
       for (const row of ids.slice(i, i + ISSUE_BATCH_ITEMS)) await issueItem(run, row.id!, s, ctx, actor);
+      await queueAdvanceForBatch(
+        run.societyId,
+        ids.slice(i, i + ISSUE_BATCH_ITEMS).map(r => r.id!),
+      );
       run = (await BillingRun.findByPk(runId))!;
       emitRunUpdated(run);
     }
@@ -414,6 +420,21 @@ export async function issueRun(runId: number): Promise<void> {
     throw err;
   } finally {
     activeIssues.delete(runId);
+  }
+}
+
+/** BR-11-37 / F18: after each committed batch, module 12 applies the advances of the flats that were just billed. */
+async function queueAdvanceForBatch(societyId: number, itemIds: number[]): Promise<void> {
+  const rows = await BillingRunItem.findAll({
+    where: { id: { [Op.in]: itemIds }, status: 'ISSUED' },
+    attributes: ['unitId'],
+  });
+  const unitIds = [...new Set(rows.map(r => r.unitId))];
+  if (!unitIds.length) return;
+  try {
+    await billingPorts().payments.queueAdvanceApply(societyId, unitIds);
+  } catch (err) {
+    logger.error({ err, societyId }, 'billing queueAdvanceApply failed');
   }
 }
 

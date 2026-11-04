@@ -38,7 +38,7 @@ export interface SocietyPorts {
   files: {
     storeSystemFile(input: {
       societyId: number;
-      purpose: 'EXPORT_FILE' | 'PLATFORM_INVOICE_PDF';
+      purpose: 'EXPORT_FILE' | 'PLATFORM_INVOICE_PDF' | 'INVOICE_PDF';
       content: Buffer;
       name: string;
       contentType: string;
