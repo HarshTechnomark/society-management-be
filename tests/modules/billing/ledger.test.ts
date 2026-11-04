@@ -15,7 +15,7 @@ import { billingUnitGuard } from '../../../src/modules/billing/billing.ledger.ho
 import { registerBilling } from '../../../src/modules/billing/billing.public';
 import { drainQueues } from '../../../src/lib/queue';
 import { unitLedger } from '../../../src/modules/billing/billing.public';
-import { systemCtx, type Ctx } from '../../../src/types/context';
+import { systemCtx } from '../../../src/types/context';
 import { ledgerSociety, resetLedger, societyCtx } from '../../helpers/billing-ledger';
 
 afterAll(async () => {
@@ -24,7 +24,7 @@ afterAll(async () => {
 });
 beforeEach(resetLedger);
 
-const post = (ctx: Ctx, unitId: number, o: Record<string, unknown>) =>
+const post = (ctx: Parameters<typeof unitLedger.post>[0], unitId: number, o: Record<string, unknown>) =>
   sequelize.transaction(t =>
     unitLedger.post(
       ctx,

@@ -17,6 +17,7 @@ import { assertBillingPortsReady, registerMeterSource } from './billing.ports';
 import { PURGE_TABLES, deleteRetainedBilling, purgeBilling } from './billing.purge';
 import { invoices } from './billing.invoices.service';
 import { unitLedger } from './billing.ledger.service';
+import { registerBillingRuns } from './billing.runs.jobs';
 // 11.1: charge heads, rules, split and late fee policy configuration
 import { chargeHeads } from './billing.heads.service';
 import { policyFor } from './billing.latefee-policy.service';
@@ -58,6 +59,7 @@ export function registerBilling(): void {
   registerPurgeHandler({ module: 'billing', order: 110, tables: PURGE_TABLES, purge: purgeBilling });
   registerRetentionExpiryHandler({ module: 'billing', order: 110, deleteRetained: deleteRetainedBilling });
   registerQueue(BILLING_QUEUE, 'Billing: runs, issue, PDFs, late fees, reminders', 4);
+  registerBillingRuns(); // 11.3: compute and issue jobs, BILLING_RUN_PUBLISH approval type
   registerSetupApprovals(); // 11.1: BILLING_RULE_CHANGE and LATE_FEE_POLICY_CHANGE
   // 11.2: real unitLedger.balance for module 09 duesPaise, module 08 BILLING check and UNIT_HAS_BALANCE guard
   registerLedgerHooks();

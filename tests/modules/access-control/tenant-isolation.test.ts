@@ -304,6 +304,16 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /billing/units/:unitId/statement',
       'POST /billing/opening-balances/:id/reverse',
       'DELETE /billing/opening-balances/:id',
+      // module 11 (11.3): another society's billing run id (or an item of it) is 404 RUN_NOT_FOUND on every run route (tests/modules/billing/runs.test.ts, T11-40)
+      'GET /billing/runs/:id',
+      'GET /billing/runs/:id/items',
+      'PATCH /billing/runs/:id',
+      'POST /billing/runs/:id/recompute',
+      'POST /billing/runs/:id/items/:itemId/exclude',
+      'POST /billing/runs/:id/items/:itemId/include',
+      'POST /billing/runs/:id/publish',
+      'POST /billing/runs/:id/cancel',
+      'POST /billing/runs/:id/resume-issue',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

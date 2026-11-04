@@ -12,10 +12,11 @@ describe('route registry of 11.1 (section 2, 8)', () => {
   it('every route has a society marker, the permission, the entitlements and the idempotency marker of the spec', () => {
     const routes = listRoutes(app).filter(
       r =>
-        r.path.startsWith('/billing/charge-heads') ||
-        r.path.startsWith('/billing/rules') ||
-        r.path.startsWith('/billing/split-rules') ||
-        r.path.startsWith('/billing/late-fee-policies'),
+        r.path !== '/billing/rules/simulate' && // 11.3, tests/modules/billing/sim.test.ts
+        (r.path.startsWith('/billing/charge-heads') ||
+          r.path.startsWith('/billing/rules') ||
+          r.path.startsWith('/billing/split-rules') ||
+          r.path.startsWith('/billing/late-fee-policies')),
     );
     const found = Object.fromEntries(routes.map(r => [`${r.method} ${r.path}`, r]));
     const V = 'settings.billing_rules.view';
