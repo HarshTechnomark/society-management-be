@@ -5,6 +5,7 @@ import { drainQueues } from '../../../src/lib/queue';
 import { touchDues } from '../../../src/modules/billing/billing.dues.cache';
 import { efficiencyOf } from '../../../src/modules/billing/billing.dues.queries';
 import { runLateFeesForSociety } from '../../../src/modules/billing/billing.latefee.service';
+import { seedBillingDues } from '../../../seeders/billing-dues';
 import { memberOf } from '../../helpers/society-setup';
 import {
   duesWorld,
@@ -229,5 +230,20 @@ describe('billing notes reads (8.19)', () => {
     expect(one.body.data.lines.map((l: any) => l.lineKind)).toEqual(['INTEREST', 'ROUND_OFF']);
     expect((await w.c('get', '/billing/notes/99999999')).status).toBe(404);
     expect((await w.c('get', '/billing/notes?noteType=BAD')).status).toBe(400);
+  });
+});
+
+describe('demo seed (seeders/billing-dues.ts)', () => {
+  it('creates one overdue invoice for Sky Heights once; the defaulter list and the dashboard show it', async () => {
+    const w = await duesWorld(3);
+    await w.society.update({ slug: 'sky-heights' });
+    const first = await seedBillingDues();
+    expect(first.created).toHaveLength(1);
+    const again = await seedBillingDues();
+    expect(again).toEqual({ created: [], skipped: ['sky-heights'] });
+    const d = await w.c('get', '/billing/defaulters');
+    expect(d.body.data.items).toHaveLength(1);
+    expect(d.body.data.items[0]).toMatchObject({ overduePaise: 1_250_000, daysOverdue: 105 });
+    expect((await w.c('get', '/billing/summary')).body.data.overdueFlats).toBe(1);
   });
 });

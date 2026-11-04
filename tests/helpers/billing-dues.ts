@@ -43,6 +43,8 @@ export interface InvoiceSpec {
   settledOn?: string | null;
   isDisputed?: boolean;
   headKey?: string;
+  billToRelation?: 'OWNER' | 'CO_OWNER' | 'TENANT';
+  ruleVersionId?: number | null;
 }
 
 /** An issued invoice with one CHARGE line of the head and the ledger debit. `outstanding` follows `paidPaise`. */
@@ -64,7 +66,7 @@ export async function makeInvoice(w: DuesWorld, s: InvoiceSpec): Promise<Invoice
     unitId: s.unit.id,
     unitLabel: s.unit.label,
     billToResidentId: s.billTo.residentId,
-    billToRelation: 'OWNER',
+    billToRelation: s.billToRelation ?? 'OWNER',
     billToName: s.billTo.name,
     periodStart,
     periodEnd: periodStart ? `${periodStart.slice(0, 7)}-30` : null,
@@ -118,7 +120,7 @@ export async function makeInvoice(w: DuesWorld, s: InvoiceSpec): Promise<Invoice
     ratePaise: null,
     amountPaise: total,
     isTaxable: false,
-    billingRuleVersionId: null,
+    billingRuleVersionId: s.ruleVersionId ?? null,
     periodFrom: null,
     periodTo: null,
     prorationDays: null,
@@ -154,6 +156,26 @@ export async function makeInvoice(w: DuesWorld, s: InvoiceSpec): Promise<Invoice
       t,
     ),
   );
+  if (paid > 0)
+    await sequelize.transaction(t =>
+      unitLedger.post(
+        {
+          ...systemCtx('t'),
+          society: { id: w.society.id!, name: '', status: 'ACTIVE', timezone: 'Asia/Kolkata', planKey: '' },
+        },
+        {
+          unitId: s.unit.id,
+          entryType: 'PAYMENT',
+          refType: 'payment',
+          refId: inv.id!,
+          debitPaise: 0,
+          creditPaise: paid,
+          date: s.settledOn ?? invoiceDate,
+          narration: `Receipt for ${inv.invoiceNo}`,
+        },
+        t,
+      ),
+    );
   return inv;
 }
 
