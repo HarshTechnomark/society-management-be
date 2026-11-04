@@ -277,6 +277,20 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'PATCH /me/ownership-transfers/:id',
       'POST /me/ownership-transfers/:id/submit',
       'POST /me/ownership-transfers/:id/cancel',
+      // module 10 (10.1): another society's committee term id is 404 COMMITTEE_TERM_NOT_FOUND on every route, seat routes included (tests/modules/committee/access.test.ts, T10-29)
+      'GET /committee/terms/:id',
+      'PATCH /committee/terms/:id',
+      'DELETE /committee/terms/:id',
+      'PATCH /committee/terms/:id/seats/:seatId',
+      // module 10 (10.2): activation preview, activate, changes preview and changes are 404 COMMITTEE_TERM_NOT_FOUND for another society's term (tests/modules/committee/activation.test.ts and changes.test.ts, T10-29)
+      'GET /committee/terms/:id/activation-preview',
+      'POST /committee/terms/:id/activate',
+      'POST /committee/terms/:id/changes/preview',
+      'POST /committee/terms/:id/changes',
+      // module 10 (10.3): the hand-over checklist routes are 404 COMMITTEE_TERM_NOT_FOUND for another society's term (tests/modules/committee/handover.test.ts, T10-29)
+      'GET /committee/terms/:id/handover',
+      'POST /committee/terms/:id/handover/items',
+      'PATCH /committee/terms/:id/handover/items/:itemId',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

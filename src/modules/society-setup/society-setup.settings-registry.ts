@@ -1106,5 +1106,12 @@ export interface SettingTypes {
   'approvals.bulkApproveBelowPaise': number;
   'committee.minStrength': number;
   'committee.maxStrength': number;
+  'committee.ownersOnly': boolean;
+  'committee.maxTermYears': number;
+  'committee.coOptionAllowed': boolean;
+  'committee.showOnResidentApp': boolean;
+  'committee.reminderDays': number[];
+  'committee.handoverDelegationDays': number;
+  'committee.handoverTemplate': { title: string; ownerDesignation: string | null }[];
 }
 export type SettingValue<K extends string> = K extends keyof SettingTypes ? SettingTypes[K] : unknown;
