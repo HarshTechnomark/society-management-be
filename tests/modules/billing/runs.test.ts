@@ -1,8 +1,22 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { AuditLog, BillingRun, ChargeHead, Society, Unit, UnitResident, closeDb } from '../../../src/models';
+import {
+  AuditLog,
+  BillSplitRule,
+  Invoice,
+  BillingRun,
+  ChargeHead,
+  Society,
+  Unit,
+  UnitResident,
+  closeDb,
+} from '../../../src/models';
 import { drainQueues } from '../../../src/lib/queue';
 import { systemCtx } from '../../../src/types/context';
-import { billingPortCalls, setBillingPorts } from '../../../src/modules/billing/billing.ports';
+import {
+  billingPortCalls,
+  placeholderApprovalTypes,
+  setBillingPorts,
+} from '../../../src/modules/billing/billing.ports';
 import { approve, reject, requestChanges } from '../../../src/modules/billing/billing.runs.approvals-hook';
 import { app } from '../../helpers/auth';
 import { listRoutes } from '../../../src/modules/access-control/access-control.registry';
@@ -233,7 +247,6 @@ describe('create a run (8.5, BR-11-24, BR-11-25, BR-11-33)', () => {
   it('a supplementary run flags a flat and party that already have a bill (ALREADY_BILLED)', async () => {
     const w = await world();
     const { resident } = w.owners[0]!;
-    const { Invoice } = await import('../../../src/models');
     await Invoice.create({
       societyId: w.society.id!,
       invoiceNo: 'INV/2026-27/000001',
@@ -577,7 +590,6 @@ describe('approval and the placeholder module 14 (BR-11-35, BR-11-36)', () => {
   it('describe returns the facts of the run for the approvals inbox', async () => {
     const { w, run, d } = await preview();
     await publish(w, run.id, d.version);
-    const { placeholderApprovalTypes } = await import('../../../src/modules/billing/billing.ports');
     const facts = await placeholderApprovalTypes.get('BILLING_RUN_PUBLISH')!.describe(run.id);
     expect(facts.map(f => f.label)).toEqual([
       'Period',
@@ -672,7 +684,6 @@ describe('state machine: patch, recompute, cancel (8.7, 8.10, T11-46)', () => {
         c => c.fn === 'notifications.send' && (c.input as any).template === 'billing.run_failed',
       ),
     ).toBe(true);
-    const { BillSplitRule } = await import('../../../src/models');
     await BillSplitRule.update({ basis: 'EQUAL' } as never, { where: { id: split.id! } });
     const r = await post(w, `/billing/runs/${run.id}/recompute`, { version: d.version });
     expect(r.status).toBe(200);
@@ -732,7 +743,6 @@ describe('reads (8.6)', () => {
 
   it('variance against the previous bill and run (BR-11-29): LARGE_VARIANCE above 25 percent, none without the plan feature', async () => {
     const w = await world({ flats: 1 });
-    const { Invoice } = await import('../../../src/models');
     const owner = w.owners[0]!.resident;
     const prior = async (total: number) =>
       Invoice.create({

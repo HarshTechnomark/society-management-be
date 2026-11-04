@@ -18,8 +18,17 @@ import { PURGE_TABLES, deleteRetainedBilling, purgeBilling } from './billing.pur
 import { invoices } from './billing.invoices.service';
 import { unitLedger } from './billing.ledger.service';
 import { registerBillingRuns } from './billing.runs.jobs';
+// 11.1: charge heads, rules, split and late fee policy configuration
+import { chargeHeads } from './billing.heads.service';
+import { policyFor } from './billing.latefee-policy.service';
+import { versionEffectiveOn } from './billing.rules.service';
+import { registerSetupApprovals } from './billing.rules.approvals-hook';
 
 export { unitLedger, invoices };
+export { chargeHeads };
+/** 11.1 readers for the calculator (11.3) and the late fee job (11.5). */
+export const billingSetup = { policyFor, versionEffectiveOn };
+export { splitPaise, splitWeight } from './billing.split';
 /** Module 21 registers its readings here at start-up (BR-11-17). */
 export const meterSources = { register: registerMeterSource };
 
@@ -50,4 +59,5 @@ export function registerBilling(): void {
   registerRetentionExpiryHandler({ module: 'billing', order: 110, deleteRetained: deleteRetainedBilling });
   registerQueue(BILLING_QUEUE, 'Billing: runs, issue, PDFs, late fees, reminders', 4);
   registerBillingRuns(); // 11.3: compute and issue jobs, BILLING_RUN_PUBLISH approval type
+  registerSetupApprovals(); // 11.1: BILLING_RULE_CHANGE and LATE_FEE_POLICY_CHANGE
 }

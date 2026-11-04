@@ -291,6 +291,15 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /committee/terms/:id/handover',
       'POST /committee/terms/:id/handover/items',
       'PATCH /committee/terms/:id/handover/items/:itemId',
+      // module 11 (11.1): another society's charge head, billing rule or split rule id is 404 CHARGE_HEAD_NOT_FOUND / RULE_NOT_FOUND / SPLIT_RULE_NOT_FOUND on every route (tests/modules/billing/access.test.ts, T11-40)
+      'PATCH /billing/charge-heads/:id',
+      'DELETE /billing/charge-heads/:id',
+      'GET /billing/rules/:id',
+      'PATCH /billing/rules/:id',
+      'DELETE /billing/rules/:id',
+      'POST /billing/rules/:id/versions',
+      'PATCH /billing/split-rules/:id',
+      'DELETE /billing/split-rules/:id',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

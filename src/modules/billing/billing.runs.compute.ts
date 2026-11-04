@@ -26,7 +26,7 @@ import {
   type WarningCode,
 } from './billing.constants';
 import { billingPorts, requireMeterSource } from './billing.ports';
-import { splitPaise, splitWeightOf, type SplitWeight } from './billing.calc.split';
+import { splitPaise, splitWeight, type WeightedUnit } from './billing.split';
 import { scopeMatches, winningRule, type RuleCandidate } from './billing.calc.rules';
 import type { MeterReading, RateVersion } from './billing.calc.rates';
 import { liableSegments, type LinkRow, type Party, type Segment } from './billing.calc.segments';
@@ -533,14 +533,14 @@ async function splitSharesFor(a: {
         throw new RunComputeError('RUN_SPLIT_INPUT_MISSING', `No amount was entered for "${rule.name}".`);
       total = Number(given.amountPaise);
     }
-    const weights: SplitWeight[] = [];
+    const weights: WeightedUnit[] = [];
     const map = new Map<number, { share?: number; exception?: ExceptionCode }>();
     for (const d of eligible) {
-      const w = splitWeightOf({ basis: rule.basis, weights: rule.weights }, d.unit);
+      const w = splitWeight(rule.basis, d.unit, rule.weights);
       if ('exception' in w) map.set(d.unit.id, { exception: w.exception });
       else weights.push({ unitId: d.unit.id, weight: w.weight });
     }
-    let split: Map<number, number>;
+    let split: { unitId: number; sharePaise: number }[];
     try {
       split = splitPaise(total, weights);
     } catch {
@@ -549,7 +549,7 @@ async function splitSharesFor(a: {
         `No flat is eligible for the split "${rule.name}".`,
       );
     }
-    for (const [unitId, share] of split) map.set(unitId, { share });
+    for (const { unitId, sharePaise } of split) map.set(unitId, { share: sharePaise });
     out.set(rule.id!, map);
   }
   return out;

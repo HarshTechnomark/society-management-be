@@ -11,7 +11,7 @@ afterAll(async () => {
 });
 beforeEach(resetLedger);
 
-const post = (ctx: ReturnType<typeof societyCtx>, unitId: number, o: Record<string, unknown>) =>
+const post = (ctx: Parameters<typeof unitLedger.post>[0], unitId: number, o: Record<string, unknown>) =>
   sequelize.transaction(t =>
     unitLedger.post(
       ctx,

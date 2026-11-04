@@ -9,7 +9,7 @@ import {
   periodStartContaining,
   runLabelOf,
 } from '../../../src/modules/billing/billing.calc.period';
-import { splitPaise, splitWeightOf } from '../../../src/modules/billing/billing.calc.split';
+import { splitPaise, splitWeight } from '../../../src/modules/billing/billing.split';
 import { gstApplies, gstOf, roundOffOf } from '../../../src/modules/billing/billing.calc.gst';
 import { rateOf, type RateVersion } from '../../../src/modules/billing/billing.calc.rates';
 import {
@@ -608,6 +608,9 @@ describe('worked examples of spec 6.7', () => {
   });
 });
 
+const shareMap = (total: number, w: { unitId: number; weight: bigint }[]) =>
+  new Map(splitPaise(total, w).map(x => [x.unitId, x.sharePaise]));
+
 describe('split of a total bill (T11-08, T11-09, example E, BR-11-22)', () => {
   it('T11-08 / E: 1,000,000 by area 1,150 / 1,150 / 700 = 383,334 / 383,333 / 233,333', () => {
     const w = [
@@ -615,7 +618,7 @@ describe('split of a total bill (T11-08, T11-09, example E, BR-11-22)', () => {
       { unitId: 502, weight: 1_150_000n },
       { unitId: 503, weight: 700_000n },
     ];
-    const s = splitPaise(1_000_000, w);
+    const s = shareMap(1_000_000, w);
     expect([s.get(501), s.get(502), s.get(503)]).toEqual([383_334, 383_333, 233_333]);
   });
 
@@ -633,7 +636,7 @@ describe('split of a total bill (T11-08, T11-09, example E, BR-11-22)', () => {
       }));
       if (weights.every(x => x.weight === 0n)) weights[0]!.weight = 1n;
       const total = 1 + rnd(1_000_000_000);
-      const shares = splitPaise(total, weights);
+      const shares = shareMap(total, weights);
       const sum = [...shares.values()].reduce((a, b) => a + b, 0);
       expect(sum).toBe(total);
       const W = weights.reduce((a, x) => a + x.weight, 0n);
@@ -641,24 +644,24 @@ describe('split of a total bill (T11-08, T11-09, example E, BR-11-22)', () => {
         const exact = (BigInt(total) * x.weight) / W;
         const share = BigInt(shares.get(x.unitId) ?? 0);
         expect(share === exact || share === exact + 1n).toBe(true);
-        if (x.weight === 0n) expect(shares.has(x.unitId)).toBe(false);
+        if (x.weight === 0n) expect(shares.get(x.unitId)).toBe(0);
       }
     }
   });
 
   it('weights per basis; zero total weight throws', () => {
     const u = { id: 5, unitType: 'FLAT', bhk: '2BHK', areaSqft: '700.000' };
-    expect(splitWeightOf({ basis: 'EQUAL', weights: null }, u)).toEqual({ weight: 1n });
-    expect(splitWeightOf({ basis: 'AREA', weights: null }, u)).toEqual({ weight: 700_000n });
-    expect(splitWeightOf({ basis: 'AREA', weights: null }, { ...u, areaSqft: null })).toEqual({
+    expect(splitWeight('EQUAL', u, null)).toEqual({ weight: 1n });
+    expect(splitWeight('AREA', u, null)).toEqual({ weight: 700_000n });
+    expect(splitWeight('AREA', { ...u, areaSqft: null }, null)).toEqual({
       exception: 'MISSING_AREA',
     });
-    expect(splitWeightOf({ basis: 'UNIT_TYPE_WEIGHT', weights: { '2BHK': 2 } }, u)).toEqual({ weight: 2n });
-    expect(splitWeightOf({ basis: 'UNIT_TYPE_WEIGHT', weights: { '3BHK': 2 } }, u)).toEqual({
+    expect(splitWeight('UNIT_TYPE_WEIGHT', u, { '2BHK': 2 })).toEqual({ weight: 2n });
+    expect(splitWeight('UNIT_TYPE_WEIGHT', u, { '3BHK': 2 })).toEqual({
       exception: 'MISSING_UNIT_TYPE_RATE',
     });
-    expect(splitWeightOf({ basis: 'CUSTOM_WEIGHT', weights: { '5': 3 } }, u)).toEqual({ weight: 3n });
-    expect(splitWeightOf({ basis: 'CUSTOM_WEIGHT', weights: {} }, u)).toEqual({ weight: 0n });
+    expect(splitWeight('CUSTOM_WEIGHT', u, { '5': 3 })).toEqual({ weight: 3n });
+    expect(splitWeight('CUSTOM_WEIGHT', u, {})).toEqual({ weight: 0n });
     expect(() => splitPaise(100, [{ unitId: 1, weight: 0n }])).toThrow();
   });
 
