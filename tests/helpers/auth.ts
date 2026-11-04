@@ -56,6 +56,12 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    // module 11.1: late fee policies, rule versions, rules, split rules, charge heads (children first)
+    'late_fee_policies',
+    'billing_rule_versions',
+    'billing_rules',
+    'bill_split_rules',
+    'charge_heads',
     'committee_terms',
     'emergency_profiles',
     'pets',
