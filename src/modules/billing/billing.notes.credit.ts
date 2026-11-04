@@ -352,7 +352,13 @@ export async function recomputeNonInterestBearing(invoiceId: number, t: Transact
        LEFT JOIN charge_heads h ON h.id = l.chargeHeadId
        LEFT JOIN billing_notes dn ON dn.id = l.billingNoteId
       WHERE (l.invoiceId = :invoiceId OR (dn.invoiceId = :invoiceId AND dn.noteType = 'DEBIT' AND dn.status = 'ISSUED'))
-        AND (l.lineKind IN ('INTEREST', 'LATE_FEE') OR (l.lineKind = 'CHARGE' AND h.interestBearing = 0))`,
+        AND (l.lineKind IN ('INTEREST', 'LATE_FEE') OR (l.lineKind = 'CHARGE' AND h.interestBearing = 0)
+             -- a debit note with no interest-bearing charge counts in full: its round-off and tax lines too (the
+             -- late fee events read it the same way), so 9,205 of interest rounded to 9,200 adds 9,200
+             OR (dn.noteType = 'DEBIT' AND l.lineKind IN ('ROUND_OFF', 'CGST', 'SGST') AND NOT EXISTS (
+                   SELECT 1 FROM invoice_lines x LEFT JOIN charge_heads xh ON xh.id = x.chargeHeadId
+                    WHERE x.billingNoteId = l.billingNoteId AND x.lineKind = 'CHARGE'
+                      AND (xh.id IS NULL OR xh.interestBearing = 1))))`,
     { replacements: { invoiceId }, type: QueryTypes.SELECT, transaction: t },
   );
   return Number(row?.n ?? 0);

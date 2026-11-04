@@ -675,7 +675,7 @@ describe('debit notes (8.16, BR-11-46)', () => {
     expect(await inv(invoice.id)).toMatchObject({
       debitedPaise: 9_200,
       outstandingPaise: 109_200,
-      nonInterestBearingPaise: 9_205,
+      nonInterestBearingPaise: 9_200, // spec worked example G: the round-off counts too
     });
     // the same dedupe key cannot be issued twice
     await expect(
@@ -702,7 +702,7 @@ describe('debit notes (8.16, BR-11-46)', () => {
     expect(await inv(invoice.id)).toMatchObject({
       creditedPaise: 5_000,
       outstandingPaise: 104_200,
-      nonInterestBearingPaise: 4_205,
+      nonInterestBearingPaise: 4_200,
     });
     expect((await InvoiceLine.findByPk(dnLine.id!))!.creditedPaise).toBe(5_000);
   });
