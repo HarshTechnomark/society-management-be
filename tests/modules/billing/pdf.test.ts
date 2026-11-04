@@ -180,6 +180,21 @@ describe('the billing:render-pdf job and the URLs (9.1, 8.13)', () => {
     expect(await renderPdfFor('invoice', 999_999)).toBe('NOT_FOUND');
   });
 
+  it('outside production a READY bill whose file is gone from the memory store (seed process, restart) is rendered again on request', async () => {
+    const w = await invoiceWorld();
+    const inv = await makeInvoice(w);
+    await drainQueues();
+    const before = (await Invoice.findByPk(inv.id))!;
+    placeholderFiles.delete(Number(before.pdfFileId));
+    const r = await urlOf(w, inv.id);
+    expect(r.status).toBe(200);
+    const after = (await Invoice.findByPk(inv.id))!;
+    expect(after.pdfStatus).toBe('READY');
+    expect(after.pdfFileId).not.toBe(before.pdfFileId);
+    expect(r.body.data.url).toBe(`/api/v1/dev/files/${after.pdfFileId}`);
+    expect(text(placeholderFiles.get(Number(after.pdfFileId))!.content)).toContain('INV/2026-27/000001');
+  });
+
   it('409 PDF_NOT_READY while the PDF is pending; 404 for an unknown id', async () => {
     const w = await invoiceWorld();
     const raw = await rawInvoice(w.society.id!, w.units[0]!.id, { pdfStatus: 'PENDING' } as never);

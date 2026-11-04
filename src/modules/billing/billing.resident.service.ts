@@ -1,3 +1,4 @@
+import { ensureStoredOutsideProduction } from './billing.pdf.service';
 import { Op, type WhereOptions } from 'sequelize';
 import { Invoice, Resident, Tenancy, Unit, UnitResident } from '../../models';
 import type { Ctx } from '../../types/context';
@@ -184,7 +185,7 @@ export async function myInvoice(ctx: Ctx, id: number) {
 
 /** `GET /me/invoices/:id/pdf-url`: `409 PDF_NOT_READY` while pending, failed or for an opening balance (no file). */
 export async function myInvoicePdfUrl(ctx: Ctx, id: number) {
-  const { inv } = await visibleInvoice(ctx, id);
+  const inv = await ensureStoredOutsideProduction('invoice', (await visibleInvoice(ctx, id)).inv);
   if (inv.pdfStatus !== 'READY' || !inv.pdfFileId)
     throw new AppError(409, 'PDF_NOT_READY', 'The bill PDF is not ready yet');
   const link = await societyPorts().files.downloadUrl(Number(inv.pdfFileId), 5);

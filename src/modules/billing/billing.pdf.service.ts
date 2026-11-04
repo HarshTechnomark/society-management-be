@@ -5,7 +5,7 @@ import { env } from '../../lib/env';
 import { logger } from '../../lib/logger';
 import { AppError } from '../../utils/errors';
 import { usersWithPermission } from '../access-control/access-control.public';
-import { societyPorts } from '../societies/societies.ports';
+import { placeholderFiles, societyPorts } from '../societies/societies.ports';
 import { BILLING_QUEUE, INVOICE_PDF_PURPOSE, JOBS, PERMISSIONS } from './billing.constants';
 import { periodLabelOfInvoice, invoiceNotFound, noteNotFound } from './billing.invoices.shared';
 import { renderBillingPdf, type PdfDocument } from './billing.pdf.render';
@@ -175,16 +175,36 @@ async function urlFor(
   return { url: link.url, expiresAt: link.expiresAt.toISOString(), fileName: fileName(no) };
 }
 
+/**
+ * Outside production only: the module 01 placeholder store keeps files in process memory, so a PDF rendered by another
+ * process (the seed, the worker) or before a restart is gone. Render it again in place so the download works. Remove when
+ * the real files service exists.
+ */
+export async function ensureStoredOutsideProduction<T extends Invoice | BillingNote>(
+  kind: 'invoice' | 'note',
+  row: T,
+): Promise<T> {
+  if (env().NODE_ENV === 'production' || row.pdfStatus !== 'READY' || !row.pdfFileId) return row;
+  if (placeholderFiles.has(Number(row.pdfFileId))) return row;
+  row.pdfStatus = 'PENDING';
+  row.pdfFileId = null;
+  await row.save();
+  await renderPdfFor(kind, Number(row.id));
+  return (await row.reload()) as T;
+}
+
 /** 8.13: `GET /invoices/:id/pdf-url`. */
 export async function invoicePdfUrl(societyId: number, id: number) {
-  const inv = await Invoice.findOne({ where: { id, societyId } });
+  let inv = await Invoice.findOne({ where: { id, societyId } });
   if (!inv) throw invoiceNotFound();
+  inv = await ensureStoredOutsideProduction('invoice', inv);
   return urlFor('invoice', inv, inv.invoiceNo);
 }
 
 /** 8.13: `GET /billing/notes/:id/pdf-url`. */
 export async function notePdfUrl(societyId: number, id: number) {
-  const n = await BillingNote.findOne({ where: { id, societyId } });
+  let n = await BillingNote.findOne({ where: { id, societyId } });
   if (!n || n.status !== 'ISSUED') throw noteNotFound();
+  n = await ensureStoredOutsideProduction('note', n);
   return urlFor('note', n, n.noteNo ?? '');
 }
