@@ -16,6 +16,7 @@ import { approvalStub } from '../residents/residents.part2.ports';
 import { placeholderApprovalRequests } from '../billing/billing.ports';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
+import * as noteApprovals from '../billing/billing.notes.approvals-hook';
 import { APPROVAL_TYPES } from '../billing/billing.constants';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
@@ -184,6 +185,9 @@ const BILLING_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [APPROVAL_TYPES.runPublish]: runApprovals,
   [APPROVAL_TYPES.ruleChange]: ruleApprovals,
   [APPROVAL_TYPES.lateFeePolicyChange]: ruleApprovals,
+  [APPROVAL_TYPES.creditNote]: noteApprovals,
+  [APPROVAL_TYPES.writeOff]: noteApprovals,
+  [APPROVAL_TYPES.invoiceCancel]: noteApprovals,
 };
 
 async function decideBilling(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
