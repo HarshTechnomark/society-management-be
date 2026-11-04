@@ -1110,6 +1110,7 @@ export interface SettingTypes {
   'committee.maxTermYears': number;
   'committee.coOptionAllowed': boolean;
   'committee.showOnResidentApp': boolean;
+  'committee.reminderDays': number[];
   'committee.handoverDelegationDays': number;
   'committee.handoverTemplate': { title: string; ownerDesignation: string | null }[];
 }

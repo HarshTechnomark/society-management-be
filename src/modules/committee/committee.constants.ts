@@ -1,5 +1,13 @@
 /** Names, enums and keys of module 10 (sections 2.2, 5, 7 and 9). The enums are shared with Zod. */
 export const COMMITTEE_QUEUE = 'members';
+/** Section 9.1 jobs of queue `members`. */
+export const JOBS = {
+  termReminders: 'members:term-reminders',
+  termAutoExpiry: 'members:term-auto-expiry',
+  reconcileSeats: 'members:reconcile-seats',
+} as const;
+/** BR-10-24: hand-over reminders on these days after `tookChargeOn` while the checklist is incomplete (section 9.1). */
+export const HANDOVER_REMINDER_DAYS = [15, 30] as const;
 
 export const DESIGNATIONS = [
   'CHAIRMAN',

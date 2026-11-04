@@ -12,6 +12,8 @@ import type { ChangeReason } from './committee.constants';
 
 export const termNotFound = () => new NotFoundError('COMMITTEE_TERM_NOT_FOUND', 'Committee term not found');
 export const seatNotFound = () => new NotFoundError('COMMITTEE_SEAT_NOT_FOUND', 'Seat not found');
+export const handoverItemNotFound = () =>
+  new NotFoundError('HANDOVER_ITEM_NOT_FOUND', 'Hand-over item not found');
 export const staleVersion = () =>
   new AppError(
     409,

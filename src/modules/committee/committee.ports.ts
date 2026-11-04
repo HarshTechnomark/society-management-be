@@ -1,6 +1,8 @@
 import type { Transaction } from 'sequelize';
 import { logger } from '../../lib/logger';
 import { notify } from '../../lib/notify';
+import { UnprocessableError } from '../../utils/errors';
+import { placeholderFiles } from '../societies/societies.ports';
 import type { Ctx } from '../../types/context';
 
 /**
@@ -11,6 +13,9 @@ import type { Ctx } from '../../types/context';
  *   placeholder records the call and creates nothing.
  * - Module 16 `notify` (section 10): the placeholder is the temporary `lib/notify.ts` stand-in, which renders the templates
  *   of `committee.templates.ts` and sends through the module 01 adapters. A failed send never fails the action it reports.
+ * - Module 01 `files.service.link(ctx, fileIds, 'committee_term', termId, 'HANDOVER_EVIDENCE')` (section 7.5, sub-module 10.3):
+ *   the placeholder accepts a CLEAN file of the society with purpose `HANDOVER_EVIDENCE` from the module 08 memory store
+ *   (`placeholderFiles`) and throws `422 FILE_NOT_LINKABLE` otherwise; it links nothing.
  * - Module 22 calls `committee.createDraftFromElection()` (in `committee.public.ts`); it needs no port. Module 23 is not used.
  */
 export interface HandoverDelegationInput {
@@ -22,6 +27,13 @@ export interface HandoverDelegationInput {
   committeeTermId: number;
 }
 export interface CommitteePorts {
+  files: {
+    linkEvidence(
+      ctx: Ctx,
+      input: { fileIds: number[]; societyId: number; termId: number },
+      t: Transaction,
+    ): Promise<void>;
+  };
   approvals: {
     createHandoverDelegation(
       ctx: Ctx,
@@ -43,6 +55,18 @@ export interface CommitteePortCall {
 export const committeePortCalls: CommitteePortCall[] = [];
 
 export const defaultCommitteePorts: CommitteePorts = {
+  files: {
+    linkEvidence: async (_ctx, i, t) => {
+      for (const fileId of i.fileIds) {
+        const f = placeholderFiles.get(fileId);
+        if (!f || f.status !== 'CLEAN' || f.purpose !== 'HANDOVER_EVIDENCE' || f.societyId !== i.societyId)
+          throw new UnprocessableError('FILE_NOT_LINKABLE', 'This file cannot be used here', [
+            { field: 'evidenceFileIds', message: 'Upload the file again', fileId },
+          ]);
+      }
+      committeePortCalls.push({ fn: 'files.linkEvidence', input: i, t });
+    },
+  },
   approvals: {
     createHandoverDelegation: async (_ctx, input, t) => {
       committeePortCalls.push({ fn: 'approvals.createHandoverDelegation', input, t });

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   DESIGNATIONS,
+  HANDOVER_STATUSES,
   MAX_SEATS_INPUT,
   PORTFOLIOS,
   TERM_KINDS,
@@ -193,7 +194,32 @@ const termList = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+const itemParam = z.object({ id, itemId: z.string().regex(/^H[1-9]\d{0,1}$/) });
+const handoverAdd = z
+  .object({ title: text(3, 120), ownerDesignation: z.enum(DESIGNATIONS).nullable() })
+  .strict();
+const handoverPatch = z
+  .object({
+    status: z.enum(HANDOVER_STATUSES).optional(),
+    note: z.string().max(300).nullable().optional(),
+    evidenceFileIds: z
+      .array(id)
+      .max(5)
+      .refine(a => new Set(a).size === a.length, 'File ids must be unique')
+      .optional(),
+  })
+  .strict()
+  .refine(b => Object.keys(b).length > 0, 'Nothing to change');
+const pageQuery = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export const committeeSchemas = {
+  itemParam,
+  handoverAdd,
+  handoverPatch,
+  pageQuery,
   idParam,
   seatParam,
   termCreate,

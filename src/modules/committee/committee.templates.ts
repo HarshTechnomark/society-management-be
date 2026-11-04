@@ -34,4 +34,29 @@ registerTemplates({
     link: String(d.link),
     sms: `You are now ${d.designationLabel} of the committee at ${d.societyName}.`,
   })),
+
+  'committee.term_expiring': t(['EMAIL', 'PUSH'], d => ({
+    link: String(d.link),
+    email: {
+      subject: `The committee term of ${d.societyName} ends in ${d.daysLeft} days`,
+      text: `"${d.termName}" ends on ${d.endDate} (${d.daysLeft} days left).\nPlan the election in time: ${d.link}`,
+    },
+    sms: `The committee term of ${d.societyName} ends on ${d.endDate}.`,
+  })),
+  'committee.term_expired': t(['EMAIL'], d => ({
+    link: String(d.link),
+    email: {
+      subject: `The committee term of ${d.societyName} has ended`,
+      text: `"${d.termName}" ended on ${d.endDate}. The committee continues as caretaker until the new committee takes charge.\nSee the committee: ${d.link}`,
+    },
+  })),
+  'committee.handover_pending': t(['PUSH'], d => ({
+    link: String(d.link),
+    sms: `The hand-over checklist of ${d.termName} at ${d.societyName} still has pending items.`,
+  })),
+  // in-app only (module 16); the stand-in renders the link and sends nothing
+  'committee.seat_needs_attention': t(['PUSH'], d => ({
+    link: String(d.link),
+    sms: `A committee seat at ${d.societyName} needs attention: ${d.detail}`,
+  })),
 });

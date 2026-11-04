@@ -117,3 +117,41 @@ r.post(
   idempotency(),
   c.applyChanges,
 );
+
+// 10.3 (8.10 to 8.13): hand-over checklist, seat meter and the resident pages. The item PATCH needs only the view permission;
+// BR-10-27 (edit permission or the seated holder of the item's owner designation) is a service rule.
+r.get(
+  '/committee/terms/:id/handover',
+  society(),
+  can('settings.members.view'),
+  feature(F.terms, read),
+  validate({ params: s.idParam }),
+  c.handover,
+);
+r.post(
+  '/committee/terms/:id/handover/items',
+  society(),
+  can('settings.members.edit'),
+  feature(F.terms),
+  validate({ params: s.idParam, body: s.handoverAdd }),
+  idempotency(),
+  c.addHandoverItem,
+);
+r.patch(
+  '/committee/terms/:id/handover/items/:itemId',
+  society(),
+  can('settings.members.view'),
+  feature(F.terms),
+  validate({ params: s.itemParam, body: s.handoverPatch }),
+  c.updateHandoverItem,
+);
+r.get('/committee/seat-usage', society(), can('settings.members.view'), c.seatUsage);
+r.get('/me/committee', society(), can('resident.home.view'), feature(F.terms, read), c.myCommittee);
+r.get(
+  '/me/committee/history',
+  society(),
+  can('resident.home.view'),
+  feature(F.terms, read),
+  validate({ query: s.pageQuery }),
+  c.myCommitteeHistory,
+);

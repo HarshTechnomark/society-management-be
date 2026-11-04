@@ -3,6 +3,9 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { created, noContent, ok, okList } from '../../utils/response';
 import * as activation from './committee.activation';
 import * as changes from './committee.changes';
+import * as handover from './committee.handover';
+import * as resident from './committee.resident';
+import * as staff from './committee.staff';
 import * as queries from './committee.queries';
 import * as svc from './committee.service';
 
@@ -56,4 +59,25 @@ export const committeeController = {
       'Committee changes saved',
     ),
   ),
+  handover: h(async (req, res) => ok(res, await handover.getHandover(req.ctx, sid(req), v(req).params.id))),
+  addHandoverItem: h(async (req, res) =>
+    created(
+      res,
+      await handover.addItem(req.ctx, sid(req), v(req).params.id, v(req).body),
+      'Checklist item added',
+    ),
+  ),
+  updateHandoverItem: h(async (req, res) =>
+    ok(
+      res,
+      await handover.updateItem(req.ctx, sid(req), v(req).params.id, v(req).params.itemId, v(req).body),
+      'Checklist item saved',
+    ),
+  ),
+  seatUsage: h(async (req, res) => ok(res, await staff.seatUsage(sid(req)))),
+  myCommittee: h(async (req, res) => ok(res, await resident.myCommittee(req.ctx, sid(req)))),
+  myCommitteeHistory: h(async (req, res) => {
+    const r = await resident.myCommitteeHistory(sid(req), v(req).query);
+    okList(res, r.data, r.pagination);
+  }),
 };

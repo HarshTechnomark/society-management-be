@@ -8,6 +8,7 @@ import { committeeExportProvider } from './committee.exports';
 import { PURGE_TABLES, purgeCommittee } from './committee.purge';
 import { createDraftFromElection } from './committee.election';
 import { getCurrent, isSeated, listSeatedUserIds } from './committee.queries';
+import { registerCommitteeJobs } from './committee.jobs';
 import './committee.templates';
 
 export const committee = { getCurrent, listSeatedUserIds, isSeated, createDraftFromElection };
@@ -25,4 +26,5 @@ export type { Designation } from './committee.constants';
 export function registerCommittee(): void {
   registerExportProvider(committeeExportProvider);
   registerPurgeHandler({ module: 'members', order: 10, tables: PURGE_TABLES, purge: purgeCommittee });
+  registerCommitteeJobs();
 }

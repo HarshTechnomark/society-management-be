@@ -456,3 +456,46 @@ export function handoverPairs(
   }
   return out;
 }
+
+// ------------------------------------------------------------------ reminders (BR-10-24) and reconciliation (BR-10-25)
+/**
+ * The reminder threshold to send now, or null. A threshold `d` qualifies when `daysLeft <= d` and the last one sent is NULL or
+ * greater than `d`; only the smallest qualifying one is sent (no burst after a late activation). Threshold 0 applies only once
+ * the end date has passed (`daysLeft < 0`) and means "term ended".
+ */
+export function reminderThreshold(
+  daysLeft: number,
+  reminderDays: number[],
+  lastReminderDays: number | null,
+): number | null {
+  const all = daysLeft < 0 ? [...reminderDays, 0] : reminderDays;
+  const qualifying = all.filter(d => daysLeft <= d && (lastReminderDays === null || lastReminderDays > d));
+  return qualifying.length ? Math.min(...qualifying) : null;
+}
+
+/** The hand-over reminder day to send now (the largest day reached that was not sent yet), or null. */
+export function handoverReminderDay(
+  daysSinceTookCharge: number,
+  days: readonly number[],
+  lastSent: number | null,
+): number | null {
+  const reached = days.filter(d => daysSinceTookCharge >= d && (lastSent === null || lastSent < d));
+  return reached.length ? Math.max(...reached) : null;
+}
+
+export type SeatFlag = SeatJson['flags'][number];
+export interface SeatFacts {
+  membership: 'ACTIVE' | 'SUSPENDED' | 'ENDED';
+  roleKey: string | null;
+  hasOwnerLink: boolean;
+}
+/** Flags of one SEATED seat from the live facts (BR-10-25); `ENDED` closes the seat instead. Canonical order. */
+export function seatFlags(designation: Designation, f: SeatFacts, ownersOnly: boolean): SeatFlag[] {
+  const flags: SeatFlag[] = [];
+  if (f.roleKey !== null && f.roleKey !== DESIGNATION_ROLE[designation]) flags.push('ROLE_MISMATCH');
+  if (f.membership === 'SUSPENDED') flags.push('MEMBERSHIP_SUSPENDED');
+  if (ownersOnly && !f.hasOwnerLink) flags.push('NOT_OWNER');
+  return flags;
+}
+export const sameFlags = (a: SeatFlag[], b: SeatFlag[]): boolean =>
+  [...a].sort().join(',') === [...b].sort().join(',');
