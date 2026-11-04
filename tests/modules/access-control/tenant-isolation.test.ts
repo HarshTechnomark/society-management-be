@@ -291,6 +291,46 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /committee/terms/:id/handover',
       'POST /committee/terms/:id/handover/items',
       'PATCH /committee/terms/:id/handover/items/:itemId',
+      // module 11 (11.1): another society's charge head, billing rule or split rule id is 404 CHARGE_HEAD_NOT_FOUND / RULE_NOT_FOUND / SPLIT_RULE_NOT_FOUND on every route (tests/modules/billing/access.test.ts, T11-40)
+      'PATCH /billing/charge-heads/:id',
+      'DELETE /billing/charge-heads/:id',
+      'GET /billing/rules/:id',
+      'PATCH /billing/rules/:id',
+      'DELETE /billing/rules/:id',
+      'POST /billing/rules/:id/versions',
+      'PATCH /billing/split-rules/:id',
+      'DELETE /billing/split-rules/:id',
+      // module 11 (11.2): another society's unit is 404 UNIT_NOT_FOUND on the statement and another society's opening balance row is 404 OPENING_BALANCE_NOT_FOUND on reverse and delete (tests/modules/billing/statement.test.ts and opening.test.ts, T11-40)
+      'GET /billing/units/:unitId/statement',
+      'POST /billing/opening-balances/:id/reverse',
+      'DELETE /billing/opening-balances/:id',
+      // module 11 (11.3): another society's billing run id (or an item of it) is 404 RUN_NOT_FOUND on every run route (tests/modules/billing/runs.test.ts, T11-40)
+      'GET /billing/runs/:id',
+      'GET /billing/runs/:id/items',
+      'PATCH /billing/runs/:id',
+      'POST /billing/runs/:id/recompute',
+      'POST /billing/runs/:id/items/:itemId/exclude',
+      'POST /billing/runs/:id/items/:itemId/include',
+      'POST /billing/runs/:id/publish',
+      'POST /billing/runs/:id/cancel',
+      'POST /billing/runs/:id/resume-issue',
+      // module 11 (11.5): another society's invoice is 404 INVOICE_NOT_FOUND on remind, note 404 NOTE_NOT_FOUND, and the resident bill routes answer 404 INVOICE_NOT_FOUND / UNIT_NOT_FOUND for another society's or another flat's ids (tests/modules/billing/reminders.test.ts, dues.test.ts and resident.test.ts, T11-40, T11-41)
+      'POST /invoices/:id/remind',
+      'GET /billing/notes/:id',
+      'GET /me/invoices/:id',
+      'GET /me/invoices/:id/pdf-url',
+      'GET /me/units/:unitId/statement',
+      // module 11 (11.4): another society's invoice id is 404 INVOICE_NOT_FOUND and another society's note id is 404 NOTE_NOT_FOUND on every invoice and note route (tests/modules/billing/invoices.test.ts and notes.test.ts, T11-40)
+      'GET /invoices/:id',
+      'GET /invoices/:id/pdf-url',
+      'POST /invoices/:id/credit-notes',
+      'POST /invoices/:id/debit-notes',
+      'POST /invoices/:id/cancel',
+      'POST /invoices/:id/write-off',
+      'GET /billing/notes/:id',
+      'GET /billing/notes/:id/pdf-url',
+      'PATCH /billing/notes/:id',
+      'POST /billing/notes/:id/withdraw',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

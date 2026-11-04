@@ -60,6 +60,18 @@ import { OwnershipTransfer } from './ownership-transfer.model';
 import { Pet } from './pet.model';
 import { EmergencyProfile } from './emergency-profile.model';
 import { CommitteeTerm } from './committee-term.model';
+import { ChargeHead } from './charge-head.model';
+import { BillSplitRule } from './bill-split-rule.model';
+import { BillingRule } from './billing-rule.model';
+import { BillingRuleVersion } from './billing-rule-version.model';
+import { LateFeePolicy } from './late-fee-policy.model';
+import { BillingRun } from './billing-run.model';
+import { Invoice } from './invoice.model';
+import { BillingRunItem } from './billing-run-item.model';
+import { BillingNote } from './billing-note.model';
+import { InvoiceLine } from './invoice-line.model';
+import { UnitLedgerEntry } from './unit-ledger-entry.model';
+import { OpeningBalance } from './opening-balance.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -140,6 +152,18 @@ const models = {
   Pet,
   EmergencyProfile,
   CommitteeTerm,
+  ChargeHead,
+  BillSplitRule,
+  BillingRule,
+  BillingRuleVersion,
+  LateFeePolicy,
+  BillingRun,
+  Invoice,
+  BillingRunItem,
+  BillingNote,
+  InvoiceLine,
+  UnitLedgerEntry,
+  OpeningBalance,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -316,6 +340,32 @@ CommitteeTerm.belongsTo(Society, { foreignKey: 'societyId' });
 CommitteeTerm.belongsTo(CommitteeTerm, { as: 'predecessor', foreignKey: 'predecessorTermId' });
 CommitteeTerm.hasOne(CommitteeTerm, { as: 'successor', foreignKey: 'predecessorTermId' });
 
+// Module 11 associations (section 7). Units, residents and files are not associated: financial rows keep plain ids.
+ChargeHead.belongsTo(Society, { foreignKey: 'societyId' });
+ChargeHead.hasMany(BillingRule, { foreignKey: 'chargeHeadId' });
+ChargeHead.hasMany(InvoiceLine, { foreignKey: 'chargeHeadId' });
+BillingRule.belongsTo(ChargeHead, { foreignKey: 'chargeHeadId' });
+BillingRule.hasMany(BillingRuleVersion, { as: 'versions', foreignKey: 'billingRuleId' });
+BillingRuleVersion.belongsTo(BillingRule, { foreignKey: 'billingRuleId' });
+BillingRuleVersion.belongsTo(BillSplitRule, { foreignKey: 'billSplitRuleId' });
+BillSplitRule.hasMany(BillingRuleVersion, { foreignKey: 'billSplitRuleId' });
+LateFeePolicy.hasMany(BillingNote, { foreignKey: 'lateFeePolicyId' });
+BillingNote.belongsTo(LateFeePolicy, { foreignKey: 'lateFeePolicyId' });
+BillingRun.hasMany(BillingRunItem, { as: 'items', foreignKey: 'billingRunId' });
+BillingRun.hasMany(Invoice, { foreignKey: 'billingRunId' });
+BillingRunItem.belongsTo(BillingRun, { foreignKey: 'billingRunId' });
+BillingRunItem.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+Invoice.belongsTo(BillingRun, { foreignKey: 'billingRunId' });
+Invoice.hasMany(InvoiceLine, { as: 'lines', foreignKey: 'invoiceId' });
+Invoice.hasMany(BillingNote, { as: 'notes', foreignKey: 'invoiceId' });
+BillingNote.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+BillingNote.hasMany(InvoiceLine, { as: 'lines', foreignKey: 'billingNoteId' });
+InvoiceLine.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+InvoiceLine.belongsTo(BillingNote, { foreignKey: 'billingNoteId' });
+InvoiceLine.belongsTo(ChargeHead, { foreignKey: 'chargeHeadId' });
+InvoiceLine.belongsTo(InvoiceLine, { as: 'refLine', foreignKey: 'refInvoiceLineId' });
+OpeningBalance.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -379,6 +429,18 @@ export {
   Pet,
   EmergencyProfile,
   CommitteeTerm,
+  ChargeHead,
+  BillSplitRule,
+  BillingRule,
+  BillingRuleVersion,
+  LateFeePolicy,
+  BillingRun,
+  Invoice,
+  BillingRunItem,
+  BillingNote,
+  InvoiceLine,
+  UnitLedgerEntry,
+  OpeningBalance,
 };
 
 export async function closeDb(): Promise<void> {

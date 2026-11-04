@@ -13,6 +13,7 @@ import { registerPlatformOps } from './modules/platform-ops/platform-ops.public'
 import { registerSocietySetup } from './modules/society-setup/society-setup.public';
 import { registerResidents } from './modules/residents/residents.public';
 import { registerCommittee } from './modules/committee/committee.public';
+import { registerBilling } from './modules/billing/billing.public';
 import { assertCatalogueComplete } from './modules/subscriptions/subscriptions.seed';
 
 /** BullMQ worker process (separate from the API). Each module registers its processors here. */
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
   registerSocietySetup();
   registerResidents();
   registerCommittee();
+  registerBilling();
   await assertCatalogueComplete(); // every catalogue key has a row in every plan version (module 04)
   await startWorkers();
   logger.info('society-worker started');

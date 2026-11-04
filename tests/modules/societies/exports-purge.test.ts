@@ -32,6 +32,7 @@ import { registerPlatformBilling } from '../../../src/modules/platform-billing/p
 import { registerSocietySetup } from '../../../src/modules/society-setup/society-setup.public';
 import { registerResidents } from '../../../src/modules/residents/residents.public';
 import { registerCommittee } from '../../../src/modules/committee/committee.public';
+import { registerBilling } from '../../../src/modules/billing/billing.public';
 import { readZip } from '../../../src/modules/societies/societies.zip';
 import { systemCtx } from '../../../src/types/context';
 import { as, idem, login, memberUser, resetLogins } from '../../helpers/access';
@@ -256,6 +257,7 @@ describe('society data export (8.24, 6.6, BR-05-22 to BR-05-24)', () => {
     registerSocietySetup(); // module 08 registers its six tables at start-up
     registerResidents(); // module 09 registers its ten tables at start-up
     registerCommittee(); // module 10 registers committee_terms at start-up
+    registerBilling(); // module 11 registers its twelve tables at start-up
     const covered = new Set(exportProviders().flatMap(p => p.tables.map(t => t.name)));
     // audit_logs: module 07 audit export; idempotency_keys: request plumbing; society_notes: platform internal (BR-05-34);
     // member_grants, role_permissions: permission plumbing; entitlement_overrides, feature_flag_overrides: platform config;
