@@ -27,6 +27,7 @@ import { registerSocietySetup } from '../src/modules/society-setup/society-setup
 import { registerResidents } from '../src/modules/residents/residents.public';
 import { seedResidents } from '../seeders/residents';
 import { registerCommittee } from '../src/modules/committee/committee.public';
+import { registerBilling } from '../src/modules/billing/billing.public';
 import { seedCommittee } from '../seeders/committee';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
@@ -44,6 +45,7 @@ async function main(): Promise<void> {
   registerSocietySetup();
   registerResidents();
   registerCommittee();
+  registerBilling();
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,

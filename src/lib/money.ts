@@ -57,3 +57,38 @@ export function formatRupees(paise: number): string {
   const grouped = rest ? `${rest},${last3}` : last3;
   return `${neg ? '−' : ''}₹${grouped}${p ? `.${String(p).padStart(2, '0')}` : ''}`;
 }
+
+/** `rateUnits` under the name of module 11 BR-11-2: `rate4('21.0000') = 210000n`. */
+export const rate4 = rateUnits;
+
+/**
+ * `units.areaSqft` (a `DECIMAL(10,3)` string such as `'1150.500'`) as integer milli-sq-ft (`1150500n`), parsed digit by digit.
+ * More than 3 decimals are refused. Module 11 BR-11-2.
+ */
+export function areaMilli(areaSqft: string | number): bigint {
+  const s = typeof areaSqft === 'number' ? String(areaSqft) : areaSqft.trim();
+  const m = /^(\d+)(?:\.(\d{1,3}))?$/.exec(s);
+  if (!m) throw new RangeError(`invalid area: ${areaSqft}`);
+  return BigInt(m[1]!) * 1000n + BigInt((m[2] ?? '').padEnd(3, '0'));
+}
+
+/** `roundHalfUp` that keeps the result a `bigint` (for intermediate sums that may exceed 2^53). */
+export function roundHalfUpBig(n: bigint, d: bigint): bigint {
+  if (d <= 0n) throw new RangeError('divisor must be positive');
+  const abs = n < 0n ? -n : n;
+  const q = (2n * abs + d) / (2n * d);
+  return n < 0n ? -q : q;
+}
+
+/** `"1234.5"`, `"1234"` or `"1234.56"` rupees (at most 2 decimals) as integer paise; never goes through a float (BR-11-65). */
+export function rupeesToPaise(rupees: string): number {
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(rupees.trim());
+  if (!m) throw new RangeError(`invalid rupee amount: ${rupees}`);
+  return toSafeNumber(BigInt(m[1]!) * 100n + BigInt((m[2] ?? '').padEnd(2, '0')));
+}
+
+/** Share of `totalPaise` for a weight out of the total weight, floored: `floor(T × w / W)` (BR-11-22). */
+export function floorShare(totalPaise: number | bigint, weight: bigint, totalWeight: bigint): bigint {
+  if (totalWeight <= 0n) throw new RangeError('total weight must be positive');
+  return (toBig(totalPaise) * weight) / totalWeight;
+}
