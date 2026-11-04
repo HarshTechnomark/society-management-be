@@ -24,8 +24,14 @@ import { policyFor } from './billing.latefee-policy.service';
 import { versionEffectiveOn } from './billing.rules.service';
 import { registerSetupApprovals } from './billing.rules.approvals-hook';
 import { registerLedgerHooks } from './billing.ledger.hooks';
+// 11.5: late fees, reminders, dues and report readers
+import { registerBillingDues } from './billing.latefee.jobs';
+import { billingReports } from './billing.reports';
 
 export { unitLedger, invoices };
+/** 11.5: read-only report readers for module 24 (section 8.25). */
+export { billingReports };
+export { ReadTimeoutError } from './billing.reports';
 export { chargeHeads };
 /** 11.1 readers for the calculator (11.3) and the late fee job (11.5). */
 export const billingSetup = { policyFor, versionEffectiveOn };
@@ -63,4 +69,5 @@ export function registerBilling(): void {
   registerSetupApprovals(); // 11.1: BILLING_RULE_CHANGE and LATE_FEE_POLICY_CHANGE
   // 11.2: real unitLedger.balance for module 09 duesPaise, module 08 BILLING check and UNIT_HAS_BALANCE guard
   registerLedgerHooks();
+  registerBillingDues(); // 11.5: late fee, reminder and reconcile jobs
 }

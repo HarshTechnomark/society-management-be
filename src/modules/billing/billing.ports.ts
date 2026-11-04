@@ -109,10 +109,11 @@ export interface PaymentsPort {
   queueAdvanceApply(societyId: number, unitIds: number[]): Promise<void>;
   /** Called before a credit note larger than the outstanding and on cancellation (BR-11-42). Safe default: no-op. */
   onInvoiceCancelled(ctx: Ctx, invoiceId: number, t: Transaction): Promise<void>;
+  /** BR-11-53: dated allocations of an invoice; `amountPaise` is negative for releases and reversals. */
   listAllocationsForInvoice(
     societyId: number,
     invoiceId: number,
-  ): Promise<{ paymentId: number; amountPaise: number }[]>;
+  ): Promise<{ paymentId?: number; allocatedOn: YmdString; amountPaise: number }[]>;
   /** Module 12 (NEW, section 17): returned cheques of a flat since a date, for module 24. */
   chequeReturnCount(societyId: number, unitId: number, since: YmdString): Promise<number>;
 }
@@ -124,12 +125,19 @@ export interface MetersPort {
   markBilled(ctx: Ctx, readingIds: number[], billingRunRef: string, t: Transaction): Promise<void>;
 }
 
+// ------------------------------------------------------------------ module 24 reports cache (section 8.26)
+export interface ReportsCachePort {
+  /** `reportsCache.touch(societyId, 'dues')` after a committed write that changes dues data. Never throws. */
+  touch(societyId: number, area: 'dues'): void | Promise<void>;
+}
+
 export interface BillingPorts {
   approvals: ApprovalsPort;
   journal: JournalPort;
   notifications: NotificationsPort;
   payments: PaymentsPort;
   meters: MetersPort;
+  reports: ReportsCachePort;
 }
 export type BillingPortName = keyof BillingPorts;
 
@@ -188,7 +196,17 @@ export const defaultBillingPorts: BillingPorts = {
       const r = placeholderApprovalRequests.get(id);
       if (r) r.status = 'CANCELLED';
     },
-    lockOpenForEntity: async () => null,
+    // 11.4: the placeholder finds a still-pending request it created (module 14 does the same with its own table)
+    lockOpenForEntity: async (societyId, entityType, entityId) => {
+      const open = [...placeholderApprovalRequests.values()].find(
+        r =>
+          r.status === 'PENDING' &&
+          r.societyId === societyId &&
+          r.entityType === entityType &&
+          r.entityId === entityId,
+      );
+      return open ? { id: open.id, type: open.type } : null;
+    },
   },
   journal: {
     post: async (_ctx, input, t) => {
@@ -234,6 +252,9 @@ export const defaultBillingPorts: BillingPorts = {
     getSource: () => undefined,
     markBilled: async (_ctx, readingIds, billingRunRef, t) =>
       record('meters.markBilled', { readingIds, billingRunRef }, t),
+  },
+  reports: {
+    touch: (societyId, area) => record('reports.touch', { societyId, area }),
   },
 };
 

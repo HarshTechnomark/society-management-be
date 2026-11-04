@@ -31,6 +31,7 @@ import { registerBilling } from '../src/modules/billing/billing.public';
 import { seedCommittee } from '../seeders/committee';
 import { seedBillingSetup } from '../seeders/billing-setup';
 import { seedBillingOpening } from '../seeders/billing-opening';
+import { seedBillingDues } from '../seeders/billing-dues';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -103,6 +104,11 @@ async function main(): Promise<void> {
     const bo = await seedBillingOpening();
     out(
       `billing-opening: created ${bo.created.join('; ') || 'none'}, skipped ${bo.skipped.join('; ') || 'none'}`,
+    );
+    // module 11 (11.5): one demo overdue invoice for the defaulter list and the dues dashboard
+    const bd = await seedBillingDues();
+    out(
+      `billing-dues: created ${bd.created.join('; ') || 'none'}, skipped ${bd.skipped.join('; ') || 'none'}`,
     );
     const pb = await seedPlatformBilling();
     out(

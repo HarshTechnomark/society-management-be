@@ -314,6 +314,12 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /billing/runs/:id/publish',
       'POST /billing/runs/:id/cancel',
       'POST /billing/runs/:id/resume-issue',
+      // module 11 (11.5): another society's invoice is 404 INVOICE_NOT_FOUND on remind, note 404 NOTE_NOT_FOUND, and the resident bill routes answer 404 INVOICE_NOT_FOUND / UNIT_NOT_FOUND for another society's or another flat's ids (tests/modules/billing/reminders.test.ts, dues.test.ts and resident.test.ts, T11-40, T11-41)
+      'POST /invoices/:id/remind',
+      'GET /billing/notes/:id',
+      'GET /me/invoices/:id',
+      'GET /me/invoices/:id/pdf-url',
+      'GET /me/units/:unitId/statement',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

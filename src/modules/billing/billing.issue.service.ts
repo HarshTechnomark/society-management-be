@@ -24,6 +24,7 @@ import { isJobAllowed } from '../societies/societies.guard';
 import { holidays, units as unitsApi } from '../society-setup/society-setup.public';
 import { AUDIT, ISSUE_BATCH_ITEMS, REALTIME, type LineKind } from './billing.constants';
 import { addDaysYmd, periodLabelOf } from './billing.calc.period';
+import { touchDues } from './billing.dues.cache';
 import { unitLedger } from './billing.ledger.service';
 import { billingPorts, type JournalLine } from './billing.ports';
 import { itemTotals } from './billing.runs.compute';
@@ -402,7 +403,13 @@ export async function issueRun(runId: number): Promise<void> {
       raw: true,
     });
     for (let i = 0; i < ids.length; i += ISSUE_BATCH_ITEMS) {
-      for (const row of ids.slice(i, i + ISSUE_BATCH_ITEMS)) await issueItem(run, row.id!, s, ctx, actor);
+      let issuedInBatch = 0;
+      try {
+        for (const row of ids.slice(i, i + ISSUE_BATCH_ITEMS))
+          if ((await issueItem(run, row.id!, s, ctx, actor)) === 'ISSUED') issuedInBatch += 1;
+      } finally {
+        if (issuedInBatch) touchDues(run.societyId); // 8.26: once per committed batch
+      }
       run = (await BillingRun.findByPk(runId))!;
       emitRunUpdated(run);
     }
