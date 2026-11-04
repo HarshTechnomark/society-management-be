@@ -23,6 +23,7 @@ import {
 import { loadBillingSettings } from '../../../src/modules/billing/billing.runs.shared';
 import { approve } from '../../../src/modules/billing/billing.runs.approvals-hook';
 import { events } from '../../helpers/auth';
+import { as, login, resetLogins } from '../../helpers/access';
 import {
   addOwner,
   createAndCompute,
@@ -288,7 +289,8 @@ describe('issue a run (BR-11-37, T11-22)', () => {
     const line = (await InvoiceLine.findOne({ where: { invoiceId: inv.id! } }))!;
     await expect(line.update({ amountPaise: 1 })).rejects.toThrow(/immutable/);
     await expect(line.destroy()).rejects.toThrow(/never deleted/);
-    await inv.update({ pdfStatus: 'READY' }); // a settlement or housekeeping column may change
+    const fresh = (await Invoice.findByPk(inv.id!))!;
+    await fresh.update({ pdfStatus: 'READY' }); // a settlement or housekeeping column may change
     expect((await Invoice.findByPk(inv.id!))!.pdfStatus).toBe('READY');
   });
 
@@ -415,7 +417,10 @@ describe('items that cannot be issued (BR-11-37, BR-11-38)', () => {
       { confirmLabel: 'BR-2026-11', version: d.version },
       { headers: idemH() },
     );
-    await Unit.update({ status: 'ARCHIVED' } as never, { where: { id: w.units[1]!.id } });
+    await Unit.update(
+      { status: 'ARCHIVED', archivedAt: new Date(), archivedReason: 'test', archivedBy: null } as never,
+      { where: { id: w.units[1]!.id } },
+    );
     await approve(p.body.data.approvalRequestId, ctxOf(w, w.treasurer.user.id!));
     await drainQueues();
     const r = (await BillingRun.findByPk(run.id))!;
@@ -493,7 +498,9 @@ describe('bill date and the daily job (BR-11-36, T11-21)', () => {
   it('FY boundary: approved 28 March for April, issued on 1 April in the 2027-28 series', async () => {
     const w = await world({ flats: 1 });
     setNow('2027-03-28T05:00:00Z');
-    const { id } = await approved(w, { periodStart: '2027-04-01' });
+    resetLogins(); // the earlier session is months old on this clock
+    const later = { ...w, c: as(await login(w.user)) };
+    const { id } = await approved(later, { periodStart: '2027-04-01' });
     await drainQueues();
     expect((await BillingRun.findByPk(id))!.status).toBe('APPROVED');
     setNow('2027-04-01T05:00:00Z');

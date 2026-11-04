@@ -320,7 +320,7 @@ export async function linkResident(
     relation,
     familyRelation: null,
     sharePercent: null,
-    isPrimary: o.primary ?? relation === 'OWNER',
+    isPrimary: o.primary ?? (relation === 'OWNER' && !o.to),
     isResiding: relation !== 'OWNER',
     canLogin: false,
     tenancyId: o.tenancyId ?? null,

@@ -196,7 +196,7 @@ describe('create a run (8.5, BR-11-24, BR-11-25, BR-11-33)', () => {
       w.c('post', '/billing/runs', { runType: 'REGULAR', periodStart: '2026-11-01' }, { headers: idemH() }),
       w.c('post', '/billing/runs', { runType: 'REGULAR', periodStart: '2026-11-01' }, { headers: idemH() }),
     ]);
-    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    expect([a, b].map(x => x.status).sort(), JSON.stringify([a.body, b.body])).toEqual([201, 409]);
     expect([a, b].find(x => x.status === 409)!.body.code).toBe('RUN_PERIOD_EXISTS');
     await drainQueues();
     expect(await BillingRun.count({ where: { societyId: w.society.id! } })).toBe(1);

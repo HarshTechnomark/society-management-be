@@ -428,6 +428,11 @@ export async function createRun(ctx: Ctx, input: CreateRunInput) {
     try {
       return await sequelize.transaction(async t => {
         let label = runLabelOf(ps);
+        if (
+          runType === 'REGULAR' &&
+          (await BillingRun.count({ where: { societyId, activeKey: `REG:${ps}` }, transaction: t }))
+        )
+          throw new ConflictError('RUN_PERIOD_EXISTS', 'A regular run already exists for this period');
         if (runType === 'REGULAR') {
           // a cancelled run keeps its label (unique per society): the next run of the period is BR-2026-11-R2
           const n = await BillingRun.count({
@@ -486,12 +491,12 @@ export async function createRun(ctx: Ctx, input: CreateRunInput) {
         return runCreatedDto(run);
       });
     } catch (err) {
+      // two creates at once can end as a deadlock of the unique-key inserts: retry, the pre-check then sees the winner
+      if ((err as { parent?: { errno?: number } }).parent?.errno === 1213) continue;
       if (err instanceof UniqueConstraintError) {
-        const fields = Object.keys(err.fields ?? {}).join(' ');
-        if (/activeKey|uq_billing_runs_active/.test(fields + err.message))
+        if (runType === 'REGULAR')
           throw new ConflictError('RUN_PERIOD_EXISTS', 'A regular run already exists for this period');
-        if (/runLabel|uq_billing_runs_label/.test(fields + err.message) && runType === 'SUPPLEMENTARY')
-          continue;
+        continue;
       }
       throw err;
     }
