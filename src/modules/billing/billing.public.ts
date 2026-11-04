@@ -22,6 +22,7 @@ import { chargeHeads } from './billing.heads.service';
 import { policyFor } from './billing.latefee-policy.service';
 import { versionEffectiveOn } from './billing.rules.service';
 import { registerSetupApprovals } from './billing.rules.approvals-hook';
+import { registerLedgerHooks } from './billing.ledger.hooks';
 
 export { unitLedger, invoices };
 export { chargeHeads };
@@ -58,4 +59,6 @@ export function registerBilling(): void {
   registerRetentionExpiryHandler({ module: 'billing', order: 110, deleteRetained: deleteRetainedBilling });
   registerQueue(BILLING_QUEUE, 'Billing: runs, issue, PDFs, late fees, reminders', 4);
   registerSetupApprovals(); // 11.1: BILLING_RULE_CHANGE and LATE_FEE_POLICY_CHANGE
+  // 11.2: real unitLedger.balance for module 09 duesPaise, module 08 BILLING check and UNIT_HAS_BALANCE guard
+  registerLedgerHooks();
 }

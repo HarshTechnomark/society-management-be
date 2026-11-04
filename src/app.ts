@@ -23,6 +23,7 @@ import { residentsRoutes } from './modules/residents/residents.routes';
 import { residentsPart2Routes } from './modules/residents/residents.part2.routes';
 import { committeeRoutes } from './modules/committee/committee.routes';
 import { billingSetupRoutes } from './modules/billing/billing.setup.routes';
+import { billingLedgerRoutes } from './modules/billing/billing.ledger.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -91,6 +92,8 @@ export function createApp(): Express {
   api.use(committeeRoutes);
   // module 11 (11.1): charge heads, billing rules and versions, bill split rules, late fee policies
   api.use(billingSetupRoutes);
+  // module 11 (11.2): unit statement of account and opening balances; 11.1, 11.3, 11.4 and 11.5 mount their routers beside it
+  api.use(billingLedgerRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

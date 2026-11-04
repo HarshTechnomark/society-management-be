@@ -30,6 +30,7 @@ import { registerCommittee } from '../src/modules/committee/committee.public';
 import { registerBilling } from '../src/modules/billing/billing.public';
 import { seedCommittee } from '../seeders/committee';
 import { seedBillingSetup } from '../seeders/billing-setup';
+import { seedBillingOpening } from '../seeders/billing-opening';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -97,6 +98,11 @@ async function main(): Promise<void> {
     const bs = await seedBillingSetup();
     out(
       `billing-setup: heads for ${bs.heads.join(', ') || 'none'}, rules created ${bs.rules.length}, skipped ${bs.skipped.length}`,
+    );
+    // module 11 (11.2): demo opening balances for Sky Heights
+    const bo = await seedBillingOpening();
+    out(
+      `billing-opening: created ${bo.created.join('; ') || 'none'}, skipped ${bo.skipped.join('; ') || 'none'}`,
     );
     const pb = await seedPlatformBilling();
     out(
