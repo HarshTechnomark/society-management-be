@@ -145,18 +145,47 @@ const record = (fn: string, input: unknown, t?: Transaction) => {
 let fakeSeq = 0;
 /** Registered type hooks (placeholder); the real module 14 keeps its own registry. */
 export const placeholderApprovalTypes = new Map<string, ApprovalTypeHooks>();
+/** Requests the placeholder `approvals.request` created (11.3): lets the development approve and reject hooks find the entity. */
+export interface PlaceholderApprovalRequest {
+  id: number;
+  type: string;
+  entityType: string;
+  entityId: number;
+  societyId: number | null;
+  requestedBy: number | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
+}
+export const placeholderApprovalRequests = new Map<number, PlaceholderApprovalRequest>();
 
 export const defaultBillingPorts: BillingPorts = {
   approvals: {
     registerType: def => {
       placeholderApprovalTypes.set(def.type, def);
     },
-    request: async (_ctx, input, t) => {
+    request: async (ctx, input, t) => {
       record('approvals.request', input, t);
-      return { id: ++fakeSeq, status: 'PENDING' };
+      const id = ++fakeSeq;
+      placeholderApprovalRequests.set(id, {
+        id,
+        type: input.type,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        societyId: ctx.society?.id ?? null,
+        requestedBy: ctx.user?.id ?? null,
+        status: 'PENDING',
+      });
+      return { id, status: 'PENDING' };
     },
-    resubmit: async (_ctx, id, input, t) => record('approvals.resubmit', { id, ...input }, t),
-    cancel: async (_ctx, id, reason, t) => record('approvals.cancel', { id, reason }, t),
+    resubmit: async (_ctx, id, input, t) => {
+      record('approvals.resubmit', { id, ...input }, t);
+      const r = placeholderApprovalRequests.get(id);
+      if (r) r.status = 'PENDING';
+    },
+    cancel: async (_ctx, id, reason, t) => {
+      record('approvals.cancel', { id, reason }, t);
+      const r = placeholderApprovalRequests.get(id);
+      if (r) r.status = 'CANCELLED';
+    },
     lockOpenForEntity: async () => null,
   },
   journal: {
@@ -215,6 +244,7 @@ export function setBillingPorts(p?: { [K in keyof BillingPorts]?: Partial<Billin
     current = defaultBillingPorts;
     replaced.clear();
     billingPortCalls.length = 0;
+    placeholderApprovalRequests.clear();
     return;
   }
   const next = { ...current } as Record<string, unknown>;
