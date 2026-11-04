@@ -196,7 +196,17 @@ export const defaultBillingPorts: BillingPorts = {
       const r = placeholderApprovalRequests.get(id);
       if (r) r.status = 'CANCELLED';
     },
-    lockOpenForEntity: async () => null,
+    // 11.4: the placeholder finds a still-pending request it created (module 14 does the same with its own table)
+    lockOpenForEntity: async (societyId, entityType, entityId) => {
+      const open = [...placeholderApprovalRequests.values()].find(
+        r =>
+          r.status === 'PENDING' &&
+          r.societyId === societyId &&
+          r.entityType === entityType &&
+          r.entityId === entityId,
+      );
+      return open ? { id: open.id, type: open.type } : null;
+    },
   },
   journal: {
     post: async (_ctx, input, t) => {
