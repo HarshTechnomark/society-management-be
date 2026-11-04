@@ -22,6 +22,7 @@ import { societySetupRoutes } from './modules/society-setup/society-setup.routes
 import { residentsRoutes } from './modules/residents/residents.routes';
 import { residentsPart2Routes } from './modules/residents/residents.part2.routes';
 import { committeeRoutes } from './modules/committee/committee.routes';
+import { billingSetupRoutes } from './modules/billing/billing.setup.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -88,6 +89,8 @@ export function createApp(): Express {
   api.use(residentsPart2Routes); // module 09 part 2: tenancies, join requests, move requests
   // module 10: committee terms and seats (10.1); activation, changes, hand-over and the resident page follow in 10.2 and 10.3
   api.use(committeeRoutes);
+  // module 11 (11.1): charge heads, billing rules and versions, bill split rules, late fee policies
+  api.use(billingSetupRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 
