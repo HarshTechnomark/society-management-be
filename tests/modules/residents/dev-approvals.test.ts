@@ -4,6 +4,7 @@ import { app } from '../../helpers/auth';
 import { closeDb } from '../../../src/models';
 import { approvalStore } from '../../../src/modules/residents/residents.part3.ports';
 import { approvalStub } from '../../../src/modules/residents/residents.part2.ports';
+import { placeholderApprovalRequests } from '../../../src/modules/billing/billing.ports';
 
 afterAll(async () => {
   await closeDb();
@@ -11,6 +12,7 @@ afterAll(async () => {
 beforeEach(() => {
   approvalStore.clear();
   approvalStub.reset();
+  placeholderApprovalRequests.clear();
 });
 
 describe('development approvals (stand-in for module 14)', () => {
@@ -41,5 +43,25 @@ describe('development approvals (stand-in for module 14)', () => {
     const res = await request(app).post('/api/v1/dev/approvals/6/approve');
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('NOT_PENDING');
+  });
+
+  it('lists billing requests with their source and keeps ids of other modules apart', async () => {
+    placeholderApprovalRequests.set(4, {
+      id: 4,
+      type: 'BILLING_RUN_PUBLISH',
+      entityType: 'billing_run',
+      entityId: 2,
+      societyId: 3,
+      requestedBy: 11,
+      status: 'PENDING',
+    });
+    approvalStub.requests.set(4, { id: 4, societyId: 3, type: 'MOVE_IN', entityId: 8, status: 'PENDING' });
+    const res = await request(app).get('/api/v1/dev/approvals');
+    expect(res.body.data.map((a: { id: number; source: string }) => `${a.source}:${a.id}`)).toEqual([
+      'residents:4',
+      'billing:4',
+    ]);
+    const missing = await request(app).post('/api/v1/dev/approvals/99/approve?source=billing');
+    expect(missing.status).toBe(404);
   });
 });

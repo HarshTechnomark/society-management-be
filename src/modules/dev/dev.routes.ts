@@ -13,6 +13,9 @@ import { approveRequest, rejectRequest } from '../residents/residents.public';
 import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
 import { approvalStore } from '../residents/residents.part3.ports';
 import { approvalStub } from '../residents/residents.part2.ports';
+import { placeholderApprovalRequests } from '../billing/billing.ports';
+import * as runApprovals from '../billing/billing.runs.approvals-hook';
+import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 
 /** Non-production only: the last messages the fake adapters recorded (module 01 section 8.9). */
 export const devRoutes = Router();
@@ -107,21 +110,43 @@ devRoutes.post(
 const approvalCtx = (societyId: number): Ctx =>
   ({ ...systemCtx('dev-approvals'), society: { id: societyId } }) as Ctx;
 
-/** The requests still waiting for a decision. */
+type ApprovalSource = 'residents' | 'billing';
+const sourceOf = (v: unknown): ApprovalSource => (v === 'billing' ? 'billing' : 'residents');
+
+/** The requests still waiting for a decision. `source` says which module's placeholder holds it (ids can repeat across modules). */
 devRoutes.get(
   '/approvals',
   asyncHandler(async (_req, res) => {
+    const row = (
+      a: { id: number; type: string; entityId: number; societyId: number | null; status: string },
+      source: ApprovalSource,
+    ) => ({ id: a.id, type: a.type, entityId: a.entityId, societyId: a.societyId, status: a.status, source });
     const part3 = [...approvalStore.values()]
       .filter(a => a.status === 'PENDING')
-      .map(a => ({ id: a.id, type: a.type, entityId: a.entityId, societyId: a.societyId, status: a.status }));
+      .map(a => row(a, 'residents'));
     const part2 = [...approvalStub.requests.values()]
       .filter(a => a.status === 'PENDING')
-      .map(a => ({ id: a.id, type: a.type, entityId: a.entityId, societyId: a.societyId, status: a.status }));
-    ok(res, [...part2, ...part3]);
+      .map(a => row(a, 'residents'));
+    const billing = [...placeholderApprovalRequests.values()]
+      .filter(a => a.status === 'PENDING')
+      .map(a => row(a, 'billing'));
+    ok(res, [...part2, ...part3, ...billing]);
   }),
 );
 
-async function decide(id: number, decision: 'approve' | 'reject', reason: string) {
+async function decideBilling(id: number, decision: 'approve' | 'reject', reason: string) {
+  const r = placeholderApprovalRequests.get(id);
+  if (!r) throw new AppError(404, 'NOT_FOUND', 'Approval request not found');
+  if (r.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
+  const ctx = approvalCtx(r.societyId ?? 0);
+  const hook = r.type === 'BILLING_RUN_PUBLISH' ? runApprovals : ruleApprovals;
+  const out = decision === 'approve' ? await hook.approve(id, ctx) : await hook.reject(id, reason, ctx);
+  r.status = decision === 'approve' ? 'APPROVED' : 'REJECTED';
+  return out;
+}
+
+async function decide(id: number, decision: 'approve' | 'reject', reason: string, source: ApprovalSource) {
+  if (source === 'billing') return decideBilling(id, decision, reason);
   const p3 = approvalStore.get(id);
   if (p3) {
     if (p3.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
@@ -140,7 +165,7 @@ async function decide(id: number, decision: 'approve' | 'reject', reason: string
 devRoutes.post(
   '/approvals/:id/approve',
   asyncHandler(async (req, res) => {
-    await decide(Number(req.params.id), 'approve', '');
+    await decide(Number(req.params.id), 'approve', '', sourceOf(req.query.source));
     ok(res, { id: Number(req.params.id), status: 'APPROVED' });
   }),
 );
@@ -149,7 +174,7 @@ devRoutes.post(
   '/approvals/:id/reject',
   asyncHandler(async (req, res) => {
     const reason = String((req.body as { reason?: string } | undefined)?.reason ?? 'Rejected in development');
-    await decide(Number(req.params.id), 'reject', reason);
+    await decide(Number(req.params.id), 'reject', reason, sourceOf(req.query.source));
     ok(res, { id: Number(req.params.id), status: 'REJECTED' });
   }),
 );
