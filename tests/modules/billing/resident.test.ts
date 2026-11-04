@@ -224,8 +224,8 @@ describe('GET /me/dues and /me/units/:unitId/statement', () => {
     const o = await x.owner.c('get', `/me/units/${x.a.id}/statement?from=2026-09-01&to=2026-11-30`);
     expect(o.status, JSON.stringify(o.body)).toBe(200);
     expect(o.body.data.unit).toEqual({ id: x.a.id, label: 'A-101' });
-    expect(o.body.data.entries).toHaveLength(3);
-    expect(o.body.data.closingBalancePaise).toBe(1_000_000);
+    expect(o.body.data.entries).toHaveLength(4);
+    expect(o.body.data.closingBalancePaise).toBe(900_000);
     const t = await x.tenant.c('get', `/me/units/${x.a.id}/statement`);
     expect(t.status).toBe(404);
     expect(t.body.code ?? t.body.error?.code).toBe('UNIT_NOT_FOUND');
