@@ -156,6 +156,11 @@ describe('POST /me/autopay-mandates (8.8, BR-12-47)', () => {
     const off = await start(x);
     expect([off.status, off.body.code]).toEqual([422, 'AUTOPAY_NOT_AVAILABLE']);
     expect((await x.owner.c('get', '/me/autopay-mandates')).body.code).toBe('AUTOPAY_NOT_AVAILABLE');
+    const off2 = await x.owner.c('get', `/me/payables?unitId=${x.w.units[0]!.id}`);
+    expect([off2.status, off2.body.data.autopayAvailable]).toEqual([200, false]);
+    await setFlag(true);
+    const on = await x.owner.c('get', `/me/payables?unitId=${x.w.units[0]!.id}`);
+    expect(on.body.data.autopayAvailable).toBe(true);
   });
 
   it('a gateway account without mandate support is AUTOPAY_NOT_AVAILABLE, a gateway failure 502 and nothing is saved', async () => {

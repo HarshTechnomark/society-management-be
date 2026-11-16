@@ -9,6 +9,7 @@ import { ERR, REQUEST_MAX_PAISE, REQUEST_MIN_PAISE, type FeeMethod } from './pay
 import { requestOutstanding } from './payments.alloc.plan';
 import { advanceBalance } from './payments.advances';
 import { checkoutOf, feeRatesOf } from './payments.orders.gateway';
+import { assertAutopayAvailable } from './payments.autopay.service';
 import { paymentsPorts } from './payments.ports';
 import { n, setting, societyToday } from './payments.shared';
 
@@ -169,7 +170,9 @@ export async function getPayables(ctx: Ctx, unitId: number) {
       suggestedPaise:
         r.collection.amountMode === 'FIXED_PER_UNIT'
           ? r.outstandingPaise
-          : Math.max(n(r.request.amountPaise), r.minPaise),
+          : n(r.request.amountPaise) > 0
+            ? Math.max(n(r.request.amountPaise), r.minPaise)
+            : null,
       minPaise: r.minPaise,
       maxPaise: r.maxPaise,
       paidPaise: n(r.request.paidPaise),
@@ -201,6 +204,10 @@ export async function getPayables(ctx: Ctx, unitId: number) {
       ),
     },
     gatewayReady: Boolean(account?.isActive),
+    autopayAvailable: await assertAutopayAvailable(societyId, undefined, 'read').then(
+      () => true,
+      () => false,
+    ),
     offlineInstructions: account?.isActive
       ? null
       : 'Online payment is not available. Pay by bank transfer or cheque and ask the treasurer for the account details.',
