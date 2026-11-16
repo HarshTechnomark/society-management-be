@@ -20,6 +20,12 @@ export interface AuthPorts {
   authAccess: {
     listMemberships(userId: number): Promise<MembershipView[]>;
     hasAppAccess(userId: number, app: ClientApp): Promise<boolean>;
+    /**
+     * True when the person has a resident record: an active owner, tenant or family link (module 09) in a society they are an
+     * active member of, or a resident-scope membership. Decides whether the single sign-in address offers the resident app
+     * next to another app (`candidateAppsFor`).
+     */
+    hasResidentRecord(userId: number): Promise<boolean>;
     userRequiresMfa(userId: number): Promise<boolean>;
     getPermissions(userId: number, societyId: number): Promise<string[]>;
     /** Platform permission keys of the user's platform role (not in the spec port list; needed by 8.13 and 8.31). */
@@ -71,6 +77,7 @@ export const defaultPorts: AuthPorts = {
       if (app === 'PLATFORM') return Boolean((await User.findByPk(userId))?.platformRoleId);
       return false;
     },
+    hasResidentRecord: async () => false,
     userRequiresMfa: async userId => Boolean((await User.findByPk(userId))?.platformRoleId),
     getPermissions: async () => [],
     getPlatformPermissions: async () => [],

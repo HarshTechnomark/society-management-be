@@ -108,11 +108,7 @@ export async function completeFirstFactor(
   if (!apps.length)
     return {
       error: hadAccess
-        ? new AppError(
-            400,
-            'LOGIN_METHOD_NOT_ALLOWED',
-            'This sign-in method is not available for your account',
-          )
+        ? methodNotAllowed(firstFactor)
         : new ForbiddenError('NO_ACCESS_FOR_APP', 'This account has no access to this app'),
     };
   if (apps.length > 1) {
@@ -140,8 +136,9 @@ const METHOD_OF: Record<FirstFactor, 'otp' | 'password' | 'passkey'> = {
 /**
  * The apps a person can open on the single sign-in address with this first factor (BR-02-42, BR-02-43): the apps they have
  * access to whose sign-in rules allow the factor (a platform account never signs in by OTP; a resident has no password).
- * Everybody can be a resident, so that app is offered next to a real role only when the person has a resident link too; this
- * keeps a committee member who is not also a resident from being asked every time.
+ * Everybody can be a resident (an unknown mobile number signs up as one), so the resident app is offered to a person who has
+ * another app only when they also have a resident record (module 09: an owner, tenant or family link, or a resident-scope
+ * membership). A platform or committee account with no such record never lands in the resident app.
  */
 export async function candidateAppsFor(
   userId: number,
@@ -150,14 +147,22 @@ export async function candidateAppsFor(
   const access = ports().authAccess;
   const have: ClientApp[] = [];
   for (const a of APP_ORDER) if (await access.hasAppAccess(userId, a)) have.push(a);
-  const usable = have.filter(a => APP_RULES[a][METHOD_OF[factor]]);
-  const roles = usable.filter(a => a !== 'RESIDENT');
-  let apps = usable;
-  if (usable.includes('RESIDENT') && roles.length) {
-    const resident = (await access.listMemberships(userId)).some(m => m.roleScope === 'resident');
-    if (!resident) apps = roles;
-  }
-  return { apps, hadAccess: have.length > 0 };
+  const others = have.filter(a => a !== 'RESIDENT');
+  const resident = have.includes('RESIDENT') && (!others.length || (await access.hasResidentRecord(userId)));
+  const real = have.filter(a => a !== 'RESIDENT' || resident);
+  const apps = real.filter(a => APP_RULES[a][METHOD_OF[factor]]);
+  return { apps, hadAccess: real.length > 0 };
+}
+
+/** The refusal for a person whose apps all refuse this first factor (BR-02-43). */
+export function methodNotAllowed(factor: FirstFactor): AppError {
+  const message =
+    factor === 'OTP'
+      ? 'This account signs in with its email address and password, not a mobile code'
+      : factor === 'PASSWORD'
+        ? 'This account signs in with a one-time code sent to its mobile number, not a password'
+        : 'This sign-in method is not available for your account';
+  return new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', message);
 }
 
 /** The second step (BR-02-23) or the session, once the app is known. */

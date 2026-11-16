@@ -41,7 +41,11 @@ hosts keep working exactly as before (BR-02-43), so both can be configured toget
 - **Sign-in:** a mobile number signs in with a one-time code, an email with its password (passkeys unchanged). `POST /auth/otp/send`, `/otp/verify`,
   `/password/login` and `/passkey/*` accept the request with no app. `completeFirstFactor` (`auth.signin.ts`) then lists the apps the person may open with
   that first factor (`candidateAppsFor`): the apps they have access to whose `APP_RULES` allow the factor (a platform account never signs in by OTP, a
-  resident has no password). Everybody can be a resident, so the resident app is offered next to a real role only when the person has a resident link.
+  resident has no password). Everybody can be a resident (an unknown mobile number signs up as one), so a person who has another app is offered the
+  resident app only when they have a resident record (`authAccess.hasResidentRecord`, module 03: a resident-scope membership, or an active module 09
+  owner, tenant or family link in a society they are an active member of, as in `computeAccess`). A chairman who owns a flat is asked to choose; a
+  platform account with no resident record that signs in by mobile code gets `LOGIN_METHOD_NOT_ALLOWED` ("signs in with its email address and
+  password"), never a resident session. `POST /auth/switch-app` and `GET /auth/apps` use the same list.
 - **One app:** the second step (`MFA_REQUIRED` or `MFA_ENROLL_REQUIRED`) or the session follows as before; the challenge and the session carry the app.
 - **More than one app:** the answer is `APP_CHOICE_REQUIRED` with the apps and a single-use challenge; the client calls `POST /auth/app/choose`
   `{ challengeToken, app }`, and the sign-in continues for that app. No session exists before the choice.

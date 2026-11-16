@@ -123,6 +123,8 @@ export async function availableApps(ctx: Ctx): Promise<{ current: ClientApp; ava
   return { current, available: apps.filter(a => a !== current) };
 }
 
+const FACTOR_OF = { otp: 'OTP', password: 'PASSWORD', passkey: 'PASSKEY' } as const;
+
 /**
  * `POST /auth/switch-app` (single sign-in address only): a signed-in person opens another app they have access to. The new
  * session keeps the first factor, the second step and the original sign-in time; an app whose rules do not allow that first
@@ -151,7 +153,8 @@ export async function switchApp(
     first === 'OTP' ? 'otp' : first === 'PASSWORD' ? 'password' : first === 'PASSKEY' ? 'passkey' : null;
   if (!method || !APP_RULES[app][method])
     throw new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Sign in again to open that app');
-  if (!(await ports().authAccess.hasAppAccess(u.id!, app)))
+  // the apps this person really has (a resident app only with a resident record), as offered at sign-in
+  if (!(await candidateAppsFor(u.id!, FACTOR_OF[method])).apps.includes(app))
     throw new ForbiddenError('NO_ACCESS_FOR_APP', 'This account has no access to this app');
   if ((await userRequiresMfa(u)) && !s0.mfaVerified)
     throw new ForbiddenError('MFA_ENROLLMENT_REQUIRED', 'Set up two-step sign-in first');

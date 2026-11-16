@@ -4,6 +4,7 @@ import { now } from '../../lib/clock';
 import type { AuthPorts } from '../auth/auth.ports';
 import type { ClientApp, MembershipView } from '../auth/auth.types';
 import { computeAccess, getPlatformPermissionsOf } from './access-control.access';
+import { accessPorts } from './access-control.ports';
 import { deletionBlockers, onUserAnonymised } from './access-control.members.service';
 
 /** The `authAccess` port module 02 consumes (BR-03-26, BR-03-29, BR-03-30, BR-03-31). Registered by `registerAccessControl()`. */
@@ -92,6 +93,20 @@ async function hasAppAccess(userId: number, app: ClientApp): Promise<boolean> {
   );
 }
 
+/**
+ * A resident record, as the resident app's own access sees it: a resident-scope membership, or (as in `computeAccess`, where
+ * owner, tenant and family permissions come from module 09 unit links) an active unit link in a society the person is an
+ * active member of. A chairman who owns a flat keeps the chairman membership and has the link.
+ */
+async function hasResidentRecord(userId: number): Promise<boolean> {
+  const mine = await listMemberships(userId);
+  if (mine.some(m => m.roleScope === 'resident')) return true;
+  const societies = new Set(mine.filter(m => m.status === 'ACTIVE').map(m => m.societyId));
+  for (const societyId of societies)
+    if ((await accessPorts().residents.getActiveUnitLinks(societyId, userId)).length) return true;
+  return false;
+}
+
 async function userRequiresMfa(userId: number): Promise<boolean> {
   const u = await User.findByPk(userId, { attributes: ['id', 'platformRoleId'] });
   if (u?.platformRoleId) return true;
@@ -106,6 +121,7 @@ async function userRequiresMfa(userId: number): Promise<boolean> {
 export const authAccess: AuthPorts['authAccess'] = {
   listMemberships,
   hasAppAccess,
+  hasResidentRecord,
   userRequiresMfa,
   getPermissions: async (userId, societyId) => (await computeAccess(societyId, userId)).permissions,
   getPlatformPermissions: getPlatformPermissionsOf,

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { Session, User, closeDb } from '../../../src/models';
+import { Resident, Session, User, closeDb, sequelize } from '../../../src/models';
+import { setNow } from '../../../src/lib/clock';
 import { setAuthPorts } from '../../../src/modules/auth/auth.ports';
 import type { ClientApp, MembershipView } from '../../../src/modules/auth/auth.types';
 import {
@@ -15,6 +16,10 @@ import {
   type Cookies,
 } from '../../helpers/auth';
 import { lifecycleSociety, resetSocieties } from '../../helpers/societies';
+import { resetResidents, residentSociety } from '../../helpers/residents';
+import { createLink } from '../../../src/modules/residents/residents.links.service';
+import { syncMembership } from '../../../src/modules/residents/residents.sync';
+import { systemCtx } from '../../../src/types/context';
 
 /** The single sign-in address (an app origin whose first host label is not a role label). */
 const U = { origin: 'https://app.societyapp.in' };
@@ -50,6 +55,7 @@ beforeEach(async () => {
       // the apps a person may open; everybody is a resident unless the test says otherwise
       hasAppAccess: async (id, app) => (access.get(id) ?? ['RESIDENT']).includes(app),
       userRequiresMfa: async id => needsMfa.has(id),
+      hasResidentRecord: async id => residentLink.has(id),
       listMemberships: async id => {
         const apps = access.get(id) ?? ['RESIDENT'];
         const out: MembershipView[] = [];
@@ -158,6 +164,16 @@ describe('the app is decided from what the person may open and how they signed i
     const r = await otpLogin(u.mobile);
     expect(r.status).toBe(400);
     expect(r.body.code).toBe('LOGIN_METHOD_NOT_ALLOWED');
+    expect(await Session.count({ where: { userId: u.id } })).toBe(0);
+  });
+
+  it('a platform account with no resident record is not given the resident app by a mobile code', async () => {
+    const u = await makeUser({ platformRoleId: 11, mfa: true });
+    grant(u.id, ['PLATFORM', 'RESIDENT'], { mfa: true }); // everybody "can" be a resident, but there is no record
+    const r = await otpLogin(u.mobile);
+    expect(r.status, JSON.stringify(r.body)).toBe(400);
+    expect(r.body.code).toBe('LOGIN_METHOD_NOT_ALLOWED');
+    expect(r.body.message).toMatch(/email address and password/);
     expect(await Session.count({ where: { userId: u.id } })).toBe(0);
   });
 
@@ -449,5 +465,120 @@ describe('links in messages use the single sign-in address when no per-role addr
     expect(r.status).toBe(202);
     const mail = (await inboxFor('reset@skyheights.in'))[0]!;
     expect(mail.body).toMatch(/https:\/\/app\.societyapp\.in\/reset\?token=/);
+  });
+});
+
+describe('with the real module 03 and module 09 access: the resident app needs a resident record', () => {
+  /** Makes `user` the owner of a flat through module 09 (resident row, unit link, membership sync), keeping their role. */
+  async function ownFlat(societyId: number, user: { id: number; mobile: string }, unitId: number) {
+    const resident = await Resident.create({
+      societyId,
+      userId: user.id,
+      memberId: null,
+      name: 'Rajesh Kulkarni',
+      mobile: user.mobile,
+      alternateMobile: null,
+      email: null,
+      dateOfBirth: null,
+      gender: null,
+      photoFileId: null,
+      preferredLanguage: 'en-IN',
+      isNri: false,
+      overseasPhone: null,
+      localRepresentativeResidentId: null,
+      status: 'ACTIVE',
+      source: 'ADMIN',
+      directoryVisible: true,
+      showMobileInDirectory: false,
+      showEmailInDirectory: false,
+      showPhotoInDirectory: false,
+      adminNote: null,
+      anonymisedAt: null,
+      version: 1,
+      createdBy: null,
+      updatedBy: null,
+      deletedAt: null,
+    } as never);
+    await sequelize.transaction(async t => {
+      await createLink(
+        systemCtx('test'),
+        societyId,
+        { residentId: resident.id!, unitId, relation: 'OWNER', fromDate: '2026-01-01' },
+        t,
+        { internal: true, checkFeature: false },
+      );
+      await syncMembership(systemCtx('test'), t, resident.id!, { societyId });
+    });
+  }
+
+  beforeEach(async () => {
+    await resetResidents();
+  });
+  // the fixtures signed the chairman in with this minute's authenticator code; a code works once
+  const nextMinute = () => setNow('2026-11-01T04:32:00Z');
+
+  async function adminViaChoice(u: { mobile: string; totpSecret?: string | null }) {
+    const r = await otpLogin(u.mobile);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data.status).toBe('APP_CHOICE_REQUIRED');
+    expect(r.body.data.apps).toEqual(['ADMIN', 'RESIDENT']);
+    const c = await post('/auth/app/choose', { challengeToken: r.body.data.challengeToken, app: 'ADMIN' }, U);
+    expect(c.body.data.status).toBe('MFA_REQUIRED');
+    const v = await post(
+      '/auth/mfa/verify',
+      { challengeToken: c.body.data.challengeToken, method: 'TOTP', code: totpNow(u.totpSecret!) },
+      U,
+    );
+    expect(v.status, JSON.stringify(v.body)).toBe(200);
+    return withCookies(v);
+  }
+
+  it('a chairman who owns a flat chooses between the society admin and the resident app, and can switch', async () => {
+    const { society, user, unit } = await residentSociety();
+    await ownFlat(society.id!, user, unit(1).id);
+    nextMinute();
+    const cookies = await adminViaChoice(user);
+    const apps = await get('/auth/apps', { ...U, cookies });
+    expect(apps.status, JSON.stringify(apps.body)).toBe(200);
+    expect(apps.body.data).toEqual({ current: 'ADMIN', available: ['RESIDENT'] });
+    const sw = await post('/auth/switch-app', { app: 'RESIDENT' }, { ...U, cookies });
+    expect(sw.status, JSON.stringify(sw.body)).toBe(200);
+    expect(sw.body.data.session.clientApp).toBe('RESIDENT');
+  });
+
+  it('a chairman with no resident record goes straight to the society admin and cannot switch to the resident app', async () => {
+    const { user } = await residentSociety();
+    nextMinute();
+    const r = await otpLogin(user.mobile);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data.status).toBe('MFA_REQUIRED');
+    const v = await post(
+      '/auth/mfa/verify',
+      { challengeToken: r.body.data.challengeToken, method: 'TOTP', code: totpNow(user.totpSecret!) },
+      U,
+    );
+    expect(v.body.data.me.session.clientApp).toBe('ADMIN');
+    const cookies = withCookies(v);
+    expect((await get('/auth/apps', { ...U, cookies })).body.data).toEqual({
+      current: 'ADMIN',
+      available: [],
+    });
+    const sw = await post('/auth/switch-app', { app: 'RESIDENT' }, { ...U, cookies });
+    expect(sw.status).toBe(403);
+    expect(sw.body.code).toBe('NO_ACCESS_FOR_APP');
+  });
+
+  it('a platform account signing in by mobile is refused and gets no resident session', async () => {
+    const u = await makeUser({ platformRoleId: 11, mfa: true });
+    const r = await otpLogin(u.mobile);
+    expect(r.status, JSON.stringify(r.body)).toBe(400);
+    expect(r.body.code).toBe('LOGIN_METHOD_NOT_ALLOWED');
+    expect(await Session.count({ where: { userId: u.id } })).toBe(0);
+  });
+
+  it('an unknown mobile number still signs up and lands in the resident app', async () => {
+    const r = await otpLogin('9833300009');
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data.me.session.clientApp).toBe('RESIDENT');
   });
 });
