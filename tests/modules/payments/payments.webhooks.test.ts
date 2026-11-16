@@ -278,7 +278,7 @@ describe('POST /webhooks/payments/:gatewayAccountId (8.25)', () => {
 describe('refund and mandate events (12.4 handlers)', () => {
   const rawEvent = (event: string, entity: Record<string, unknown>, key: 'refund' | 'mandate') =>
     JSON.stringify({ id: `evt_${++seq}_${Date.now()}`, event, payload: { [key]: { entity } } });
-  it('a refund event for a refund that is not known yet is retried, not lost', async () => {
+  it('a refund event for a refund that is not known yet is retried five times, then kept for review', async () => {
     const raw = rawEvent(
       'refund.processed',
       { id: 'rfnd_unknown1', payment_id: 'pay_x', amount: 100 },
@@ -288,17 +288,17 @@ describe('refund and mandate events (12.4 handlers)', () => {
     await drainQueues();
     const ev = (await PaymentWebhookEvent.findOne({ where: { eventType: 'refund.processed' } }))!;
     expect([ev.status, ev.gatewayRefundId, Number(ev.attempts)]).toEqual([
-      'FAILED_RETRYABLE',
+      'NEEDS_REVIEW',
       'rfnd_unknown1',
-      1,
+      5,
     ]);
   });
-  it('a mandate event for an unknown mandate is retried; the dev activate route is 404 for it', async () => {
+  it('a mandate event for an unknown mandate is retried then kept for review; the dev activate route is 404 for it', async () => {
     const raw = rawEvent('mandate.activated', { id: 'token_unknown1' }, 'mandate');
     await post(acct(), raw);
     await drainQueues();
     expect((await PaymentWebhookEvent.findOne({ where: { eventType: 'mandate.activated' } }))!.status).toBe(
-      'FAILED_RETRYABLE',
+      'NEEDS_REVIEW',
     );
     const r = await call('post', '/dev/payments/mandates/token_unknown1/activate', {}, { origin: null });
     expect(r.status).toBe(404);
