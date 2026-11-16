@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { UniqueConstraintError } from 'sequelize';
+import { Op, UniqueConstraintError } from 'sequelize';
 import { addDays, now } from '../../lib/clock';
 import { env } from '../../lib/env';
 import { logger } from '../../lib/logger';
@@ -63,6 +63,45 @@ export async function createPaymentLink(ctx: Ctx, input: LinkInput) {
           throw new UnprocessableError(ERR.amountBelowMinimum, 'The amount is below the minimum');
         if (base > MAX_BASE_PAISE)
           throw new UnprocessableError(ERR.amountTooLarge, 'The amount is too large for one payment');
+        // a still-open link for the same flat and amount is replaced by the new one (8.18 is silent; one live link per amount)
+        const open = await PaymentOrder.findAll({
+          where: {
+            societyId,
+            unitId: input.unitId,
+            sourceType: 'PAYMENT_LINK',
+            status: { [Op.in]: [...LIVE] },
+            basePaise: base,
+            expiresAt: { [Op.gt]: now() },
+          },
+          lock: t.LOCK.UPDATE,
+          transaction: t,
+        });
+        for (const old of open) {
+          await old.update(
+            {
+              status: 'CANCELLED',
+              cancelledAt: now(),
+              cancelReason: 'Replaced by a new link',
+              nextCheckAt: null,
+              version: n(old.version) + 1,
+            },
+            { transaction: t },
+          );
+          await audit(
+            ctx,
+            {
+              action: AUDIT.orderCancelled,
+              entityType: 'payment_order',
+              entityId: n(old.id),
+              entityLabel: `PO-${old.id}`,
+              societyId,
+              before: { status: old.previous('status') ?? 'CREATED' },
+              after: { status: 'CANCELLED' },
+              reason: 'Replaced by a new link',
+            },
+            t,
+          );
+        }
         const o = await insertOrder(
           ctx,
           {

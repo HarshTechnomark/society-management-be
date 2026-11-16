@@ -81,7 +81,7 @@ export const onlineSchemas = {
       path: ['amountPaise'],
       message: 'Required for FIXED and not allowed for OUTSTANDING',
     }),
-  codeParam: z.object({ code: z.string().regex(/^[A-Za-z0-9]{10}$/) }).strict(),
+  codeParam: z.object({ code: z.string().min(1).max(64) }).strict(),
   publicBody: z
     .object({ token: z.string().min(8).max(100).optional() })
     .strict()
