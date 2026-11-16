@@ -19,31 +19,49 @@ between the **foundation** (this commit series) and the **five parts** that fill
 
 ## Core API (call these; never write `payment_allocations`, `unit_advances` or `receiptNo` yourself)
 
-- `payments.settle.ts`: `settleInput(ctx, input: SettleInput, t)` creates the effective payment in the caller's transaction:
-  payment row, allocation (oldest first or `SELECTED`, rest to advance), invoice updates through module 11, advance row,
-  receipt number, unit ledger credit, journal (6.9), audit `payments.payment.captured|recorded`, and `afterCommit`
-  realtime, receipt-render job and advance-apply job. Idempotent by `gatewayPaymentId` and `referenceKey` (returns the
-  existing payment). `settleCapture(gatewayAccountId, gp, ctx?)` is the 6.8 online entry (order lookup and locks,
-  mismatch/duplicate/cancelled rules, `PaymentOrder` to PAID). Offline parts call `settleInput` on approval.
-- `payments.alloc.plan.ts`: `buildPlan(open, input)` pure function (BR-12-15/16/17), `loadOpenTargets`.
-- `payments.advances.ts`: `advanceBalance(societyId, unitId, t?)`, `postAdvance(ctx, unitId, entry, t)` (needs the unit lock, checks never negative, dedupe key),
-  `applyAdvancesForUnit(ctx, societyId, unitId, t)` (job body), `creditOpeningAdvance`.
-- `payments.receipts.core.ts`: `issueReceipt(payment, t)`, `cancelReceipt`, `bumpReceiptRevision`.
-- `payments.reverse.core.ts`: `reverseAllocations(ctx, payment, opts, t)` is the one routine for reverse, bounce, return, refund freeing, reallocation and
-  invoice cancel (negative rows, `invoices.reverseAllocation`, advance release, request totals, payment part columns).
-  `reversePaymentCore(ctx, paymentId, {newStatus, reasonCode, reason}, t)` also removes excess advance, cancels the receipt and journals the mirror.
-- `payments.duplicates.ts`: `referenceKeyOf`, `findDuplicateReference`, `findDuplicateSuspect` (F22).
-- `payments.shared.ts`: `lockUnit`, `societyToday`, `setting(societyId, key)`, `emitFinance`, `paymentToAudit`, `auditPayment`.
-- Journal builder: `payments.journal.ts` `captureJournal`, `mirrorJournal`, `advanceAppliedJournal`.
+Open every transaction that touches the core with `moneyTx(fn)` from `payments.shared.ts` (it is `READ COMMITTED`: the advance
+balance is read with `FOR UPDATE`, whose gap locks would deadlock two units' first rows under the default `REPEATABLE READ`).
+Pass `ctx` (user or `systemCtx()`); the core adds the society with `withSociety`.
+
+- `payments.settle.ts`
+  - `settleInput(ctx, input: SettleInput, t)` creates an effective payment: takes the unit lock, makes the plan, inserts the payment
+    (with parts), applies allocations (invoices through module 11 `applyAllocation`, collection requests), advance row for the rest,
+    receipt number, unit ledger credit (`toInvoices + toAdvance`), journal (6.9), audit (`payments.payment.recorded|captured`), and after
+    commit realtime `payment.received`, receipt render job, apply-advances job, `receipt_issued` notification. Idempotent by `gatewayPaymentId` and `referenceKey`
+    (returns `{ payment, created: false }`). Use `mode: 'OLDEST_FIRST'` (+ `duesPaise`) or `mode: 'SELECTED'` (+ `selected`), or `advanceOnly`.
+  - `effectivatePending(ctx, paymentId, { mode, selected, duesPaise, status: 'CONFIRMED' | 'RECEIVED', approvedBy }, t)` turns a `PENDING_APPROVAL` payment
+    (created by 12.2 with the CHECK-friendly zero parts) effective: same effects, audit `payments.payment.approved`.
+  - `settleCapture(gatewayAccountId, gp, t, ctx?)` is 6.8 inside a transaction (`gp = { id, status, amountPaise, method, orderId }`): returns
+    `SETTLED | ALREADY_SETTLED | ATTEMPT_RECORDED | PENDING | UNKNOWN_ORDER` (the caller flags the webhook event). Mismatch, cancelled order and
+    second capture (BR-12-13/14) are handled; order set to `PAID`; `registerOrderHook` hooks run. `settleCaptureTx(gatewayAccountId, gatewayPaymentId, ctx?)` is
+    the wrapper for verify, webhook job and reconcile job (fetches the gateway payment before the transaction, treats the unique-key race as already settled).
+  - `registerOrderHook`, `orderHookFor(refType)` (12.1 calls `onExpired` from it).
+- `payments.alloc.plan.ts`: `buildPlan(open, input)` (pure, BR-12-15/16/17, tested with example 6.10), `loadOpenTargets(societyId, unitId, t, opts)`, `requestOutstanding`.
+- `payments.alloc.apply.ts`: `applyPlan`, `moveRequestPaid`, `requestStatusFor`. `payments.alloc.totals.ts`: `refreshCollectionTotals(collectionId)` (body of `collections:refresh-totals`; 12.5 owns changes to it).
+- `payments.advances.ts`: `advanceBalance(societyId, unitId, t?)`, `postAdvance(ctx, societyId, unitId, entry, t)` (unit lock must be held; idempotent by `dedupeKey`; `ADVANCE_INSUFFICIENT`),
+  `applyAdvancesForUnit(ctx, societyId, unitId, t, { force? })` (body of `payments:apply-advances`), `applyAdvanceToInvoice`, `creditOpeningAdvance`, `queueAdvanceApply`, `listAdvanceEntries`, `lockUnitRow`.
+- `payments.receipts.core.ts`: `issueReceipt`, `cancelReceipt`, `bumpReceiptRevision`, `enqueueReceiptRender` (job `payments:render-receipt` is a placeholder that 12.3 replaces).
+- `payments.reverse.core.ts`: `reverseLiveAllocations(ctx, selector, { reasonCode, releaseToAdvance, newestFirst?, limitPaise? }, t)` is the routine for reverse, bounce, return, refund freeing,
+  reallocation and invoice cancel (negative rows with `reversalOfId`, module 11 `reverseAllocation`, request totals, advance release with journal; payment parts follow when released to advance).
+  `reversePaymentCore(ctx, paymentId, { newStatus: 'REVERSED' | 'BOUNCED' | 'RETURNED', reversalReasonCode?, reason?, patch? }, t)` takes a whole effective payment out: unwinds a spent advance first, receipt `CANCELLED`
+  (number kept), unit ledger `PAYMENT_REVERSAL`, mirror journal, audit, realtime `payment.reversed`. `onInvoiceCancelled` is BR-12-53 (already wired to module 11).
+- `payments.duplicates.ts`: `referenceKeyOf`, `findDuplicateReference`, `assertNoDuplicateReference`, `findDuplicateSuspect`, `checkDuplicateSuspect(…, confirmDuplicate)`, `firstPaymentOfOrder`.
+- `payments.journal.ts`: `captureJournal`, `mirrorJournal`, `releaseJournal`, `advanceAppliedJournal`, `receiptDebitAccount`.
+- `payments.shared.ts`: `moneyTx`, `lockUnit`, `withSociety`, `setting(societyId, key)`, `unitLabelOf`, `emitFinance`, `auditPayment`, `paymentToAudit`, `notImplemented`, `invalidState`.
+- `payments.billing-hooks.ts` (done): `registerBillingHooks()` replaces the module 11 placeholders (`advanceBalance`, `applyAdvanceToInvoice`, `creditOpeningAdvance`, `queueAdvanceApply`, `onInvoiceCancelled`,
+  `listAllocationsForInvoice`, `chequeReturnCount`) and registers the `collection_request` fund resolver (BR-12-55). `chequeReturnCounts` and `findByGatewayPaymentId` are real already.
+- Known limits of the foundation: the payment's `paymentDate` for online captures is the UTC date (12.1: pass the society date when it wraps `settleCapture`); an archived unit makes `lockUnit` throw `UNIT_NOT_FOUND`
+  (BR-12-19 asks for `NEEDS_REVIEW`; 12.1 handles that in the webhook job); mandatory-collection invoices mirror payments onto the request's `paidPaise` without an allocation row (12.3's integrity check must count
+  allocations of `collection_requests.invoiceId` too).
 
 Lock order (BR-12-19) is: approvals request → order → unit (`units.lockActive`) → invoices → collection request → collection.
 
 ## Rules for every part
 
 - Files only with your prefix (below). Shared files you may touch with **additive lines only**: `src/app.ts` (one `api.use(...)`
-  mount line of your routes), this README (tick your part at the bottom), `scripts/seed.ts` and `seeders/payments.ts` (your own function in a
-  file `seeders/payments-<part>.ts`, plus one call line), `payments.public.ts` (replace the body of the stubs you own; keep the signature),
-  `src/modules/dev/dev.routes.ts` (one line in `PAYMENTS_APPROVAL_HOOKS`), `payments.jobs.ts` registry (one `register...()` call line in `registerPaymentJobs`).
+  mount line of your routes), this README (tick your part at the bottom), `seeders/payments.ts` (one entry in `PAYMENT_SEEDERS`, your function in
+  `seeders/payments-<part>.ts`; `scripts/seed.ts` already calls `seedPayments()`), `payments.public.ts` (replace the body of the stubs you own; keep the signature),
+  `src/modules/dev/dev.routes.ts` (one line in `PAYMENTS_APPROVAL_HOOKS`), `payments.jobs.ts` (one `register...Jobs()` call line at the end of `registerPaymentJobs`; replace the `payments:render-receipt` placeholder line if you are 12.3), `tests/helpers/payments.ts` (additive helpers).
 - Tests in `tests/modules/payments/<prefix>.*.test.ts`. Use `setPaymentsPorts()` and `paymentsPortCalls` like module 11.
 - Routes go through `routeMeta`, `requirePermission`, `requireFeature` (entitlements `ENT.*`), `validate`, `idempotency` for money/create routes.
 - Money is paise; times from `lib/clock`; notify only after commit; audit in the same transaction.
@@ -59,7 +77,7 @@ Spec: 8.2–8.5 order parts, 8.18, 8.24, 8.25, 8.26 order parts; F01–F04, F14�
 - Writes: `payment_orders`, `payment_webhook_events`; payments only through `settleCapture`.
 - Calls: `settleCapture`, `buildPlan` for previews, `paymentsPorts().gateways`, `invoices.listOpen`.
 - Also: convenience fee (BR-12-37), `payments.createOrder`, `registerOrderHook`, `getOrder`, jobs `process-webhook`, `reconcile-orders`, `recovery-nudge`, `expire-links`, `purge-webhook-events`, family pay, notifications `payment_failed`, `checkout_abandoned`, `payment_link`.
-- Own `payments.public.ts` stubs: `createOrder`, `registerOrderHook`, `getOrder`, `findByGatewayPaymentId`, `onUnitLinkEnded` (order part).
+- Own `payments.public.ts` stubs: `createOrder`, `getOrder`, `onUnitLinkEnded` (order part). `registerOrderHook` and `findByGatewayPaymentId` are done.
 
 ### 12.2 offline (prefix `payments.offline`, `payments.cheques`, `payments.declared`)
 
@@ -69,7 +87,7 @@ Spec: 8.6, 8.11, 8.12; F08–F10, F22 offline part; section 5.5; approval type `
 - Writes: `payments` (PENDING_APPROVAL and cheque lifecycle columns), files link (`PAYMENT_PROOF`); money effects only through `settleInput` (on approval) and `reversePaymentCore` (bounce, return).
 - Calls: `settleInput`, `reversePaymentCore`, `findDuplicateReference`, `findDuplicateSuspect`, `paymentsPorts().approvals`, `bankAccounts`, billing `invoices.createAdHoc` for the bounce charge.
 - Registers the real `OFFLINE_PAYMENT` hooks and adds them to `PAYMENTS_APPROVAL_HOOKS`; jobs `cheque-reminder`; notifications `offline_rejected`, `cheque_received`, `cheque_bounced`, `cheque_deposit_due`.
-- Own stubs: `chequeReturnCount`, `chequeReturnCounts` (and replace the placeholder in the billing port).
+- `chequeReturnCount(s)` are done in the foundation; no stubs to fill. Nothing else of `payments.public.ts` belongs to 12.2.
 
 ### 12.3 admin (prefix `payments.admin`, `payments.receipts`, `payments.reverse`, `payments.advances`, `payments.reports`)
 

@@ -22,6 +22,7 @@ import {
   FAKE_WEBHOOK_SECRET,
   fakeGatewayAccount,
   paymentsPortCalls,
+  paymentsPorts,
   setPaymentsPorts,
 } from '../../../src/modules/payments/payments.ports';
 import { refreshCollectionTotals } from '../../../src/modules/payments/payments.alloc.totals';
@@ -287,9 +288,7 @@ describe('collection requests in the plan (SELECTED)', () => {
 describe('ports', () => {
   it('records journal and notification calls, refuses an unbalanced journal, serves a fake gateway account', async () => {
     const w = await paymentsWorld();
-    const { journal, gateways } = (
-      await import('../../../src/modules/payments/payments.ports')
-    ).paymentsPorts();
+    const { journal, gateways } = paymentsPorts();
     await expect(
       sequelize.transaction(t =>
         journal.post(
@@ -310,12 +309,6 @@ describe('ports', () => {
     expect(acct).toMatchObject({ provider: 'FAKE', webhookSecret: FAKE_WEBHOOK_SECRET, isActive: true });
     expect(gateways.clientFor(acct!)).toBe(gw);
     setPaymentsPorts({ gateways: { accountFor: async () => null } });
-    expect(
-      await (
-        await import('../../../src/modules/payments/payments.ports')
-      )
-        .paymentsPorts()
-        .gateways.accountFor(1),
-    ).toBeNull();
+    expect(await paymentsPorts().gateways.accountFor(1)).toBeNull();
   });
 });
