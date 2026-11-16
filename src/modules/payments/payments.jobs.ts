@@ -6,6 +6,7 @@ import { JOBS, PAYMENTS_QUEUE } from './payments.constants';
 import { applyAdvancesForUnit } from './payments.advances';
 import { registerCollections } from './payments.collections.jobs';
 import { refreshCollectionTotals } from './payments.alloc.totals';
+import { registerOnlineJobs } from './payments.online.jobs';
 import { registerRefundJobs } from './payments.refunds.jobs';
 import { registerAutopayJobs } from './payments.autopay.jobs';
 import { registerOfflinePayments } from './payments.offline.register';
@@ -31,6 +32,7 @@ export function registerPaymentJobs(): void {
     logger.debug({ paymentId: data.paymentId }, 'payments:render-receipt placeholder (12.3 renders the PDF)');
   });
   // parts add their registration here, one line each:
+  registerOnlineJobs(); // 12.1: process-webhook, reconcile-orders, recovery-nudge, expire-links, purge-webhook-events
   registerRefundJobs(); // 12.4: PAYMENT_REFUND approval type and refund-status
   registerAutopayJobs(); // 12.4
   registerOfflinePayments(); // 12.2

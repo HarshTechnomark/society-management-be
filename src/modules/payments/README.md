@@ -119,8 +119,33 @@ Spec: 8.9, 8.21–8.23, 6.4, 6.11; F19, F20; sections 5.8, 6.4; approval type `C
 ## Status
 
 - [x] Foundation
-- [ ] 12.1 online
+- [x] 12.1 online
 - [x] 12.2 offline
-- [ ] 12.3 admin
+- [x] 12.3 admin
 - [x] 12.4 refunds and AutoPay
 - [x] 12.5 collections
+
+## 12.1 online: notes
+
+Files: `payments.orders.*` (fee, gateway, payables, create, service), `payments.webhooks.service.ts`, `payments.links.service.ts`,
+`payments.online.{routes,controller,validation,jobs,templates}.ts`, `src/modules/dev/dev.payments.ts`.
+
+- Routes: `GET /me/payables`, `POST /me/payables/payment-orders`, `POST /me/payables/payment-orders/:id/verify`,
+  `GET /me/payment-orders/:id`, `POST /me/payment-orders/:id/cancel`, `GET /payment-orders`, `GET /payment-orders/:id`,
+  `POST /payment-orders/:id/cancel`, `POST /payment-orders/:id/check`, `POST /payment-links`, `GET /public/pay/:code`,
+  `POST /public/pay/:code/checkout`, `POST /public/pay/:code/verify`, `POST /webhooks/payments/:gatewayAccountId`.
+- Every capture path (verify, webhook job, reconcile job, dev route) calls `settleFetched` (payments.orders.gateway.ts), which runs the core
+  `settleCapture` inside `moneyTx`. Webhook event handlers are pluggable: `registerWebhookHandler(types, fn)`; 12.1 handles
+  `payment.captured|order.paid|payment.failed` and the disputes, and dispatches `refund.*` and `mandate.*` to 12.4.
+- Module 29 placeholders: fee rates (`feeRatesBp` on the account, else 0/180/120/190 bp), `webhookSecrets` (rotation), key id and UPI VPA of the checkout.
+- Jobs: `process-webhook`, `reconcile-orders` (2 min), `recovery-nudge` (15 min, dedupe key in `lib/kv`), `expire-links`, `purge-webhook-events`.
+
+### Development routes (never mounted in production)
+
+- `POST /api/v1/dev/payments/:gatewayOrderId/pay` body `{ status?: 'success'|'fail'|'pending'|'captured'|'failed', amountPaise?, method? }`
+  (no session needed). The fake gateway creates the payment; for a module 12 order a signed webhook is then ingested and processed
+  inline (`settleCapture`). Response `data`: `{ gatewayPaymentId, orderId (gateway), status: 'captured'|'failed'|'pending', amountPaise,
+paymentOrderId, orderStatus, eventStatus }`. Module 06 platform orders still get only the first four fields.
+- `POST /api/v1/dev/payments/orders/:orderId/simulate` body `{ outcome: 'success'|'fail' }`, `:orderId` is the payment order id; same response.
+- `POST /api/v1/dev/payments/mandates/:gatewayMandateId/activate` (no body): `mandate.activated` through the webhook path; `data`:
+  `{ mandateId, gatewayMandateId, status, eventStatus }`.

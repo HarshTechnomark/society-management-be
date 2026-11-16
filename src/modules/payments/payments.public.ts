@@ -3,7 +3,7 @@
  * reach payments only through this file. The core (advances, hooks for module 11, duplicate helpers, settle and reverse) is real;
  * functions marked "part" throw `501 NOT_IMPLEMENTED_IN_FOUNDATION` until their part fills the body (see README).
  */
-import { Payment } from '../../models';
+import { Payment, PaymentOrder } from '../../models';
 import { registerQueue } from '../../lib/queue';
 import {
   registerExportProvider,
@@ -27,7 +27,10 @@ import { onInvoiceCancelled } from './payments.reverse.core';
 import { cancelAllForSociety, cancelMandatesForUnitLink } from './payments.autopay.service';
 import { registerOrderHook } from './payments.settle';
 import { successRate } from './payments.admin.jobs';
-import { notImplemented } from './payments.shared';
+import { createModuleOrder, type CreateOrderInput } from './payments.orders.create';
+import { orderDto } from './payments.orders.gateway';
+import { cancelOrdersForUnitLink } from './payments.orders.service';
+import type { PaymentOrderDto } from './payments.orders.types';
 import type { AnyCtx, Transaction } from './payments.types';
 
 export { paymentsReports } from './payments.reports';
@@ -53,17 +56,16 @@ export const payments = {
   findByGatewayPaymentId,
   registerOrderHook,
   // ---- parts
+  /** Part 12.1: 8.26 `createOrder` for other modules. */
+  createOrder: (ctx: AnyCtx, input: CreateOrderInput) => createModuleOrder(ctx, input),
   /** Part 12.1. */
-  createOrder: async (_ctx: AnyCtx, _input: Record<string, unknown>): Promise<never> => {
-    throw notImplemented('payments.createOrder');
+  getOrder: async (societyId: number, orderId: number): Promise<PaymentOrderDto | null> => {
+    const o = await PaymentOrder.findOne({ where: { id: orderId, societyId } });
+    return o ? orderDto(o) : null;
   },
-  /** Part 12.1. */
-  getOrder: async (_societyId: number, _orderId: number): Promise<never> => {
-    throw notImplemented('payments.getOrder');
-  },
-  /** Part 12.1 (orders, via `cancelOrdersForUnitLink`) and 12.4 (mandates, via `cancelMandatesForUnitLink`). */
+  /** Part 12.1 (orders, `cancelOrdersForUnitLink`) and 12.4 (mandates, `cancelMandatesForUnitLink`). */
   onUnitLinkEnded: async (ctx: AnyCtx, unitId: number, userId: number, t: Transaction): Promise<void> => {
-    // 12.4: the payer's mandates of that flat end; 12.1 adds the order part (`cancelOrdersForUnitLink`) next to this call
+    await cancelOrdersForUnitLink(ctx, unitId, userId, t);
     await cancelMandatesForUnitLink(ctx, unitId, userId, t);
   },
   /** Part 12.3. */
