@@ -11,5 +11,7 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 60_000,
     fileParallelism: false,
+    // TEST_FAST=1 (set by scripts/test-shards.sh): cheap password hashes for fixture users, see the file
+    setupFiles: process.env.TEST_FAST === '1' ? ['tests/setup/fast-argon.ts'] : [],
   },
 });
