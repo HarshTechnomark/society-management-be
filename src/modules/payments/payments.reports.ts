@@ -1,8 +1,8 @@
+import { collectionProgress } from './payments.collections.read';
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../../models';
 import { diffDays } from '../billing/billing.calc.period';
 import { ReadTimeoutError, invoices } from '../billing/billing.public';
-import { paymentsPorts } from './payments.ports';
 import { n } from './payments.shared';
 
 /**
@@ -180,12 +180,6 @@ const REGISTER_SORT = {
   amountPaise: 'p.amountPaise',
   receiptNo: 'p.receiptNo',
 };
-const PROGRESS_SORT = {
-  dueDate: 'dueDate',
-  title: 'title',
-  collectedPaise: 'collectedPaise',
-  percent: 'percent',
-};
 
 export const paymentsReports = {
   summary: async (societyId: number, from: string, to: string, opts: Partial<ReadOpts> = {}) => {
@@ -283,72 +277,7 @@ export const paymentsReports = {
       totals: { amountPaise: n(tot?.amount), refundedPaise: n(tot?.refunded) },
     };
   },
-
-  collectionProgress: async (societyId: number, q: CollectionProgressQuery, opts: Partial<ReadOpts> = {}) => {
-    if (!(q.sortBy in PROGRESS_SORT))
-      throw new Error(`paymentsReports.collectionProgress: sortBy ${q.sortBy}`);
-    if (!Number.isInteger(q.limit) || q.limit < 1 || q.limit > 1000)
-      throw new Error('paymentsReports.collectionProgress: limit must be 1 to 1000');
-    const rep: Record<string, unknown> = { societyId };
-    let where = 'c.societyId = :societyId AND c.deletedAt IS NULL';
-    if (q.status?.length) {
-      where += ' AND c.status IN (:statuses)';
-      rep.statuses = q.status;
-    }
-    if (q.kind?.length) {
-      where += ' AND c.kind IN (:kinds)';
-      rep.kinds = q.kind;
-    }
-    const scoped = Boolean(q.buildingIds?.length);
-    if (scoped) rep.buildingIds = q.buildingIds;
-    // with buildings, the counts and money are recomputed from the requests of those buildings and flats without requests are left out
-    const joinReq = scoped
-      ? `JOIN collection_requests r ON r.collectionId = c.id AND r.status <> 'CANCELLED'
-         JOIN units u ON u.id = r.unitId AND u.buildingId IN (:buildingIds)`
-      : `LEFT JOIN collection_requests r ON r.collectionId = c.id AND r.status <> 'CANCELLED'`;
-    const base = `FROM collections c ${joinReq} WHERE ${where} GROUP BY c.id`;
-    const select = `SELECT c.id, c.title, c.kind, c.isMandatory, c.status, c.targetPaise, c.fundId,
-        DATE_FORMAT(c.dueDate, '%Y-%m-%d') AS dueDate, COUNT(r.id) AS requestCount,
-        COALESCE(SUM(r.status = 'PAID'), 0) AS paidCount, COALESCE(SUM(r.paidPaise > 0), 0) AS contributorCount,
-        COALESCE(SUM(r.paidPaise), 0) AS collectedPaise,
-        CASE WHEN c.targetPaise > 0 THEN ROUND(COALESCE(SUM(r.paidPaise), 0) * 100 / c.targetPaise) ELSE 0 END AS percent`;
-    const dir = q.sortDir === 'asc' ? 'ASC' : 'DESC';
-    const all = await readRows<Record<string, unknown>>(
-      `${select} ${base} ORDER BY ${PROGRESS_SORT[q.sortBy]} ${dir}, c.id ${dir}`,
-      rep,
-      opts,
-    );
-    const pageRows = all.slice((q.page - 1) * q.limit, q.page * q.limit);
-    const rows = [];
-    for (const r of pageRows) {
-      const fund = await paymentsPorts()
-        .funds.name(societyId, n(r.fundId))
-        .catch(() => null);
-      rows.push({
-        id: n(r.id),
-        title: r.title as string,
-        kind: r.kind as string,
-        isMandatory: Boolean(r.isMandatory),
-        status: r.status as string,
-        targetPaise: n(r.targetPaise),
-        collectedPaise: n(r.collectedPaise),
-        percent: n(r.percent),
-        requestCount: n(r.requestCount),
-        paidCount: n(r.paidCount),
-        contributorCount: n(r.contributorCount),
-        dueDate: r.dueDate as string,
-        fundName: fund ?? '',
-        // module 13 `expenses.listForCollection` is not built yet: null means "cannot answer"
-        spentPaise: null as number | null,
-      });
-    }
-    return {
-      rows,
-      total: all.length,
-      totals: {
-        targetPaise: all.reduce((a, r) => a + n(r.targetPaise), 0),
-        collectedPaise: all.reduce((a, r) => a + n(r.collectedPaise), 0),
-      },
-    };
-  },
+  /** Part 12.5 (`payments.collections.read.ts`). */
+  collectionProgress: (societyId: number, q: CollectionProgressQuery, opts?: ReadOpts) =>
+    collectionProgress(societyId, q, opts),
 };

@@ -22,6 +22,8 @@ import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
 import { APPROVAL_TYPES } from '../billing/billing.constants';
+import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.constants';
+import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
@@ -206,6 +208,7 @@ const BILLING_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
 const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [PAYMENT_APPROVAL_TYPES.paymentRefund]: refundApprovals, // 12.4
   [PAYMENT_APPROVAL_TYPES.offlinePayment]: offlineApprovals,
+  [PAYMENTS_APPROVAL_TYPES.collectionPublish]: collectionApprovals, // 12.5
 };
 
 async function decidePayments(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {

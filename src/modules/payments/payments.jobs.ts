@@ -4,6 +4,7 @@ import { systemCtx } from '../../types/context';
 import { moneyTx } from './payments.shared';
 import { JOBS, PAYMENTS_QUEUE } from './payments.constants';
 import { applyAdvancesForUnit } from './payments.advances';
+import { registerCollections } from './payments.collections.jobs';
 import { refreshCollectionTotals } from './payments.alloc.totals';
 import { registerRefundJobs } from './payments.refunds.jobs';
 import { registerAutopayJobs } from './payments.autopay.jobs';
@@ -34,4 +35,5 @@ export function registerPaymentJobs(): void {
   registerAutopayJobs(); // 12.4
   registerOfflinePayments(); // 12.2
   registerAdminJobs(); // 12.3: receipt PDF renderer (replaces the no-op above), integrity check, summary cache, review alerts
+  registerCollections(); // 12.5
 }
