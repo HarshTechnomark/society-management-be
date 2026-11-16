@@ -36,6 +36,7 @@ export const PUBLIC_ROUTES: Rule[] = [
   { method: 'POST', path: /^\/public\/invitations\/[^/]+\/decline$/ },
   { method: 'POST', path: /^\/dev\/payments\/[^/]+\/pay$/ },
   { method: 'POST', path: /^\/dev\/payments\/orders\/\d+\/simulate$/ },
+  { method: 'POST', path: /^\/dev\/payments\/refunds\/[^/]+\/process$/ },
   { method: 'POST', path: /^\/dev\/payments\/mandates\/[^/]+\/activate$/ },
   { method: 'GET', path: /^\/public\/pay\/[^/]{1,64}$/ },
   { method: 'POST', path: /^\/public\/pay\/[^/]{1,64}\/(checkout|verify)$/ },

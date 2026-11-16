@@ -18,7 +18,7 @@ import {
   pollGatewayRefunds,
 } from '../../../src/modules/payments/payments.refunds.service';
 import { FakePaymentGateway } from '../../../src/adapters/payments/payment-gateway';
-import { app } from '../../helpers/auth';
+import { app, call } from '../../helpers/auth';
 import { memberOf } from '../../helpers/society-setup';
 import { ctxFor } from '../../helpers/billing-invoices';
 import { idemH, type RunSociety } from '../../helpers/billing-runs';
@@ -457,6 +457,22 @@ describe('gateway refunds (6.3, T12-25)', () => {
     expect(row.failureReason).toBeTruthy();
     expect(await bal(w)).toBe(before);
     expect(await AuditLog.count({ where: { action: 'payments.refund.failed' } })).toBe(1);
+  });
+
+  it('dev route POST /dev/payments/refunds/:id/process finishes a gateway refund (processed or failed)', async () => {
+    const w = await paymentsWorld({ flats: 2 });
+    const p = await online(w);
+    const r = await ask(w, gbody(Number(p.id)));
+    await approve(r.body.data.approvalRequestId, decider(w));
+    const row = (await Refund.findByPk(r.body.data.id))!;
+    expect(row.status).toBe('PROCESSING');
+    const bad = await call('post', `/dev/payments/refunds/${row.gatewayRefundId}/process`, { outcome: 'x' });
+    expect(bad.status).toBe(400);
+    const d = await call('post', `/dev/payments/refunds/${row.gatewayRefundId}/process`, {});
+    expect(d.status, JSON.stringify(d.body)).toBe(200);
+    expect(d.body.data.status).toBe('PROCESSED');
+    expect((await Refund.findByPk(row.id))!.status).toBe('PROCESSED');
+    expect((await call('post', '/dev/payments/refunds/nope/process', {})).status).toBe(404);
   });
 
   it('payments:refund-status polls PROCESSING refunds older than 2 hours', async () => {
