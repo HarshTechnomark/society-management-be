@@ -31,6 +31,7 @@ import { billingResidentRoutes } from './modules/billing/billing.resident.routes
 import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes';
 import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes';
 import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
+import { paymentsOfflineRoutes } from './modules/payments/payments.offline.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -112,6 +113,8 @@ export function createApp(): Express {
   // module 12 (12.4): refunds and AutoPay mandates
   api.use(paymentsRefundRoutes);
   api.use(paymentsAutopayRoutes);
+  // module 12 (12.2): offline payments, cheques, declared transfers
+  api.use(paymentsOfflineRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

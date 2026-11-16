@@ -17,6 +17,7 @@ import { placeholderApprovalRequests } from '../billing/billing.ports';
 import { placeholderPaymentApprovals } from '../payments/payments.ports';
 import { APPROVAL_TYPES as PAYMENT_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as refundApprovals from '../payments/payments.refunds.approvals-hook';
+import * as offlineApprovals from '../payments/payments.offline.approvals-hook';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
@@ -204,6 +205,7 @@ const BILLING_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
  */
 const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [PAYMENT_APPROVAL_TYPES.paymentRefund]: refundApprovals, // 12.4
+  [PAYMENT_APPROVAL_TYPES.offlinePayment]: offlineApprovals,
 };
 
 async function decidePayments(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {

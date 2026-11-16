@@ -338,6 +338,10 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /me/autopay-mandates/:id/resume',
       'POST /me/autopay-mandates/:id/cancel',
       'POST /autopay-mandates/:id/cancel',
+      // module 12 (12.2): another society's payment id is 404 PAYMENT_NOT_FOUND on the cheque routes (tests/modules/payments/payments.cheques.test.ts, T12-34)
+      'POST /payments/:id/cheque/clear',
+      'POST /payments/:id/cheque/bounce',
+      'POST /payments/:id/cheque/return',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

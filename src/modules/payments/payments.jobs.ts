@@ -7,6 +7,7 @@ import { applyAdvancesForUnit } from './payments.advances';
 import { refreshCollectionTotals } from './payments.alloc.totals';
 import { registerRefundJobs } from './payments.refunds.jobs';
 import { registerAutopayJobs } from './payments.autopay.jobs';
+import { registerOfflinePayments } from './payments.offline.register';
 
 /**
  * Registry of the jobs of queue `payments` (section 9.1). The foundation registers the two jobs its core needs
@@ -30,4 +31,5 @@ export function registerPaymentJobs(): void {
   // parts add their registration here, one line each:
   registerRefundJobs(); // 12.4: PAYMENT_REFUND approval type and refund-status
   registerAutopayJobs(); // 12.4
+  registerOfflinePayments(); // 12.2
 }
