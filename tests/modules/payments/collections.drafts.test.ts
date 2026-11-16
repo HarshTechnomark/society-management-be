@@ -224,6 +224,8 @@ describe('collections list and detail (8.21)', () => {
     expect(all.body.pagination).toMatchObject({ total: 3, page: 1 });
     expect(all.body.data[0]).toHaveProperty('fundName');
     expect(all.body.data[0].createdByName).toBeTruthy();
+    // the cards of the Collections tab show the purpose and "n of N flats"
+    expect(all.body.data[0]).toMatchObject({ purpose: expect.any(String), paidCount: 0 });
     const q = (s: string) => w.c('get', `/collections?${s}`).then(r => r.body.data.map((x: any) => x.title));
     expect(await q('status=PENDING_APPROVAL')).toEqual(['Ganesh Utsav 2026']);
     expect((await q('status=DRAFT,PENDING_APPROVAL')).length).toBe(3);
@@ -255,7 +257,9 @@ describe('collections list and detail (8.21)', () => {
       audienceType: 'ALL',
       audienceIds: null,
       spentPaise: 0,
+      expenses: [],
       reminderCount: 0,
+      paidCount: 0,
     });
     expect(d.body.data.timeline.map((x: any) => x.event)).toEqual(['collections.collection.created']);
     const nf = await w.c('get', '/collections/999999999');

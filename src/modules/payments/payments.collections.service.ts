@@ -46,6 +46,7 @@ export interface CollectionItemDto {
   id: number;
   title: string;
   kind: string;
+  purpose: string;
   isMandatory: boolean;
   amountMode: string;
   amountPerUnitPaise: number;
@@ -55,6 +56,7 @@ export interface CollectionItemDto {
   percent: number;
   contributorCount: number;
   requestCount: number;
+  paidCount: number;
   dueDate: string;
   status: string;
   fundId: number;
@@ -74,6 +76,7 @@ export async function itemDtos(societyId: number, rows: Collection[]): Promise<C
     id: Number(c.id),
     title: c.title,
     kind: c.kind,
+    purpose: c.purpose,
     isMandatory: Boolean(c.isMandatory),
     amountMode: c.amountMode,
     amountPerUnitPaise: Number(c.amountPerUnitPaise),
@@ -83,6 +86,7 @@ export async function itemDtos(societyId: number, rows: Collection[]): Promise<C
     percent: percentOf(Number(c.collectedPaise), Number(c.targetPaise)),
     contributorCount: Number(c.contributorCount),
     requestCount: Number(c.requestCount),
+    paidCount: Number(c.paidCount),
     dueDate: c.dueDate,
     status: c.status,
     fundId: Number(c.fundId),
@@ -125,7 +129,6 @@ export async function collectionDetail(societyId: number, id: number) {
     sendNotice: Boolean(c.sendNotice),
     reminderCount: Number(c.reminderCount),
     lastReminderAt: c.lastReminderAt ? c.lastReminderAt.toISOString() : null,
-    paidCount: Number(c.paidCount),
     publishedAt: c.publishedAt ? c.publishedAt.toISOString() : null,
     closedAt: c.closedAt ? c.closedAt.toISOString() : null,
     closeReason: c.closeReason,
@@ -136,6 +139,7 @@ export async function collectionDetail(societyId: number, id: number) {
       reason: c.rejectedReason,
     },
     spentPaise: spend.spentPaise,
+    expenses: spend.expenses,
     timeline: log.map(l => ({
       at: (l.createdAt ?? new Date()).toISOString(),
       event: l.action,
