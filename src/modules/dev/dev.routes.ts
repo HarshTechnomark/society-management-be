@@ -20,6 +20,7 @@ import { approvalStore } from '../residents/residents.part3.ports';
 import { approvalStub } from '../residents/residents.part2.ports';
 import { placeholderApprovalRequests } from '../billing/billing.ports';
 import { placeholderPaymentApprovals } from '../payments/payments.ports';
+import { placeholderAccountsApprovals } from '../accounts/accounts.ports';
 import { APPROVAL_TYPES as PAYMENT_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as refundApprovals from '../payments/payments.refunds.approvals-hook';
 import * as offlineApprovals from '../payments/payments.offline.approvals-hook';
@@ -178,9 +179,9 @@ async function deciderCtx(req: Request, societyId: number): Promise<Ctx> {
   };
 }
 
-type ApprovalSource = 'residents' | 'billing' | 'payments';
+type ApprovalSource = 'residents' | 'billing' | 'payments' | 'accounts';
 const sourceOf = (v: unknown): ApprovalSource =>
-  v === 'billing' ? 'billing' : v === 'payments' ? 'payments' : 'residents';
+  v === 'billing' ? 'billing' : v === 'payments' ? 'payments' : v === 'accounts' ? 'accounts' : 'residents';
 
 /** The requests still waiting for a decision. `source` says which module's placeholder holds it (ids can repeat across modules). */
 devRoutes.get(
@@ -204,7 +205,10 @@ devRoutes.get(
         .filter(a => a.status === 'PENDING')
         .map(async a => ({ ...row(a, 'payments'), ...(await paymentsApprovalDetails(a)) })),
     );
-    ok(res, [...part2, ...part3, ...billing, ...paymentsPending]);
+    const accountsPending = [...placeholderAccountsApprovals.values()]
+      .filter(a => a.status === 'PENDING')
+      .map(a => row(a, 'accounts'));
+    ok(res, [...part2, ...part3, ...billing, ...paymentsPending, ...accountsPending]);
   }),
 );
 
@@ -235,6 +239,27 @@ const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [PAYMENT_APPROVAL_TYPES.offlinePayment]: offlineApprovals,
   [PAYMENTS_APPROVAL_TYPES.collectionPublish]: collectionApprovals, // 12.5
 };
+
+/**
+ * Module 13 approval types and the hook that decides each (`?source=accounts`). Parts add their line here:
+ * 13.1 `MANUAL_JOURNAL`, 13.2 `EXPENSE` and `FUND_TRANSFER`, 13.4 `PERIOD_UNLOCK` and `DEPOSIT_REFUND` (`APPROVAL_TYPES` of `accounts.constants`).
+ * A hook gets the placeholder request id (`placeholderAccountsApprovals.get(id)` has the entity) and the deciding context.
+ */
+const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {};
+
+async function decideAccounts(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
+  const r = placeholderAccountsApprovals.get(id);
+  if (!r) throw new AppError(404, 'NOT_FOUND', 'Approval request not found');
+  if (r.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
+  const hook = ACCOUNTS_APPROVAL_HOOKS[r.type];
+  if (!hook) throw new AppError(422, 'UNKNOWN_APPROVAL_TYPE', `No development approval hook for ${r.type}`);
+  const ctx = await deciderCtx(req, r.societyId ?? 0);
+  if (decision === 'approve' && ctx.user && ctx.user.id === r.requestedBy)
+    throw new AppError(409, 'MAKER_CHECKER_VIOLATION', 'The person who requested this cannot approve it');
+  const out = decision === 'approve' ? await hook.approve(id, ctx) : await hook.reject(id, reason, ctx);
+  r.status = decision === 'approve' ? 'APPROVED' : 'REJECTED';
+  return out;
+}
 
 async function decidePayments(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderPaymentApprovals.get(id);
@@ -274,6 +299,7 @@ async function decide(
 ) {
   if (source === 'billing') return decideBilling(req, id, decision, reason);
   if (source === 'payments') return decidePayments(req, id, decision, reason);
+  if (source === 'accounts') return decideAccounts(req, id, decision, reason);
   const p3 = approvalStore.get(id);
   if (p3) {
     if (p3.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');

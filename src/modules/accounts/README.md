@@ -120,6 +120,24 @@ Spec: 8.3, 8.17, 8.18, 8.19, 8.21 and 8.20 deposits; F05, F16, F20 to F22; secti
 - Jobs `deposit-sync`, `relock`, `year-close`, `report-export`; realtime `deposit.updated`; notifications `period_locked`, `period_unlocked`, `year_closed`, `deposit_*`, `export_ready`; dev hooks for `PERIOD_UNLOCK` and `DEPOSIT_REFUND`.
 - Cash-book monthly totals (`cashBook.monthlyTotals`) are read from `journal_lines` of BANK, CASH and PETTY_CASH ledgers excluding entries whose lines are all on those ledgers (contra).
 
+## Notes and decisions of the foundation (read before you build)
+
+- **No routes yet.** The foundation mounts nothing in `app.ts`, so no route registry meta, permission-matrix or tenant-isolation entries exist; each part adds its own routes to those lists in `tests/`.
+- **`(refType, refId)` is unique among posted entries** (BR-13-6). Module 12 used `('payment', id)` for several journals of one payment, so the foundation changed it:
+  receipt `('payment', id)` (unchanged), cheque clearance `('cheque_clearance', id)` (as in 7.14), reversal, bounce and return mirror `('payment_reversal', id)`, reallocation
+  `('payment_realloc', '<id>:<version>')`. The spec table 7.14 says `payment` for the bounce journal; the engine cannot accept two different journals for one source. `JournalInput.refId` is `number | string`.
+- **MySQL triggers** (`trg_journal_entries_*`, `trg_journal_lines_*`) are created by the migrations when the server allows it. A server with binary logging and a user without SUPER refuses triggers
+  (error 1419); the migrations then print a warning and continue, and the model hooks (which every service goes through) still enforce immutability. Set `log_bin_trust_function_creators=1` and re-run the
+  trigger statements of migrations `20261118000300` and `20261118000400` to get both layers. The retention delete uses `@accounts_purge = 1` on its own connection to pass the delete triggers.
+- **Tests reset the 12 tables with `TRUNCATE`** (`resetAll` in `tests/helpers/auth.ts`), because posted journals cannot be `DELETE`d.
+- **BR-13-32 (fund may not go negative by a user posting)** is opt-in: `postJournal(…, { enforceFundBalance: true })`. T13-16 expects an expense from the Repair fund to take it negative, so 13.2 decides per case.
+- **Sources:** an entry is `MANUAL` only when `source: 'MANUAL'` is passed or `refType` is `manual_journal`; everything else is `SYSTEM`, which the manual reverse route (`viaManualRoute`) refuses.
+- **Draft journals (13.1):** create the DRAFT entry and its lines yourself (`JournalEntry`, `JournalLine`), with `resolveLines`/`validateLines` from `accounts.engine.core.ts` so each line carries its `fundId`; lines of a PENDING entry cannot be changed (trigger). `postDraft` then numbers and posts it.
+- **Retention:** the handler has order 130, so it runs before modules 12 and 11 (expenses reference collections, deposits reference invoices).
+- **Realtime public room** gets `balance.updated` only when the society setting `finance.showFinancesToResidents` is true; the cache touch (`reportsCache.touch(societyId, 'finance')`) is a port with a recording placeholder until module 24.
+- **Lock order** inside the engine: `society_balances` row (via `lockBooks`) → ledger accounts, funds. Callers lock their own rows (unit, invoice) first, never after a posting.
+- **Speed:** a posting is about 20 statements (around 70 ms on the development machine) and serialises per society on the `society_balances` row; do not post inside loops of thousands without batching transactions.
+
 ## Status
 
 - [x] Foundation (13.0)

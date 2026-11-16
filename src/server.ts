@@ -12,6 +12,7 @@ import { registerPlatformOps } from './modules/platform-ops/platform-ops.public'
 import { registerSocietySetup } from './modules/society-setup/society-setup.public';
 import { registerResidents } from './modules/residents/residents.public';
 import { registerCommittee } from './modules/committee/committee.public';
+import { registerAccounts } from './modules/accounts/accounts.public';
 import { registerBilling } from './modules/billing/billing.public';
 import { registerPayments } from './modules/payments/payments.public';
 import { assertCatalogueComplete } from './modules/subscriptions/subscriptions.seed';
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
   registerSocietySetup();
   registerResidents();
   registerCommittee();
+  registerAccounts(); // before registerBilling(): installs the real journal behind the module 11 and 12 ports
   registerBilling();
   registerPayments();
   await assertCatalogueComplete(); // every catalogue key has a row in every plan version (module 04)

@@ -71,7 +71,8 @@ export interface JournalInput {
   date: YmdString;
   voucherType: string;
   refType: string;
-  refId: number;
+  /** Id of the source, or a composite such as `'88:2'` (module 13 keeps `(refType, refId)` unique among posted entries). */
+  refId: number | string;
   narration: string;
   lines: JournalLine[];
 }
