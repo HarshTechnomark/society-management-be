@@ -58,9 +58,9 @@ export async function runIntegrityCheck(societyId?: number): Promise<IntegrityIs
     [
       'collection_totals',
       `SELECT x.id FROM collections x
-         LEFT JOIN (SELECT collectionId, SUM(paidPaise) AS paid, SUM(status <> 'CANCELLED') AS cnt
+         LEFT JOIN (SELECT collectionId, SUM(paidPaise) AS paid, SUM(status <> 'CANCELLED') AS cnt, COUNT(*) AS total
                       FROM collection_requests GROUP BY collectionId) r ON r.collectionId = x.id
-        WHERE (x.collectedPaise <> COALESCE(r.paid, 0) OR x.requestCount <> COALESCE(r.cnt, 0)) :scope`,
+        WHERE (x.collectedPaise <> COALESCE(r.paid, 0) OR x.requestCount <> COALESCE(CASE WHEN x.status = 'CLOSED' THEN r.total ELSE r.cnt END, 0)) :scope`,
     ],
   ];
   const issues: IntegrityIssue[] = [];

@@ -24,7 +24,7 @@ import {
   touchReports,
   userIdOf,
 } from './payments.collections.shared';
-import { recomputeTotals } from './payments.collections.totals';
+import { recomputeTarget, recomputeTotals } from './payments.collections.totals';
 import { createRequestsFor } from './payments.collections.workflow';
 import type { RequestListQuery } from './payments.collections.validation';
 
@@ -167,9 +167,10 @@ export async function addRequests(
     });
     const have = new Set(existing.map(r => Number(r.unitId)));
     const fresh = found.filter(u => !have.has(u.id));
-    const { created } = await createRequestsFor(ctx, c, fresh, today, t, false);
+    const { created, skippedNoBillTo } = await createRequestsFor(ctx, c, fresh, today, t, true);
     await c.update({ version: Number(c.version) + 1, updatedBy: userIdOf(ctx) }, { transaction: t });
     await recomputeTotals(c, t);
+    await recomputeTarget(c, t);
     await audit(
       ctx,
       {
@@ -178,7 +179,7 @@ export async function addRequests(
         entityId: collectionId,
         entityLabel: c.title,
         societyId,
-        after: { unitIds: created.map(r => Number(r.unitId)), skippedUnitIds: [...have] },
+        after: { unitIds: created.map(r => Number(r.unitId)), skippedUnitIds: [...have], skippedNoBillTo },
       },
       t,
     );
@@ -187,6 +188,11 @@ export async function addRequests(
       addedCount: created.length,
       addedUnitIds: created.map(r => Number(r.unitId)),
       skippedUnitIds: wanted.filter(i => have.has(i)),
+      skipped: [
+        ...wanted.filter(i => have.has(i)).map(unitId => ({ unitId, reason: 'Already in this collection' })),
+        ...skippedNoBillTo.map(unitId => ({ unitId, reason: 'This flat has no owner or bill-to party' })),
+      ],
+      targetPaise: Number(c.targetPaise),
       requestCount: Number(c.requestCount),
       version: Number(c.version),
     };
@@ -213,6 +219,7 @@ export async function waiveRequest(ctx: Ctx, requestId: number, input: { reason:
       { transaction: t },
     );
     await recomputeTotals(c, t);
+    await recomputeTarget(c, t);
     await audit(
       ctx,
       {
