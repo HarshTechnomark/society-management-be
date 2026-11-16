@@ -302,6 +302,8 @@ describe('POST /payments/offline (8.11)', () => {
       where: { action: 'payments.payment.recorded', entityId: String(ok.body.data.id) },
     }))!;
     expect((row.after as any).fileIds).toEqual([good]);
+    const detail = (await w.c('get', `/payments/${ok.body.data.id}`)).body.data;
+    expect(detail.proofFiles).toEqual([{ id: good, name: expect.any(String) }]);
     for (const fid of [
       proofFile(w.society.id!, w.user.id, 'KYC_DOCUMENT'),
       proofFile(w.society.id!, w.treasurer.user.id),

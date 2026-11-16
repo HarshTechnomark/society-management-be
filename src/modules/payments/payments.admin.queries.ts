@@ -2,7 +2,9 @@ import { Op, QueryTypes, type WhereOptions } from 'sequelize';
 import { AuditLog, Payment, Refund, Unit, sequelize } from '../../models';
 import { NotFoundError } from '../../utils/errors';
 import { pageMeta } from '../../utils/pagination';
+import { placeholderFiles } from '../societies/societies.ports';
 import { ERR } from './payments.constants';
+import { proofFiles } from './payments.offline.proof';
 import { adminItem, dateOnly, isoOrNull, landsIn } from './payments.admin.dto';
 import { n } from './payments.shared';
 
@@ -151,8 +153,10 @@ export async function getPayment(societyId: number, id: number) {
       status: r.status,
       createdAt: isoOrNull(r.createdAt),
     })),
-    // proof files are linked by the offline part (12.2) through the files service; nothing is stored on the payment row
-    proofFiles: [] as unknown[],
+    // proof files linked by the offline part (12.2) through the proof port (memory placeholder until module 01 files exist)
+    proofFiles: proofFiles()
+      .list(n(p.id))
+      .map(fid => ({ id: fid, name: placeholderFiles.get(fid)?.name ?? 'Proof' })),
     approval: p.approvalRequestId
       ? {
           requestId: n(p.approvalRequestId),
