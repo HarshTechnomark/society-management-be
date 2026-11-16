@@ -35,7 +35,8 @@ beforeEach(resetSetup);
 
 const routes = listRoutes(app);
 const mine = (r: { path: string }) =>
-  /^\/(society|buildings|units|locations|holidays|onboarding)(\/|$)/.test(r.path);
+  /^\/(society|buildings|units|locations|holidays|onboarding)(\/|$)/.test(r.path) &&
+  !/^\/units\/:unitId\/advances$/.test(r.path); // module 12 (flat advance balance)
 
 describe('route table of module 08', () => {
   it('registers the 44 routes of section 8.1 with the permissions, features, step-up and idempotency of section 8.1', () => {

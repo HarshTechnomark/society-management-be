@@ -178,19 +178,8 @@ export async function notifyOutcome(
     await sendAll(NOTIFY.needsReview, await treasurerIds(societyId), { societyId, reason: 'UNKNOWN_ORDER' });
     return;
   }
-  if (out.outcome !== 'SETTLED') return;
-  if (out.needsReview)
-    await sendAll(NOTIFY.needsReview, await treasurerIds(societyId), {
-      societyId,
-      paymentId: out.paymentId,
-      reason: 'REVIEW',
-    });
-  if (out.duplicate)
-    await sendAll(
-      NOTIFY.duplicatePayment,
-      [...(order?.payerUserId ? [n(order.payerUserId)] : []), ...(await treasurerIds(societyId))],
-      { societyId, paymentId: out.paymentId },
-    );
+  // a settled capture that needs review or is a duplicate suspect is announced by `payments.admin.alerts.ts`
+  // (driven by the committed capture audit row, for every capture path), so it is not sent a second time here
 }
 
 /**
