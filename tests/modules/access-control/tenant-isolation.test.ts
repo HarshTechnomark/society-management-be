@@ -291,6 +291,21 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /committee/terms/:id/handover',
       'POST /committee/terms/:id/handover/items',
       'PATCH /committee/terms/:id/handover/items/:itemId',
+      // module 12 (12.5): another society's collection or request id is 404 COLLECTION_NOT_FOUND / COLLECTION_REQUEST_NOT_FOUND (tests/modules/payments/collections.*.test.ts, T12-34)
+      'GET /me/collections/:id',
+      'GET /collections/:id',
+      'PATCH /collections/:id',
+      'DELETE /collections/:id',
+      'POST /collections/:id/submit',
+      'POST /collections/:id/publish',
+      'POST /collections/:id/remind',
+      'POST /collections/:id/close',
+      'POST /collections/:id/cancel',
+      'GET /collections/:id/requests',
+      'POST /collections/:id/requests',
+      'GET /collections/:id/requests/export',
+      'POST /collection-requests/:id/waive',
+      'GET /collections/:id/statement',
       // module 11 (11.1): another society's charge head, billing rule or split rule id is 404 CHARGE_HEAD_NOT_FOUND / RULE_NOT_FOUND / SPLIT_RULE_NOT_FOUND on every route (tests/modules/billing/access.test.ts, T11-40)
       'PATCH /billing/charge-heads/:id',
       'DELETE /billing/charge-heads/:id',
@@ -304,6 +319,13 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /billing/units/:unitId/statement',
       'POST /billing/opening-balances/:id/reverse',
       'DELETE /billing/opening-balances/:id',
+      // module 12 (12.1): another society's payment order id (or another unit's on /me routes) is 404 PAYMENT_ORDER_NOT_FOUND (tests/modules/payments/payments.online.orders.test.ts)
+      'POST /me/payables/payment-orders/:id/verify',
+      'GET /me/payment-orders/:id',
+      'POST /me/payment-orders/:id/cancel',
+      'GET /payment-orders/:id',
+      'POST /payment-orders/:id/cancel',
+      'POST /payment-orders/:id/check',
       // module 11 (11.3): another society's billing run id (or an item of it) is 404 RUN_NOT_FOUND on every run route (tests/modules/billing/runs.test.ts, T11-40)
       'GET /billing/runs/:id',
       'GET /billing/runs/:id/items',
@@ -331,6 +353,27 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /billing/notes/:id/pdf-url',
       'PATCH /billing/notes/:id',
       'POST /billing/notes/:id/withdraw',
+      // module 12 (12.4): another society's refund or mandate id is 404 REFUND_NOT_FOUND / MANDATE_NOT_FOUND (tests/modules/payments/refunds.test.ts and autopay.test.ts, T12-34)
+      'GET /refunds/:id',
+      'POST /refunds/:id/complete',
+      'POST /me/autopay-mandates/:id/pause',
+      'POST /me/autopay-mandates/:id/resume',
+      'POST /me/autopay-mandates/:id/cancel',
+      'POST /autopay-mandates/:id/cancel',
+      // module 12 (12.2): another society's payment id is 404 PAYMENT_NOT_FOUND on the cheque routes (tests/modules/payments/payments.cheques.test.ts, T12-34)
+      'POST /payments/:id/cheque/clear',
+      'POST /payments/:id/cheque/bounce',
+      'POST /payments/:id/cheque/return',
+      // module 12 (12.3): another society's payment is 404 PAYMENT_NOT_FOUND, another flat's payment or advance 404 PAYMENT_NOT_FOUND / UNIT_NOT_FOUND (tests/modules/payments/payments.admin.list.test.ts, payments.receipts.test.ts and payments.reverse.test.ts, T12-34, T12-35)
+      'GET /payments/:id',
+      'GET /payments/:id/receipt-url',
+      'POST /payments/:id/receipt/resend',
+      'POST /payments/:id/review-done',
+      'POST /payments/:id/reverse',
+      'POST /payments/:id/reallocate',
+      'GET /me/payments/:id',
+      'GET /me/payments/:id/receipt-url',
+      'GET /units/:unitId/advances',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

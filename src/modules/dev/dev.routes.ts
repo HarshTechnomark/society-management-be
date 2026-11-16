@@ -6,18 +6,29 @@ import { putPlaceholderFile } from '../society-setup/society-setup.ports';
 import { AppError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
-import { paymentGateway } from '../../adapters';
-import { FakePaymentGateway } from '../../adapters/payments/payment-gateway';
+import {
+  paymentsApprovalDetails,
+  devActivateMandate,
+  devPayOrder,
+  devProcessRefund,
+  devSimulateOrder,
+} from './dev.payments';
 import { systemCtx, type Ctx } from '../../types/context';
 import { approveRequest, rejectRequest } from '../residents/residents.public';
 import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
 import { approvalStore } from '../residents/residents.part3.ports';
 import { approvalStub } from '../residents/residents.part2.ports';
 import { placeholderApprovalRequests } from '../billing/billing.ports';
+import { placeholderPaymentApprovals } from '../payments/payments.ports';
+import { APPROVAL_TYPES as PAYMENT_APPROVAL_TYPES } from '../payments/payments.constants';
+import * as refundApprovals from '../payments/payments.refunds.approvals-hook';
+import * as offlineApprovals from '../payments/payments.offline.approvals-hook';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
 import { APPROVAL_TYPES } from '../billing/billing.constants';
+import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.constants';
+import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
@@ -93,17 +104,35 @@ devRoutes.post(
 devRoutes.post(
   '/payments/:orderId/pay',
   asyncHandler(async (req, res) => {
-    const gw = paymentGateway();
-    if (!(gw instanceof FakePaymentGateway)) throw new AppError(404, 'NOT_FOUND', 'Not found');
-    const orderId = String(req.params.orderId);
-    if (!gw.orders.has(orderId)) throw new AppError(404, 'NOT_FOUND', 'Order not found');
-    const body = (req.body ?? {}) as {
-      amountPaise?: number;
-      status?: 'captured' | 'failed' | 'pending';
-      method?: string;
-    };
-    const p = gw.payOrder(orderId, body);
-    ok(res, { gatewayPaymentId: p.paymentId, orderId, status: p.status, amountPaise: p.amountPaise });
+    // module 06 platform orders and module 12 society orders (12.1: captured through the webhook code path)
+    ok(res, await devPayOrder(String(req.params.orderId), (req.body ?? {}) as Record<string, never>));
+  }),
+);
+
+/** Module 12 (12.4): the fake gateway confirms an AutoPay mandate (`mandate.activated` through the webhook path). */
+devRoutes.post(
+  '/payments/mandates/:gatewayMandateId/activate',
+  asyncHandler(async (req, res) => {
+    ok(res, await devActivateMandate(String(req.params.gatewayMandateId)));
+  }),
+);
+
+/** Module 12 (12.4): the fake gateway finishes a refund (`refund.processed|failed` through the webhook path). */
+devRoutes.post(
+  '/payments/refunds/:gatewayRefundId/process',
+  asyncHandler(async (req, res) => {
+    ok(
+      res,
+      await devProcessRefund(String(req.params.gatewayRefundId), (req.body ?? {}) as { outcome?: unknown }),
+    );
+  }),
+);
+
+/** Module 12 alias by payment order id (`PO-<id>`): body `{ outcome: 'success' | 'fail' }`. */
+devRoutes.post(
+  '/payments/orders/:orderId/simulate',
+  asyncHandler(async (req, res) => {
+    ok(res, await devSimulateOrder(Number(req.params.orderId), (req.body ?? {}) as { outcome?: unknown }));
   }),
 );
 
@@ -149,8 +178,9 @@ async function deciderCtx(req: Request, societyId: number): Promise<Ctx> {
   };
 }
 
-type ApprovalSource = 'residents' | 'billing';
-const sourceOf = (v: unknown): ApprovalSource => (v === 'billing' ? 'billing' : 'residents');
+type ApprovalSource = 'residents' | 'billing' | 'payments';
+const sourceOf = (v: unknown): ApprovalSource =>
+  v === 'billing' ? 'billing' : v === 'payments' ? 'payments' : 'residents';
 
 /** The requests still waiting for a decision. `source` says which module's placeholder holds it (ids can repeat across modules). */
 devRoutes.get(
@@ -169,7 +199,12 @@ devRoutes.get(
     const billing = [...placeholderApprovalRequests.values()]
       .filter(a => a.status === 'PENDING')
       .map(a => row(a, 'billing'));
-    ok(res, [...part2, ...part3, ...billing]);
+    const paymentsPending = await Promise.all(
+      [...placeholderPaymentApprovals.values()]
+        .filter(a => a.status === 'PENDING')
+        .map(async a => ({ ...row(a, 'payments'), ...(await paymentsApprovalDetails(a)) })),
+    );
+    ok(res, [...part2, ...part3, ...billing, ...paymentsPending]);
   }),
 );
 
@@ -189,6 +224,31 @@ const BILLING_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [APPROVAL_TYPES.writeOff]: noteApprovals,
   [APPROVAL_TYPES.invoiceCancel]: noteApprovals,
 };
+
+/**
+ * Module 12 approval types and the hook that decides each (`?source=payments`). Parts add their line here:
+ * 12.2 `OFFLINE_PAYMENT`, 12.4 `PAYMENT_REFUND`, 12.5 `COLLECTION_PUBLISH` (`APPROVAL_TYPES` of `payments.constants`).
+ * A hook gets the placeholder request id (`placeholderPaymentApprovals.get(id)` has the entity) and the deciding context.
+ */
+const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
+  [PAYMENT_APPROVAL_TYPES.paymentRefund]: refundApprovals, // 12.4
+  [PAYMENT_APPROVAL_TYPES.offlinePayment]: offlineApprovals,
+  [PAYMENTS_APPROVAL_TYPES.collectionPublish]: collectionApprovals, // 12.5
+};
+
+async function decidePayments(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
+  const r = placeholderPaymentApprovals.get(id);
+  if (!r) throw new AppError(404, 'NOT_FOUND', 'Approval request not found');
+  if (r.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
+  const hook = PAYMENTS_APPROVAL_HOOKS[r.type];
+  if (!hook) throw new AppError(422, 'UNKNOWN_APPROVAL_TYPE', `No development approval hook for ${r.type}`);
+  const ctx = await deciderCtx(req, r.societyId ?? 0);
+  if (decision === 'approve' && ctx.user && ctx.user.id === r.requestedBy)
+    throw new AppError(409, 'MAKER_CHECKER_VIOLATION', 'The person who requested this cannot approve it');
+  const out = decision === 'approve' ? await hook.approve(id, ctx) : await hook.reject(id, reason, ctx);
+  r.status = decision === 'approve' ? 'APPROVED' : 'REJECTED';
+  return out;
+}
 
 async function decideBilling(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderApprovalRequests.get(id);
@@ -213,6 +273,7 @@ async function decide(
   source: ApprovalSource,
 ) {
   if (source === 'billing') return decideBilling(req, id, decision, reason);
+  if (source === 'payments') return decidePayments(req, id, decision, reason);
   const p3 = approvalStore.get(id);
   if (p3) {
     if (p3.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');

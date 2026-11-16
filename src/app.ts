@@ -28,7 +28,13 @@ import { billingSetupRoutes } from './modules/billing/billing.setup.routes';
 import { billingLedgerRoutes } from './modules/billing/billing.ledger.routes';
 import { billingDuesRoutes } from './modules/billing/billing.dues.routes';
 import { billingResidentRoutes } from './modules/billing/billing.resident.routes';
+import { paymentsAdminRoutes } from './modules/payments/payments.admin.routes';
+import { paymentsOnlineRoutes } from './modules/payments/payments.online.routes';
 import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes';
+import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes';
+import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
+import { paymentsOfflineRoutes } from './modules/payments/payments.offline.routes';
+import { paymentsCollectionsRoutes } from './modules/payments/payments.collections.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -105,8 +111,19 @@ export function createApp(): Express {
   // module 11 (11.5): dues summary, defaulters, reminders, notes reads and the resident bill routes
   api.use(billingDuesRoutes);
   api.use(billingResidentRoutes);
+  // module 12 (12.3): payments list, receipts, reverse, reallocate, advances, resident payments
+  api.use(paymentsAdminRoutes);
   // module 11 (11.4): invoices, ad-hoc invoices, credit and debit notes, cancellation, write-off, PDFs
   api.use(billingInvoicesRoutes);
+  // module 12 (12.1): pay list, payment orders, payment links, public pay routes, gateway webhook
+  api.use(paymentsOnlineRoutes);
+  // module 12 (12.4): refunds and AutoPay mandates
+  api.use(paymentsRefundRoutes);
+  api.use(paymentsAutopayRoutes);
+  // module 12 (12.2): offline payments, cheques, declared transfers
+  api.use(paymentsOfflineRoutes);
+  // module 12 (12.5): collections
+  api.use(paymentsCollectionsRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

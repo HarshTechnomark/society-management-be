@@ -72,6 +72,15 @@ import { BillingNote } from './billing-note.model';
 import { InvoiceLine } from './invoice-line.model';
 import { UnitLedgerEntry } from './unit-ledger-entry.model';
 import { OpeningBalance } from './opening-balance.model';
+import { PaymentOrder } from './payment-order.model';
+import { Payment } from './payment.model';
+import { PaymentAllocation } from './payment-allocation.model';
+import { Refund } from './refund.model';
+import { PaymentWebhookEvent } from './payment-webhook-event.model';
+import { AutopayMandate } from './autopay-mandate.model';
+import { UnitAdvance } from './unit-advance.model';
+import { Collection } from './collection.model';
+import { CollectionRequest } from './collection-request.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -164,6 +173,15 @@ const models = {
   InvoiceLine,
   UnitLedgerEntry,
   OpeningBalance,
+  PaymentOrder,
+  Payment,
+  PaymentAllocation,
+  Refund,
+  PaymentWebhookEvent,
+  AutopayMandate,
+  UnitAdvance,
+  Collection,
+  CollectionRequest,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -366,6 +384,38 @@ InvoiceLine.belongsTo(ChargeHead, { foreignKey: 'chargeHeadId' });
 InvoiceLine.belongsTo(InvoiceLine, { as: 'refLine', foreignKey: 'refInvoiceLineId' });
 OpeningBalance.belongsTo(Invoice, { foreignKey: 'invoiceId' });
 
+// Module 12 associations (section 7). Associations to modules 13, 14 and 29 tables are added when those exist.
+PaymentOrder.belongsTo(Unit, { foreignKey: 'unitId' });
+PaymentOrder.belongsTo(User, { as: 'payer', foreignKey: 'payerUserId' });
+PaymentOrder.belongsTo(AutopayMandate, { as: 'mandate', foreignKey: 'mandateId' });
+PaymentOrder.hasMany(Payment, { foreignKey: 'paymentOrderId' });
+Payment.belongsTo(Unit, { foreignKey: 'unitId' });
+Payment.belongsTo(PaymentOrder, { foreignKey: 'paymentOrderId' });
+Payment.belongsTo(User, { as: 'payer', foreignKey: 'payerUserId' });
+Payment.belongsTo(Payment, { as: 'duplicateOf', foreignKey: 'duplicateOfPaymentId' });
+Payment.hasMany(PaymentAllocation, { foreignKey: 'paymentId' });
+Payment.hasMany(Refund, { foreignKey: 'paymentId' });
+Payment.hasMany(UnitAdvance, { foreignKey: 'paymentId' });
+PaymentAllocation.belongsTo(Payment, { foreignKey: 'paymentId' });
+PaymentAllocation.belongsTo(UnitAdvance, { foreignKey: 'unitAdvanceId' });
+PaymentAllocation.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+PaymentAllocation.belongsTo(CollectionRequest, { foreignKey: 'collectionRequestId' });
+PaymentAllocation.belongsTo(PaymentAllocation, { as: 'reversalOf', foreignKey: 'reversalOfId' });
+Refund.belongsTo(Payment, { foreignKey: 'paymentId' });
+Refund.belongsTo(Unit, { foreignKey: 'unitId' });
+Refund.hasMany(UnitAdvance, { foreignKey: 'refundId' });
+UnitAdvance.belongsTo(Unit, { foreignKey: 'unitId' });
+UnitAdvance.belongsTo(Payment, { foreignKey: 'paymentId' });
+UnitAdvance.belongsTo(Refund, { foreignKey: 'refundId' });
+AutopayMandate.belongsTo(Unit, { foreignKey: 'unitId' });
+AutopayMandate.belongsTo(User, { as: 'payer', foreignKey: 'payerUserId' });
+AutopayMandate.hasMany(PaymentOrder, { foreignKey: 'mandateId' });
+Collection.hasMany(CollectionRequest, { as: 'requests', foreignKey: 'collectionId' });
+Collection.belongsTo(User, { as: 'creator', foreignKey: 'createdBy' });
+CollectionRequest.belongsTo(Collection, { foreignKey: 'collectionId' });
+CollectionRequest.belongsTo(Unit, { foreignKey: 'unitId' });
+CollectionRequest.hasMany(PaymentAllocation, { foreignKey: 'collectionRequestId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -441,6 +491,15 @@ export {
   InvoiceLine,
   UnitLedgerEntry,
   OpeningBalance,
+  PaymentOrder,
+  Payment,
+  PaymentAllocation,
+  Refund,
+  PaymentWebhookEvent,
+  AutopayMandate,
+  UnitAdvance,
+  Collection,
+  CollectionRequest,
 };
 
 export async function closeDb(): Promise<void> {
