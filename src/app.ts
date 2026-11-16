@@ -29,6 +29,7 @@ import { billingLedgerRoutes } from './modules/billing/billing.ledger.routes';
 import { billingDuesRoutes } from './modules/billing/billing.dues.routes';
 import { billingResidentRoutes } from './modules/billing/billing.resident.routes';
 import { paymentsAdminRoutes } from './modules/payments/payments.admin.routes';
+import { paymentsOnlineRoutes } from './modules/payments/payments.online.routes';
 import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes';
 import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes';
 import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
@@ -114,6 +115,8 @@ export function createApp(): Express {
   api.use(paymentsAdminRoutes);
   // module 11 (11.4): invoices, ad-hoc invoices, credit and debit notes, cancellation, write-off, PDFs
   api.use(billingInvoicesRoutes);
+  // module 12 (12.1): pay list, payment orders, payment links, public pay routes, gateway webhook
+  api.use(paymentsOnlineRoutes);
   // module 12 (12.4): refunds and AutoPay mandates
   api.use(paymentsRefundRoutes);
   api.use(paymentsAutopayRoutes);
