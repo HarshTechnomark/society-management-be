@@ -25,6 +25,7 @@ import { PURGE_TABLES, deleteRetainedPayments, purgePayments } from './payments.
 import { onInvoiceCancelled } from './payments.reverse.core';
 import { cancelAllForSociety, cancelMandatesForUnitLink } from './payments.autopay.service';
 import { registerOrderHook } from './payments.settle';
+import { successRate } from './payments.admin.jobs';
 import { notImplemented } from './payments.shared';
 import type { AnyCtx, Transaction } from './payments.types';
 
@@ -65,9 +66,7 @@ export const payments = {
     await cancelMandatesForUnitLink(ctx, unitId, userId, t);
   },
   /** Part 12.3. */
-  successRate: async (_since: Date): Promise<number | null> => {
-    throw notImplemented('payments.successRate');
-  },
+  successRate,
   /** Part 12.4. */
   autopay: {
     cancelAllForSociety: (societyId: number, t: Transaction): Promise<number> =>

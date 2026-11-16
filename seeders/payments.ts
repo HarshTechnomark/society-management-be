@@ -1,3 +1,4 @@
+import { seedPaymentsAdmin } from './payments-admin';
 /**
  * Module 12 demo seed (section 7.10, not run in production). The foundation seeds nothing; each part adds ONE entry to
  * `PAYMENT_SEEDERS` that calls its own function from `seeders/payments-<part>.ts` (12.3: 120 payments with receipts and the
@@ -9,7 +10,9 @@ export interface PaymentsSeedReport {
   skipped: string[];
 }
 
-export const PAYMENT_SEEDERS: { name: string; run: () => Promise<PaymentsSeedReport> }[] = [];
+export const PAYMENT_SEEDERS: { name: string; run: () => Promise<PaymentsSeedReport> }[] = [
+  { name: 'admin', run: seedPaymentsAdmin },
+];
 
 export async function seedPayments(): Promise<PaymentsSeedReport> {
   if (process.env.NODE_ENV === 'production') throw new Error('payments demo seed must not run in production');

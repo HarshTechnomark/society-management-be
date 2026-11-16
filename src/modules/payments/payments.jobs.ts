@@ -8,6 +8,7 @@ import { refreshCollectionTotals } from './payments.alloc.totals';
 import { registerRefundJobs } from './payments.refunds.jobs';
 import { registerAutopayJobs } from './payments.autopay.jobs';
 import { registerOfflinePayments } from './payments.offline.register';
+import { registerAdminJobs } from './payments.admin.jobs';
 
 /**
  * Registry of the jobs of queue `payments` (section 9.1). The foundation registers the two jobs its core needs
@@ -32,4 +33,5 @@ export function registerPaymentJobs(): void {
   registerRefundJobs(); // 12.4: PAYMENT_REFUND approval type and refund-status
   registerAutopayJobs(); // 12.4
   registerOfflinePayments(); // 12.2
+  registerAdminJobs(); // 12.3: receipt PDF renderer (replaces the no-op above), integrity check, summary cache, review alerts
 }

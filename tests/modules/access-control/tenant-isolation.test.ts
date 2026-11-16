@@ -342,6 +342,16 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /payments/:id/cheque/clear',
       'POST /payments/:id/cheque/bounce',
       'POST /payments/:id/cheque/return',
+      // module 12 (12.3): another society's payment is 404 PAYMENT_NOT_FOUND, another flat's payment or advance 404 PAYMENT_NOT_FOUND / UNIT_NOT_FOUND (tests/modules/payments/payments.admin.list.test.ts, payments.receipts.test.ts and payments.reverse.test.ts, T12-34, T12-35)
+      'GET /payments/:id',
+      'GET /payments/:id/receipt-url',
+      'POST /payments/:id/receipt/resend',
+      'POST /payments/:id/review-done',
+      'POST /payments/:id/reverse',
+      'POST /payments/:id/reallocate',
+      'GET /me/payments/:id',
+      'GET /me/payments/:id/receipt-url',
+      'GET /units/:unitId/advances',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
