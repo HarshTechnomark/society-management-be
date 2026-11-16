@@ -1,3 +1,4 @@
+import { collectionProgress } from './payments.collections.read';
 import { notImplemented } from './payments.shared';
 
 /**
@@ -51,7 +52,7 @@ export const paymentsReports = {
   register: async (_societyId: number, _q: RegisterQuery, _opts?: ReadOpts) => {
     throw notImplemented('paymentsReports.register');
   },
-  collectionProgress: async (_societyId: number, _q: CollectionProgressQuery, _opts?: ReadOpts) => {
-    throw notImplemented('paymentsReports.collectionProgress');
-  },
+  /** Part 12.5 (`payments.collections.read.ts`). */
+  collectionProgress: (societyId: number, q: CollectionProgressQuery, opts?: ReadOpts) =>
+    collectionProgress(societyId, q, opts),
 };

@@ -18,6 +18,7 @@ import {
   listAllocationsForInvoice,
   registerBillingHooks,
 } from './payments.billing-hooks';
+import { collectionEfficiency, getCollectionForOtherModules } from './payments.collections.read';
 import { paymentsExportProvider } from './payments.exports';
 import { registerPaymentJobs } from './payments.jobs';
 import { assertPaymentsPortsReady } from './payments.ports';
@@ -79,12 +80,9 @@ export const payments = {
   },
   /** Part 12.5. */
   collections: {
-    efficiency: async (_societyId: number, _month: string): Promise<number | null> => {
-      throw notImplemented('payments.collections.efficiency');
-    },
-    get: async (_societyId: number, _id: number): Promise<never> => {
-      throw notImplemented('payments.collections.get');
-    },
+    efficiency: (societyId: number, month: string): Promise<number | null> =>
+      collectionEfficiency(societyId, month),
+    get: (societyId: number, id: number) => getCollectionForOtherModules(societyId, id),
   },
 };
 

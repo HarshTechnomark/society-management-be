@@ -19,6 +19,8 @@ import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
 import { APPROVAL_TYPES } from '../billing/billing.constants';
+import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.constants';
+import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
@@ -200,7 +202,9 @@ const BILLING_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
  * 12.2 `OFFLINE_PAYMENT`, 12.4 `PAYMENT_REFUND`, 12.5 `COLLECTION_PUBLISH` (`APPROVAL_TYPES` of `payments.constants`).
  * A hook gets the placeholder request id (`placeholderPaymentApprovals.get(id)` has the entity) and the deciding context.
  */
-const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {};
+const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
+  [PAYMENTS_APPROVAL_TYPES.collectionPublish]: collectionApprovals, // 12.5
+};
 
 async function decidePayments(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderPaymentApprovals.get(id);

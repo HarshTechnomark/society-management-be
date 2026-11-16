@@ -4,6 +4,7 @@ import { systemCtx } from '../../types/context';
 import { moneyTx } from './payments.shared';
 import { JOBS, PAYMENTS_QUEUE } from './payments.constants';
 import { applyAdvancesForUnit } from './payments.advances';
+import { registerCollections } from './payments.collections.jobs';
 import { refreshCollectionTotals } from './payments.alloc.totals';
 
 /**
@@ -26,4 +27,5 @@ export function registerPaymentJobs(): void {
     logger.debug({ paymentId: data.paymentId }, 'payments:render-receipt placeholder (12.3 renders the PDF)');
   });
   // parts add their registration here, one line each:
+  registerCollections(); // 12.5
 }

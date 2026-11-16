@@ -1,4 +1,5 @@
 import { QueryTypes } from 'sequelize';
+import { requestFundHint } from './payments.collections.hints';
 import { CollectionRequest, Collection, PaymentAllocation, sequelize } from '../../models';
 import { invoices, setBillingPorts } from '../billing/billing.public';
 import {
@@ -50,6 +51,8 @@ export async function chequeReturnCount(societyId: number, unitId: number, since
 
 /** BR-12-55: a mandatory collection's invoice is credited to the collection's fund. */
 export async function fundOfRequest(_societyId: number, requestId: number): Promise<number | null> {
+  const hint = requestFundHint.get(requestId); // 12.5: set while the publish transaction is open
+  if (hint) return hint;
   const r = await CollectionRequest.findByPk(requestId, { attributes: ['collectionId', 'societyId'] });
   if (!r || n(r.societyId) !== _societyId) return null;
   const c = await Collection.findByPk(r.collectionId, { attributes: ['fundId'], paranoid: false });
