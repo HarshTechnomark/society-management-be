@@ -331,6 +331,13 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /billing/notes/:id/pdf-url',
       'PATCH /billing/notes/:id',
       'POST /billing/notes/:id/withdraw',
+      // module 12 (12.4): another society's refund or mandate id is 404 REFUND_NOT_FOUND / MANDATE_NOT_FOUND (tests/modules/payments/refunds.test.ts and autopay.test.ts, T12-34)
+      'GET /refunds/:id',
+      'POST /refunds/:id/complete',
+      'POST /me/autopay-mandates/:id/pause',
+      'POST /me/autopay-mandates/:id/resume',
+      'POST /me/autopay-mandates/:id/cancel',
+      'POST /autopay-mandates/:id/cancel',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

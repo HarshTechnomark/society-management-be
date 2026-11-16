@@ -23,6 +23,7 @@ import { registerPaymentJobs } from './payments.jobs';
 import { assertPaymentsPortsReady } from './payments.ports';
 import { PURGE_TABLES, deleteRetainedPayments, purgePayments } from './payments.purge';
 import { onInvoiceCancelled } from './payments.reverse.core';
+import { cancelAllForSociety, cancelMandatesForUnitLink } from './payments.autopay.service';
 import { registerOrderHook } from './payments.settle';
 import { notImplemented } from './payments.shared';
 import type { AnyCtx, Transaction } from './payments.types';
@@ -59,13 +60,9 @@ export const payments = {
     throw notImplemented('payments.getOrder');
   },
   /** Part 12.1 (orders, via `cancelOrdersForUnitLink`) and 12.4 (mandates, via `cancelMandatesForUnitLink`). */
-  onUnitLinkEnded: async (
-    _ctx: AnyCtx,
-    _unitId: number,
-    _userId: number,
-    _t: Transaction,
-  ): Promise<never> => {
-    throw notImplemented('payments.onUnitLinkEnded');
+  onUnitLinkEnded: async (ctx: AnyCtx, unitId: number, userId: number, t: Transaction): Promise<void> => {
+    // 12.4: the payer's mandates of that flat end; 12.1 adds the order part (`cancelOrdersForUnitLink`) next to this call
+    await cancelMandatesForUnitLink(ctx, unitId, userId, t);
   },
   /** Part 12.3. */
   successRate: async (_since: Date): Promise<number | null> => {
@@ -73,9 +70,8 @@ export const payments = {
   },
   /** Part 12.4. */
   autopay: {
-    cancelAllForSociety: async (_societyId: number, _t: Transaction): Promise<number> => {
-      throw notImplemented('payments.autopay.cancelAllForSociety');
-    },
+    cancelAllForSociety: (societyId: number, t: Transaction): Promise<number> =>
+      cancelAllForSociety(societyId, t),
   },
   /** Part 12.5. */
   collections: {

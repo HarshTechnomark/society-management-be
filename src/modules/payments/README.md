@@ -122,5 +122,5 @@ Spec: 8.9, 8.21–8.23, 6.4, 6.11; F19, F20; sections 5.8, 6.4; approval type `C
 - [ ] 12.1 online
 - [ ] 12.2 offline
 - [ ] 12.3 admin
-- [ ] 12.4 refunds and AutoPay
+- [x] 12.4 refunds and AutoPay
 - [ ] 12.5 collections
