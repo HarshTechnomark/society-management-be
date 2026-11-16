@@ -26,7 +26,8 @@ import {
 } from '../../../src/modules/payments/payments.collections.read';
 import { paymentsReports } from '../../../src/modules/payments/payments.reports';
 import { payments } from '../../../src/modules/payments/payments.public';
-import { events } from '../../helpers/auth';
+import { events, app } from '../../helpers/auth';
+import request from 'supertest';
 import { offline, sysCtx } from '../../helpers/payments';
 import { mkInvoice } from '../../helpers/payments';
 import {
@@ -302,7 +303,7 @@ describe('close and cancel (BR-12-44)', () => {
       status: 'CLOSED',
       closeReason: 'Festival is over',
       collectedPaise: 60_000,
-      requestCount: 1,
+      requestCount: 3,
       contributorCount: 2,
       paidCount: 1,
     });
@@ -922,5 +923,116 @@ describe('suspended society', () => {
     ).toBe(423);
     expect((await w.c('get', '/collections')).status).toBe(200);
     void sequelize;
+  });
+});
+
+describe('review fixes (module 12 browser tests)', () => {
+  it('add flats on a mandatory collection skips flats without a bill-to, reports them, and adds the rest', async () => {
+    const { w } = await collWorld(5, 3);
+    const c = await published(w, {
+      isMandatory: true,
+      amountPerUnitPaise: 100_000,
+      title: 'Mandatory add',
+      audienceType: 'UNITS',
+      audienceIds: [w.units[0]!.id],
+    });
+    expect(c.targetPaise).toBe(100_000);
+    const r = await w.c('post', `/collections/${c.id}/requests`, {
+      unitIds: [w.units[1]!.id, w.units[3]!.id, w.units[4]!.id],
+      version: c.version,
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data.addedCount).toBe(1);
+    expect(r.body.data.skipped).toEqual([
+      { unitId: w.units[3]!.id, reason: 'This flat has no owner or bill-to party' },
+      { unitId: w.units[4]!.id, reason: 'This flat has no owner or bill-to party' },
+    ]);
+    expect((await Collection.findByPk(c.id))!.targetPaise).toBe(200_000);
+  });
+
+  it('target follows added and waived flats of a fixed collection', async () => {
+    const { w } = await collWorld(4, 3);
+    const c = await published(w);
+    expect(c.targetPaise).toBe(150_000);
+    const r = await w.c('post', `/collections/${c.id}/requests`, {
+      unitIds: [w.units[3]!.id],
+      version: c.version,
+    });
+    expect(r.body.data.targetPaise).toBe(200_000);
+    expect((await w.c('get', `/collections/${c.id}`)).body.data.targetPaise).toBe(200_000);
+    const [q] = await requestsOf(c.id);
+    const wv = await w.c('post', `/collection-requests/${q!.id}/waive`, {
+      reason: 'Hardship case',
+      version: q!.version,
+    });
+    expect(wv.status, JSON.stringify(wv.body)).toBe(200);
+    expect((await Collection.findByPk(c.id))!.targetPaise).toBe(150_000);
+  });
+
+  it('a voluntary collection has a null suggested amount in admin and resident views', async () => {
+    const { w, owners } = await collWorld(4, 3);
+    const c = await published(w, {
+      amountMode: 'VOLUNTARY',
+      amountPerUnitPaise: undefined,
+      targetPaise: 500_000,
+      title: 'Voluntary any',
+    });
+    expect(c.suggestedAmountPaise).toBeNull();
+    const fixed = await published(w, { title: 'Fixed one' });
+    expect(fixed.suggestedAmountPaise).toBe(50_000);
+    const mine = await owners[0]!.c('get', '/me/collections');
+    expect(mine.status, JSON.stringify(mine.body)).toBe(200);
+    const v = mine.body.data.find((x: any) => x.id === c.id);
+    expect(v.suggestedAmountPaise).toBeNull();
+    const d = await owners[0]!.c('get', `/me/collections/${c.id}`);
+    expect(d.body.data.suggestedAmountPaise).toBeNull();
+    const pay = await owners[0]!.c('get', `/me/payables?unitId=${w.units[0]!.id}`);
+    const item = pay.body.data.items.find((i: any) => i.label.startsWith('Voluntary any'));
+    expect(item.suggestedPaise).toBeNull();
+  });
+
+  it('list limit out of range is 400, never 500; a page of 24 works', async () => {
+    const { w } = await collWorld(4, 3);
+    await create(w);
+    expect((await w.c('get', '/collections?page=1&limit=24')).status).toBe(200);
+    for (const q of ['limit=0', 'limit=101', 'limit=abc', 'limit=-1', 'page=0', 'limit=1e9']) {
+      const r = await w.c('get', `/collections?${q}`);
+      expect([q, r.status, r.body.code]).toEqual([q, 400, 'VALIDATION_FAILED']);
+    }
+  });
+
+  it('closing does not change the request count denominator', async () => {
+    const { w } = await collWorld(4, 3);
+    const c = await published(w);
+    const reqs = await requestsOf(c.id);
+    await reqs[0]!.update({ status: 'PAID', paidPaise: 50_000 });
+    const r = await w.c('post', `/collections/${c.id}/close`, { version: c.version, reason: 'Done now' });
+    expect(r.body.data).toMatchObject({ requestCount: 3, paidCount: 1 });
+    await refreshCollectionTotals(c.id);
+    expect((await Collection.findByPk(c.id))!.requestCount).toBe(3);
+    const p = await collectionProgress(Number(w.society.id), {
+      page: 1,
+      limit: 10,
+      sortBy: 'dueDate',
+      sortDir: 'asc',
+      buildingIds: [w.buildingId],
+    });
+    expect(p.rows.find(x => x.id === c.id)!.requestCount).toBe(3);
+  });
+
+  it('GET /dev/approvals rows of a collection publish carry title, amount, mode and requester', async () => {
+    const { w } = await collWorld(4, 3);
+    const c = await create(w, { title: 'Dev approvals row' });
+    await w.c('post', `/collections/${c.id}/submit`, { version: c.version });
+    const res = await request(app).get('/api/v1/dev/approvals');
+    const row = res.body.data.find((r: any) => r.source === 'payments' && r.entityId === c.id);
+    expect(row).toMatchObject({
+      type: 'COLLECTION_PUBLISH',
+      title: 'Dev approvals row',
+      amountPaise: 150_000,
+      mode: 'FIXED_PER_UNIT',
+    });
+    expect(row.requestedByName).toBeTruthy();
+    expect(row.payload).toMatchObject({ title: 'Dev approvals row' });
   });
 });

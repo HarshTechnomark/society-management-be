@@ -1,4 +1,5 @@
 import type { Payment } from '../../models';
+import { EFFECTIVE_STATUSES } from './payments.constants';
 import { receiptDebitAccount } from './payments.journal';
 import { n } from './payments.shared';
 
@@ -7,6 +8,16 @@ export const dateOnly = (v: unknown): string | null =>
   v == null ? null : typeof v === 'string' ? v.slice(0, 10) : (v as Date).toISOString().slice(0, 10);
 export const isoOrNull = (v: unknown): string | null =>
   v == null ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+
+/** `NONE` until a refund is PROCESSED, `PART` while `refundedPaise < amountPaise`, `FULL` when all of it was returned. */
+export const refundStatusOf = (
+  p: Pick<Payment, 'amountPaise' | 'refundedPaise'>,
+): 'NONE' | 'PART' | 'FULL' =>
+  n(p.refundedPaise) <= 0 ? 'NONE' : n(p.refundedPaise) >= n(p.amountPaise) ? 'FULL' : 'PART';
+
+/** Resident-facing status: every status whose money counts is `PAID`; the others (REVERSED, BOUNCED, ...) are as stored. */
+export const displayStatusOf = (status: string): string =>
+  (EFFECTIVE_STATUSES as readonly string[]).includes(status) ? 'PAID' : status;
 
 type WithUnit = Payment & { Unit?: { label?: string } | null };
 
@@ -27,6 +38,8 @@ export function residentItem(p: Payment, unitLabel: string) {
     toCollectionsPaise: n(p.toCollectionsPaise),
     toAdvancePaise: n(p.toAdvancePaise),
     refundedPaise: n(p.refundedPaise),
+    refundStatus: refundStatusOf(p),
+    displayStatus: displayStatusOf(p.status),
     paymentDate: dateOnly(p.paymentDate),
     capturedAt: isoOrNull(p.capturedAt),
     receiptNo: p.receiptNo,

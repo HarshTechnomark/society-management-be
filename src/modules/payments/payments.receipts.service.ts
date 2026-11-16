@@ -1,3 +1,4 @@
+import { primaryOwnerUserIds } from '../residents/residents.part3.shared';
 import { QueryTypes } from 'sequelize';
 import { addMinutes, now } from '../../lib/clock';
 import { enqueue } from '../../lib/queue';
@@ -212,7 +213,8 @@ export async function resendReceipt(
   await sequelize.transaction(t =>
     auditPayment(ctx, AUDIT.receiptResent, p, null, t, `channels: ${input.channels.join(', ')}`),
   );
-  const recipients = p.payerUserId ? [n(p.payerUserId)] : [];
+  // the payer when known (online); an offline entry has no payer account, so the flat's primary owners get it
+  const recipients = p.payerUserId ? [n(p.payerUserId)] : await primaryOwnerUserIds(societyId, n(p.unitId));
   if (recipients.length)
     await paymentsPorts().notifications.send(NOTIFY.receiptIssued, recipients, {
       societyId,
@@ -222,5 +224,9 @@ export async function resendReceipt(
       channels: input.channels,
       resend: true,
     });
-  return { sent: recipients.length, channels: input.channels };
+  return {
+    sent: recipients.length ? input.channels.length : 0,
+    recipients: recipients.length,
+    channels: input.channels,
+  };
 }

@@ -50,6 +50,7 @@ export interface CollectionItemDto {
   isMandatory: boolean;
   amountMode: string;
   amountPerUnitPaise: number;
+  suggestedAmountPaise: number | null;
   minAmountPaise: number;
   targetPaise: number;
   collectedPaise: number;
@@ -68,6 +69,10 @@ export interface CollectionItemDto {
 
 const fundNameOf = async (societyId: number, fundId: number) => paymentsPorts().funds.name(societyId, fundId);
 
+/** Blank suggested amount (voluntary collections) is null so the app can say "Any amount". */
+export const suggestedOf = (c: Pick<Collection, 'amountPerUnitPaise'>): number | null =>
+  Number(c.amountPerUnitPaise) > 0 ? Number(c.amountPerUnitPaise) : null;
+
 export async function itemDtos(societyId: number, rows: Collection[]): Promise<CollectionItemDto[]> {
   const names = await userNames(rows.flatMap(r => [r.createdBy, r.approvedBy]));
   const funds = new Map<number, string | null>();
@@ -80,6 +85,7 @@ export async function itemDtos(societyId: number, rows: Collection[]): Promise<C
     isMandatory: Boolean(c.isMandatory),
     amountMode: c.amountMode,
     amountPerUnitPaise: Number(c.amountPerUnitPaise),
+    suggestedAmountPaise: suggestedOf(c),
     minAmountPaise: Number(c.minAmountPaise),
     targetPaise: Number(c.targetPaise),
     collectedPaise: Number(c.collectedPaise),

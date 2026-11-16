@@ -5,6 +5,7 @@ import { pageMeta } from '../../utils/pagination';
 import { placeholderFiles } from '../societies/societies.ports';
 import { ERR } from './payments.constants';
 import { proofFiles } from './payments.offline.proof';
+import { userNames } from './payments.collections.shared';
 import { adminItem, dateOnly, isoOrNull, landsIn } from './payments.admin.dto';
 import { n } from './payments.shared';
 
@@ -121,6 +122,7 @@ export async function getPayment(societyId: number, id: number) {
   ]);
   return {
     ...adminItem(p as never),
+    recordedByName: p.createdBy ? ((await userNames([n(p.createdBy)])).get(n(p.createdBy)) ?? null) : null,
     landsIn: landsIn(p),
     receiptRevision: n(p.receiptRevision),
     receiptPdfStatus: p.receiptPdfStatus,

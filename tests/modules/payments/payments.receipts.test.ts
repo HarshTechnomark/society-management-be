@@ -174,7 +174,8 @@ describe('POST /payments/:id/receipt/resend (8.16)', () => {
       );
     const r = await go();
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(r.body.data).toEqual({ sent: 1, channels: ['EMAIL', 'WHATSAPP'] });
+    expect(r.body.data).toEqual({ sent: 2, recipients: 1, channels: ['EMAIL', 'WHATSAPP'] });
+    expect(r.body.message).toBe('Receipt queued on 2 channels');
     const call = paymentsPortCalls.find(c => c.fn === 'notifications.send')!.input as any;
     expect(call).toMatchObject({ template: 'payments.receipt_issued', userIds: [Number(payer.user.id)] });
     expect(call.data.channels).toEqual(['EMAIL', 'WHATSAPP']);

@@ -79,9 +79,9 @@ export async function collectionProgress(
   }
   if (scoped) rep.buildingIds = q.buildingIds;
   const agg = scoped
-    ? `JOIN (SELECT r.collectionId, SUM(r.status <> 'CANCELLED') AS requestCount, SUM(r.status = 'PAID') AS paidCount,
+    ? `JOIN (SELECT r.collectionId, SUM(r.status <> 'CANCELLED' OR c2.status = 'CLOSED') AS requestCount, SUM(r.status = 'PAID') AS paidCount,
                     SUM(r.paidPaise > 0) AS contributorCount, COALESCE(SUM(r.paidPaise), 0) AS collectedPaise
-               FROM collection_requests r JOIN units u ON u.id = r.unitId
+               FROM collection_requests r JOIN units u ON u.id = r.unitId JOIN collections c2 ON c2.id = r.collectionId
               WHERE r.societyId = :societyId AND u.buildingId IN (:buildingIds) GROUP BY r.collectionId) a ON a.collectionId = c.id`
     : '';
   const cols = scoped

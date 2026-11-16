@@ -5,6 +5,7 @@ import type { Ctx } from '../../types/context';
 import { PERM, ERR } from './payments.constants';
 import { NotFoundError } from '../../utils/errors';
 import { expensesPort, percentOf, societyIdOf } from './payments.collections.shared';
+import { suggestedOf } from './payments.collections.service';
 
 /** Resident side (8.9, BR-12-45): collections that have a request for one of the caller's units. Never names or payer identities. */
 const CLOSED_WINDOW_DAYS = 90;
@@ -60,6 +61,7 @@ function itemOf(c: Collection, mine: ReturnType<typeof requestItem>[]) {
     isMandatory: Boolean(c.isMandatory),
     amountMode: c.amountMode,
     amountPerUnitPaise: Number(c.amountPerUnitPaise),
+    suggestedAmountPaise: suggestedOf(c),
     minAmountPaise: Number(c.minAmountPaise),
     dueDate: c.dueDate,
     status: c.status,

@@ -384,3 +384,23 @@ describe('development routes', () => {
     await setSetting(x.w.society.id!, 'payments.orderExpiryMinutes', 30);
   });
 });
+
+describe('review fixes (module 12 browser tests)', () => {
+  it('a malformed public code is 404 PAYMENT_LINK_NOT_FOUND, not 401', async () => {
+    const r = await pub('get', '/public/pay/NOSUCHCODE1', 'sometokensometoken');
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('PAYMENT_LINK_NOT_FOUND');
+    expect((await pub('get', '/public/pay/short')).status).toBe(404);
+  });
+  it('a new link for the same flat and amount cancels the open one', async () => {
+    const b = { unitId: x.unitId, amountMode: 'FIXED', amountPaise: 7_000 };
+    const a1 = await mkLink(b);
+    const a2 = await mkLink(b);
+    const a3 = await mkLink({ ...b, amountPaise: 8_000 });
+    expect(a2.status).toBe(201);
+    const o1 = (await PaymentOrder.findByPk(a1.body.data.orderId))!;
+    expect([o1.status, o1.cancelReason]).toEqual(['CANCELLED', 'Replaced by a new link']);
+    expect((await PaymentOrder.findByPk(a2.body.data.orderId))!.status).toBe('CREATED');
+    expect((await PaymentOrder.findByPk(a3.body.data.orderId))!.status).toBe('CREATED');
+  });
+});

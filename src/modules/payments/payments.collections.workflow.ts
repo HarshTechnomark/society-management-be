@@ -252,7 +252,7 @@ export function requestAmounts(c: Collection): { amountPaise: number; minAmountP
 /**
  * Creates one request per unit (6.11 step 3) and, for a mandatory collection, the ad-hoc invoice through module 11.
  * `skipNoBillTo`: a mandatory collection cannot bill a flat nobody owns, so publishing skips those flats; adding a flat by
- * hand raises module 11's `422 NO_BILL_TO` instead.
+ * hand skips them too and reports them (8.23).
  */
 export async function createRequestsFor(
   ctx: Ctx,
@@ -399,6 +399,9 @@ export async function publishCollection(ctx: Ctx, id: number, version: number, r
         publishedAt: now(),
         publishedBy: uid,
         requestCount: created.length,
+        ...(c.amountMode === 'VOLUNTARY'
+          ? {}
+          : { targetPaise: created.length * requestAmounts(c).amountPaise }),
         updatedBy: uid,
         version: Number(c.version) + 1,
       },

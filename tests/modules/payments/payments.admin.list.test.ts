@@ -395,3 +395,25 @@ describe('advances (8.7)', () => {
     expect([y.status, y.body.code]).toEqual([404, 'UNIT_NOT_FOUND']);
   });
 });
+
+describe('refund and display status fields', () => {
+  it('refundStatus follows refundedPaise, displayStatus is PAID, status filter keeps working, detail has recordedByName', async () => {
+    const { w, neft, cash } = await world();
+    await Payment.update({ refundedPaise: 200_000 }, { where: { id: neft.id } });
+    await Payment.update({ refundedPaise: 100_000 }, { where: { id: cash.id } });
+    const list = (await w.c('get', '/payments')).body.data as any[];
+    const by = (id: unknown) => list.find(p => p.id === Number(id));
+    expect(by(neft.id)).toMatchObject({
+      refundStatus: 'PART',
+      refundedPaise: 200_000,
+      displayStatus: 'PAID',
+      status: 'CONFIRMED',
+    });
+    expect(by(cash.id)).toMatchObject({ refundStatus: 'FULL', status: 'CONFIRMED' });
+    expect(list.find(p => p.refundedPaise === 0).refundStatus).toBe('NONE');
+    expect((await w.c('get', '/payments?status=CONFIRMED')).body.data.length).toBeGreaterThanOrEqual(2);
+    const d = (await w.c('get', `/payments/${neft.id}`)).body.data;
+    expect(d).toMatchObject({ refundStatus: 'PART' });
+    expect(d).toHaveProperty('recordedByName');
+  });
+});

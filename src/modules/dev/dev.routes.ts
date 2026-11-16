@@ -6,7 +6,13 @@ import { putPlaceholderFile } from '../society-setup/society-setup.ports';
 import { AppError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
-import { devActivateMandate, devPayOrder, devSimulateOrder } from './dev.payments';
+import {
+  paymentsApprovalDetails,
+  devActivateMandate,
+  devPayOrder,
+  devProcessRefund,
+  devSimulateOrder,
+} from './dev.payments';
 import { systemCtx, type Ctx } from '../../types/context';
 import { approveRequest, rejectRequest } from '../residents/residents.public';
 import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
@@ -111,6 +117,17 @@ devRoutes.post(
   }),
 );
 
+/** Module 12 (12.4): the fake gateway finishes a refund (`refund.processed|failed` through the webhook path). */
+devRoutes.post(
+  '/payments/refunds/:gatewayRefundId/process',
+  asyncHandler(async (req, res) => {
+    ok(
+      res,
+      await devProcessRefund(String(req.params.gatewayRefundId), (req.body ?? {}) as { outcome?: unknown }),
+    );
+  }),
+);
+
 /** Module 12 alias by payment order id (`PO-<id>`): body `{ outcome: 'success' | 'fail' }`. */
 devRoutes.post(
   '/payments/orders/:orderId/simulate',
@@ -182,9 +199,11 @@ devRoutes.get(
     const billing = [...placeholderApprovalRequests.values()]
       .filter(a => a.status === 'PENDING')
       .map(a => row(a, 'billing'));
-    const paymentsPending = [...placeholderPaymentApprovals.values()]
-      .filter(a => a.status === 'PENDING')
-      .map(a => row(a, 'payments'));
+    const paymentsPending = await Promise.all(
+      [...placeholderPaymentApprovals.values()]
+        .filter(a => a.status === 'PENDING')
+        .map(async a => ({ ...row(a, 'payments'), ...(await paymentsApprovalDetails(a)) })),
+    );
     ok(res, [...part2, ...part3, ...billing, ...paymentsPending]);
   }),
 );

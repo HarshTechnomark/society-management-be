@@ -17,10 +17,10 @@ export async function refreshCollectionTotals(collectionId: number): Promise<boo
     contributorCount: string;
     collectedPaise: string | null;
   }>(
-    `SELECT SUM(status <> 'CANCELLED') AS requestCount, SUM(status = 'PAID') AS paidCount,
+    `SELECT SUM(status <> 'CANCELLED' OR :closed) AS requestCount, SUM(status = 'PAID') AS paidCount,
             SUM(paidPaise > 0) AS contributorCount, SUM(paidPaise) AS collectedPaise
        FROM collection_requests WHERE collectionId = :id`,
-    { replacements: { id: collectionId }, type: QueryTypes.SELECT },
+    { replacements: { id: collectionId, closed: c.status === 'CLOSED' ? 1 : 0 }, type: QueryTypes.SELECT },
   );
   const next = {
     requestCount: n(row?.requestCount),
