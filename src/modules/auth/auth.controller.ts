@@ -9,6 +9,7 @@ import * as sec from './auth.security';
 import * as meSvc from './auth.me';
 import { refreshSession } from './auth.sessions';
 import { clearSessionCookies, COOKIES, setSessionCookies } from './auth.tokens';
+import type { ClientApp } from './auth.types';
 
 const ctxOf = (req: Request) => req.ctx;
 const body = <T>(req: Request): T => req.valid.body as T;
@@ -54,6 +55,9 @@ export const authController = {
   passkeyVerify: handler(async (req, res) => {
     sendSignIn(res, await passkey.passkeyLogin(ctxOf(req), body(req)));
   }),
+  appChoose: handler(async (req, res) => {
+    sendSignIn(res, await signin.chooseApp(ctxOf(req), body(req)));
+  }),
   mfaVerify: handler(async (req, res) => {
     sendSignIn(res, await signin.verifyMfa(ctxOf(req), body(req)));
   }),
@@ -84,6 +88,14 @@ export const authController = {
   }),
   switchSociety: handler(async (req, res) => {
     ok(res, await meSvc.switchSociety(ctxOf(req), body<{ societyId: number }>(req).societyId));
+  }),
+  apps: handler(async (req, res) => {
+    ok(res, await meSvc.availableApps(ctxOf(req)));
+  }),
+  switchApp: handler(async (req, res) => {
+    const r = await meSvc.switchApp(ctxOf(req), body<{ app: ClientApp }>(req).app);
+    if (r.cookies) setSessionCookies(res, r.cookies);
+    ok(res, r.me);
   }),
   reauthOtp: handler(async (req, res) => {
     const d = await sec.reauthOtp(ctxOf(req), body<{ channel?: 'SMS' | 'WHATSAPP' }>(req).channel ?? 'SMS');

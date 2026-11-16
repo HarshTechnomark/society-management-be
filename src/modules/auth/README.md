@@ -31,3 +31,31 @@ run against a real Redis in this build.
 
 `npm test` (uses `.env.test` and the `societyapp_test` database; run `npm run migrate` against it first). Tests are in
 `tests/modules/auth/`, `tests/lib/` and `tests/*.test.ts`. Time is frozen with `setNow()` from `src/lib/clock.ts`.
+
+## Single sign-in address
+
+An origin in `APP_ORIGINS` whose first host label is **not** a role label (`platform`, `admin`, `my`, `gate`, `work`) is the single sign-in address
+(`isUnifiedOrigin` in `auth.apps.ts`). Everybody signs in there and the app is decided **after the first factor**, not from the host. The per-role
+hosts keep working exactly as before (BR-02-43), so both can be configured together.
+
+- **Sign-in:** a mobile number signs in with a one-time code, an email with its password (passkeys unchanged). `POST /auth/otp/send`, `/otp/verify`,
+  `/password/login` and `/passkey/*` accept the request with no app. `completeFirstFactor` (`auth.signin.ts`) then lists the apps the person may open with
+  that first factor (`candidateAppsFor`): the apps they have access to whose `APP_RULES` allow the factor (a platform account never signs in by OTP, a
+  resident has no password). Everybody can be a resident (an unknown mobile number signs up as one), so a person who has another app is offered the
+  resident app only when they have a resident record (`authAccess.hasResidentRecord`, module 03: a resident-scope membership, or an active module 09
+  owner, tenant or family link in a society they are an active member of, as in `computeAccess`). A chairman who owns a flat is asked to choose; a
+  platform account with no resident record that signs in by mobile code gets `LOGIN_METHOD_NOT_ALLOWED` ("signs in with its email address and
+  password"), never a resident session. `POST /auth/switch-app` and `GET /auth/apps` use the same list.
+- **One app:** the second step (`MFA_REQUIRED` or `MFA_ENROLL_REQUIRED`) or the session follows as before; the challenge and the session carry the app.
+- **More than one app:** the answer is `APP_CHOICE_REQUIRED` with the apps and a single-use challenge; the client calls `POST /auth/app/choose`
+  `{ challengeToken, app }`, and the sign-in continues for that app. No session exists before the choice.
+- **Errors:** `LOGIN_METHOD_NOT_ALLOWED` when the person has access but not with this first factor, `NO_ACCESS_FOR_APP` when they have none, `APP_NOT_ALLOWED` for a
+  choice that was not offered.
+- **After sign-in:** `authMiddleware` takes `ctx.clientApp` from the session (the access token names the app and must agree with it), so every
+  module sees the same `clientApp` as on a per-role host. Idle and absolute timeouts are the app's own.
+- **Switching app:** `POST /auth/switch-app` `{ app }` opens another app the person has access to with a new session that keeps the first factor,
+  the second step and the sign-in time; the old session ends. An app whose rules do not allow the session's first factor refuses it (an OTP sign-in
+  never opens the platform). Support sessions cannot switch.
+- **Links in messages** (`appUrl`, `appHost`) use the app's own host when one is configured, else the single sign-in address.
+- **Limitation:** one browser holds one session per address, so a platform admin who starts a support hand-off from the platform replaces their
+  platform session in that browser when the hand-off opens on the same address. Keep a per-role admin host configured if both must stay open.

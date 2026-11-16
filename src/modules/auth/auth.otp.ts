@@ -8,7 +8,7 @@ import { AppError } from '../../utils/errors';
 import { audit } from '../../utils/audit';
 import type { Ctx } from '../../types/context';
 import { hashOtp, hashToken, newChallengeId, newOtpCode, randomToken, safeEqual } from './auth.crypto';
-import { appHost, assertMethod, requireApp } from './auth.apps';
+import { appHost, assertMethod, requireApp, requireAppOrUnified } from './auth.apps';
 import { assertNotLocked, lockedError, lockRemainingSeconds, recordFailure, resetLock } from './auth.lockout';
 import { completeFirstFactor, isError, type OrError, type SignInOutcome } from './auth.signin';
 import { activateInvited } from './auth.users';
@@ -84,11 +84,12 @@ type Deliverability = { deliverable: boolean; user: User | null; existingForSign
 async function decideDeliverability(
   mobile: string,
   purpose: 'LOGIN' | 'SIGNUP',
-  app: ReturnType<typeof requireApp>,
+  app: ReturnType<typeof requireApp> | undefined,
 ): Promise<Deliverability> {
   const user = await User.findOne({ where: { mobile } });
   if (purpose === 'SIGNUP') return { deliverable: !user, user, existingForSignup: Boolean(user) };
-  if (!user) return { deliverable: app === 'RESIDENT', user: null }; // BR-02-5, BR-02-12
+  // BR-02-5, BR-02-12: an unknown number may become a resident; on the single sign-in address (no app yet) that is allowed too
+  if (!user) return { deliverable: app === undefined || app === 'RESIDENT', user: null };
   const ok = user.status === 'ACTIVE' || user.status === 'INVITED' || user.status === 'PENDING_DELETION';
   return { deliverable: ok, user };
 }
@@ -98,9 +99,10 @@ export async function sendOtp(
   ctx: Ctx,
   input: { mobile: string; purpose: 'LOGIN' | 'SIGNUP'; channel: OtpChannel },
 ): Promise<OtpSendResult> {
-  const app = requireApp(ctx.clientApp);
+  const app = requireAppOrUnified(ctx);
   if (input.purpose === 'SIGNUP') {
-    if (app !== 'ADMIN') throw new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Sign-up is not available here');
+    if ((app ?? 'ADMIN') !== 'ADMIN')
+      throw new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Sign-up is not available here');
   } else assertMethod(app, 'otp');
   return withMinDuration(async () => {
     await assertNotLocked('OTP', input.mobile);
@@ -134,7 +136,7 @@ export async function resendOtp(
   ctx: Ctx,
   input: { challengeId: string; channel?: OtpChannel },
 ): Promise<OtpSendResult> {
-  const app = requireApp(ctx.clientApp);
+  const app = requireAppOrUnified(ctx);
   return txOutcome<OtpSendResult>(async tx => {
     const old = await AuthOtp.findOne({
       where: { challengeId: input.challengeId },
@@ -150,7 +152,7 @@ export async function resendOtp(
     )
       return { error: new AppError(401, 'OTP_EXPIRED', 'Request a new code') };
     if (old.purpose === 'SIGNUP') {
-      if (app !== 'ADMIN')
+      if ((app ?? 'ADMIN') !== 'ADMIN')
         return { error: new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Sign-up is not available here') };
     } else assertMethod(app, 'otp');
     const lock = await lockRemainingSeconds('OTP', old.mobile, tx);
@@ -255,7 +257,7 @@ export async function verifyOtp(
   ctx: Ctx,
   input: { challengeId: string; code: string },
 ): Promise<VerifyOtpResult> {
-  const app = requireApp(ctx.clientApp);
+  const app = requireAppOrUnified(ctx);
   return txOutcome<VerifyOtpResult>(async tx => {
     const v = await verifyOtpChallenge(ctx, tx, {
       challengeId: input.challengeId,
@@ -266,7 +268,7 @@ export async function verifyOtp(
     const ch = v.challenge;
     if (ch.purpose === 'LOGIN') assertMethod(app, 'otp');
     if (ch.purpose === 'SIGNUP') {
-      if (app !== 'ADMIN')
+      if ((app ?? 'ADMIN') !== 'ADMIN')
         return { error: new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Sign-up is not available here') };
       if (await User.findOne({ where: { mobile: ch.mobile }, transaction: tx }))
         return {
@@ -311,7 +313,7 @@ export async function verifyOtp(
       lock: tx.LOCK.UPDATE,
     });
     if (!user) {
-      if (app !== 'RESIDENT')
+      if (app && app !== 'RESIDENT')
         return {
           error: new AppError(401, 'OTP_INVALID', 'That code is not correct', [
             { field: 'attemptsLeft', message: '0' },

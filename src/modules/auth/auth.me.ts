@@ -5,7 +5,7 @@ import { emitToUser } from '../../lib/realtime';
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { audit } from '../../utils/audit';
 import type { Ctx } from '../../types/context';
-import { appUrl, requireApp } from './auth.apps';
+import { appUrl, requireAppOrUnified } from './auth.apps';
 import { classify, consumeOrThrow, findToken, issueToken, linkError, ttl } from './auth.links';
 import { ports } from './auth.ports';
 import {
@@ -18,7 +18,8 @@ import {
   membershipFitsApp,
 } from './auth.sessions';
 import type { SessionCookies } from './auth.tokens';
-import type { AuthMe, AuthUserView } from './auth.types';
+import { APP_RULES, type AuthMe, type AuthUserView, type ClientApp } from './auth.types';
+import { candidateAppsFor, type FirstFactor } from './auth.signin';
 import { lockUser } from './auth.users';
 import { safeAfterCommit } from './auth.util';
 
@@ -104,6 +105,84 @@ export async function switchSociety(ctx: Ctx, societyId: number): Promise<AuthMe
   return buildMe((await User.findByPk(u.id!))!, s);
 }
 
+/**
+ * `GET /auth/apps` (single sign-in address only): the app of this session and the other apps the person can switch to with the
+ * way they signed in. Empty on a per-role address and in a support session, so the client shows no switch button there.
+ */
+export async function availableApps(ctx: Ctx): Promise<{ current: ClientApp; available: ClientApp[] }> {
+  const s = ctx.session!;
+  const current = s.clientApp;
+  if (!ctx.unified || s.supportGrantId) return { current, available: [] };
+  const first = s.amr[0];
+  const factor: FirstFactor | null =
+    first === 'OTP' ? 'OTP' : first === 'PASSWORD' ? 'PASSWORD' : first === 'PASSKEY' ? 'PASSKEY' : null;
+  if (!factor) return { current, available: [] };
+  const u = (await User.findByPk(ctx.user!.id))!;
+  if ((await userRequiresMfa(u)) && !s.mfaVerified) return { current, available: [] };
+  const { apps } = await candidateAppsFor(u.id!, factor);
+  return { current, available: apps.filter(a => a !== current) };
+}
+
+const FACTOR_OF = { otp: 'OTP', password: 'PASSWORD', passkey: 'PASSKEY' } as const;
+
+/**
+ * `POST /auth/switch-app` (single sign-in address only): a signed-in person opens another app they have access to. The new
+ * session keeps the first factor, the second step and the original sign-in time; an app whose rules do not allow that first
+ * factor refuses (an OTP sign-in never opens the platform), and the old session ends so only one stays in this browser.
+ */
+export async function switchApp(
+  ctx: Ctx,
+  app: ClientApp,
+): Promise<{ me: AuthMe; cookies: SessionCookies | null }> {
+  if (!ctx.unified)
+    throw new AppError(
+      400,
+      'LOGIN_METHOD_NOT_ALLOWED',
+      'Switching app is available on the single sign-in address only',
+    );
+  const s0 = ctx.session!;
+  if (s0.supportGrantId)
+    throw new ForbiddenError('SUPPORT_SESSION_LOCKED', 'Support sessions cannot switch app');
+  const u = (await User.findByPk(ctx.user!.id))!;
+  if (s0.clientApp === app) {
+    const s = (await Session.findByPk(s0.id))!;
+    return { me: await buildMe(u, s), cookies: null };
+  }
+  const first = s0.amr[0];
+  const method =
+    first === 'OTP' ? 'otp' : first === 'PASSWORD' ? 'password' : first === 'PASSKEY' ? 'passkey' : null;
+  if (!method || !APP_RULES[app][method])
+    throw new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Sign in again to open that app');
+  // the apps this person really has (a resident app only with a resident record), as offered at sign-in
+  if (!(await candidateAppsFor(u.id!, FACTOR_OF[method])).apps.includes(app))
+    throw new ForbiddenError('NO_ACCESS_FOR_APP', 'This account has no access to this app');
+  if ((await userRequiresMfa(u)) && !s0.mfaVerified)
+    throw new ForbiddenError('MFA_ENROLLMENT_REQUIRED', 'Set up two-step sign-in first');
+  return sequelize.transaction(async tx => {
+    const created = await createSession(ctx, tx, {
+      userId: u.id!,
+      clientApp: app,
+      amr: s0.amr,
+      mfaVerified: s0.mfaVerified,
+      authTime: s0.authTime,
+    });
+    const old = await Session.findByPk(s0.id, { transaction: tx, lock: tx.LOCK.UPDATE });
+    if (old) await revokeSessionRows([old], 'USER_REVOKED', tx, u.id!);
+    await audit(
+      ctx,
+      {
+        action: 'auth.session.app_switched',
+        entityType: 'session',
+        entityId: created.sessionId,
+        after: { from: s0.clientApp, to: app },
+        actor: actorOf(ctx),
+      },
+      tx,
+    );
+    return { me: created.me, cookies: created.cookies };
+  });
+}
+
 /** `POST /auth/logout` (section 8.12). */
 export async function logout(ctx: Ctx): Promise<void> {
   await sequelize.transaction(async tx => {
@@ -168,7 +247,8 @@ export async function redeemSupportHandoff(
   ctx: Ctx,
   rawToken: string,
 ): Promise<{ me: AuthMe; cookies: SessionCookies }> {
-  const app = requireApp(ctx.clientApp);
+  // the admin host, or the single sign-in address (where the app is not known before the session exists)
+  const app = requireAppOrUnified(ctx) ?? 'ADMIN';
   if (app !== 'ADMIN')
     throw new AppError(400, 'LOGIN_METHOD_NOT_ALLOWED', 'Open the hand-off link on the admin host');
   return sequelize.transaction(async tx => {

@@ -9,6 +9,11 @@ export interface RequestContext {
   clientApp?: ClientApp;
   /** Origin header value (scheme and host) when it is an allowed app origin. */
   origin?: string;
+  /**
+   * True when the Origin is the single sign-in address (an app origin whose first host label is not a role label). The app is
+   * then chosen after sign-in, and once a session exists `clientApp` comes from the session.
+   */
+  unified?: boolean;
   /** Raw `sa_device` cookie value when the browser sent one. */
   deviceId?: string;
   user?: {
@@ -60,6 +65,7 @@ export type Ctx = Pick<RequestContext, 'requestId' | 'ip' | 'userAgent'> &
     Pick<
       RequestContext,
       | 'clientApp'
+      | 'unified'
       | 'origin'
       | 'deviceId'
       | 'user'

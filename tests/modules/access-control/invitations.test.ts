@@ -302,7 +302,7 @@ describe('list, resend, revoke (8.13, 8.14)', () => {
     expect((await get(`/public/invitations/${fresh}`, { app: 'ADMIN' })).status).toBe(200);
     // expiry was reset on each resend
     const inv = (await Invitation.findByPk(id))!;
-    expect(inv.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(inv.expiresAt.getTime()).toBeGreaterThan(now().getTime());
   });
 
   it('revoke needs a reason, audits, and blocks later actions', async () => {

@@ -21,7 +21,7 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
     const token = req.cookies?.[COOKIES.access] as string | undefined;
     if (!token) return next(unauth());
     const claims = verifyAccessToken(token, req.ctx.clientApp);
-    if (!claims || !req.ctx.clientApp) return next(unauth());
+    if (!claims || (!req.ctx.clientApp && !req.ctx.unified)) return next(unauth());
 
     const session = await Session.findByPk(Number(claims.sid));
     const user =
@@ -33,6 +33,12 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
       (user.status !== 'ACTIVE' && user.status !== 'PENDING_DELETION')
     )
       return next(new AppError(401, 'SESSION_REVOKED', 'Your session was ended'));
+
+    // single sign-in address: the app is the session's (the token already named it; they must agree)
+    if (req.ctx.unified && !req.ctx.clientApp) {
+      if (session.clientApp !== claims.app) return next(unauth());
+      req.ctx.clientApp = session.clientApp;
+    }
 
     const t = now();
     if (t >= session.absoluteExpiresAt) {
@@ -98,11 +104,12 @@ export async function readOptionalSession(
   req: Request,
 ): Promise<{ user: NonNullable<Request['ctx']['user']>; activeSocietyId: number | null } | null> {
   const token = req.cookies?.[COOKIES.access] as string | undefined;
-  if (!token || !req.ctx.clientApp) return null;
+  if (!token || (!req.ctx.clientApp && !req.ctx.unified)) return null;
   const claims = verifyAccessToken(token, req.ctx.clientApp);
   if (!claims) return null;
   const session = await Session.findByPk(Number(claims.sid));
   if (!session || session.userId !== Number(claims.sub) || session.revokedAt) return null;
+  if (!req.ctx.clientApp && session.clientApp !== claims.app) return null;
   const t = now();
   if (t >= session.absoluteExpiresAt || isExpiredIdle(session, t)) return null;
   const user = await User.findByPk(session.userId);
