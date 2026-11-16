@@ -48,7 +48,11 @@ export const collectionsController = {
     ok(res, await submitCollection(req.ctx, v(req).params.id, v(req).body.version), 'Sent for approval'),
   ),
   publish: h(async (req, res) =>
-    ok(res, await publishCollection(req.ctx, v(req).params.id, v(req).body.version), 'Collection published'),
+    ok(
+      res,
+      await publishCollection(req.ctx, v(req).params.id, v(req).body.version, v(req).body.reason),
+      'Collection published',
+    ),
   ),
   remind: h(async (req, res) =>
     ok(res, await remindCollection(req.ctx, v(req).params.id, v(req).body.version), 'Reminder sent'),

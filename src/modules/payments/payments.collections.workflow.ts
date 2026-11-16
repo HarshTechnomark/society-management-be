@@ -376,7 +376,7 @@ async function recallNotice(ctx: Ctx, id: number, reason: string): Promise<void>
 
 // ------------------------------------------------------------------ publish (6.11)
 
-export async function publishCollection(ctx: Ctx, id: number, version: number) {
+export async function publishCollection(ctx: Ctx, id: number, version: number, reason?: string) {
   const societyId = societyIdOf(ctx);
   const today = await societyToday(societyId);
   const out = await moneyTx(async t => {
@@ -412,6 +412,7 @@ export async function publishCollection(ctx: Ctx, id: number, version: number) {
         entityId: id,
         entityLabel: c.title,
         societyId,
+        ...(reason ? { reason } : {}),
         after: { requestCount: created.length, skippedNoBillTo },
       },
       t,

@@ -98,6 +98,17 @@ describe('publish (6.11, BR-12-40, 41)', () => {
     ).toBe(1);
   });
 
+  it('the optional publish reason goes to the audit trail', async () => {
+    const { w } = await collWorld(4, 3);
+    const a = await approved(w);
+    const r = await w.c('post', `/collections/${a.id}/publish`, { version: a.version, reason: 'Go live' });
+    expect(r.status).toBe(200);
+    const row = await AuditLog.findOne({
+      where: { action: 'collections.collection.published', entityId: String(a.id) },
+    });
+    expect(row!.reason).toBe('Go live');
+  });
+
   it('includeVacant asks the empty flat too (no bill-to); sendNotice false posts no notice; kind decides the category', async () => {
     const { w } = await collWorld(4, 3);
     const c = await published(w, { includeVacant: true, sendNotice: false, kind: 'DONATION' });
