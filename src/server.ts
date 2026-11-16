@@ -13,6 +13,7 @@ import { registerSocietySetup } from './modules/society-setup/society-setup.publ
 import { registerResidents } from './modules/residents/residents.public';
 import { registerCommittee } from './modules/committee/committee.public';
 import { registerBilling } from './modules/billing/billing.public';
+import { registerPayments } from './modules/payments/payments.public';
 import { assertCatalogueComplete } from './modules/subscriptions/subscriptions.seed';
 import { startWorkers, stopWorkers, usesRedis } from './lib/queue';
 import { closeRedis } from './lib/kv';
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
   registerResidents();
   registerCommittee();
   registerBilling();
+  registerPayments();
   await assertCatalogueComplete(); // every catalogue key has a row in every plan version (module 04)
   if (!usesRedis()) await startWorkers();
 

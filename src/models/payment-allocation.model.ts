@@ -26,7 +26,7 @@ export class PaymentAllocation extends Model<
   declare collectionRequestId: number | null;
   declare amountPaise: number;
   declare reversalOfId: number | null;
-  declare reasonCode: AllocReason;
+  declare reasonCode: CreationOptional<AllocReason>;
   declare allocatedOn: string;
   declare createdBy: number | null;
   declare updatedBy: number | null;

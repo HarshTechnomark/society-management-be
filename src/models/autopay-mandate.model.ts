@@ -29,11 +29,11 @@ export class AutopayMandate extends Model<
   declare gatewayCustomerId: string | null;
   declare payerInstrumentMasked: string | null;
   declare maxAmountPaise: number;
-  declare debitDaysBeforeDue: number;
+  declare debitDaysBeforeDue: CreationOptional<number>;
   declare startDate: string;
   declare endDate: string;
-  declare status: MandateStatus;
-  declare consecutiveFailures: number;
+  declare status: CreationOptional<MandateStatus>;
+  declare consecutiveFailures: CreationOptional<number>;
   declare lastDebitAt: Date | null;
   declare lastDebitStatus: DebitStatus | null;
   declare activatedAt: Date | null;
@@ -42,7 +42,7 @@ export class AutopayMandate extends Model<
   declare endReason: MandateEndReason | null;
   declare createdBy: number | null;
   declare updatedBy: number | null;
-  declare version: number;
+  declare version: CreationOptional<number>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 

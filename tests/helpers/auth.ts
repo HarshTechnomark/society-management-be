@@ -56,6 +56,16 @@ export async function resetAll(): Promise<void> {
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const t of [
+    // module 12 (children first)
+    'payment_webhook_events',
+    'payment_allocations',
+    'unit_advances',
+    'refunds',
+    'payments',
+    'payment_orders',
+    'autopay_mandates',
+    'collection_requests',
+    'collections',
     'opening_balances',
     'unit_ledger_entries',
     'invoice_lines',
