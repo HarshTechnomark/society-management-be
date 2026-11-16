@@ -6,8 +6,7 @@ import { putPlaceholderFile } from '../society-setup/society-setup.ports';
 import { AppError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
-import { paymentGateway } from '../../adapters';
-import { FakePaymentGateway } from '../../adapters/payments/payment-gateway';
+import { devPayOrder, devSimulateOrder } from './dev.payments';
 import { systemCtx, type Ctx } from '../../types/context';
 import { approveRequest, rejectRequest } from '../residents/residents.public';
 import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
@@ -94,17 +93,16 @@ devRoutes.post(
 devRoutes.post(
   '/payments/:orderId/pay',
   asyncHandler(async (req, res) => {
-    const gw = paymentGateway();
-    if (!(gw instanceof FakePaymentGateway)) throw new AppError(404, 'NOT_FOUND', 'Not found');
-    const orderId = String(req.params.orderId);
-    if (!gw.orders.has(orderId)) throw new AppError(404, 'NOT_FOUND', 'Order not found');
-    const body = (req.body ?? {}) as {
-      amountPaise?: number;
-      status?: 'captured' | 'failed' | 'pending';
-      method?: string;
-    };
-    const p = gw.payOrder(orderId, body);
-    ok(res, { gatewayPaymentId: p.paymentId, orderId, status: p.status, amountPaise: p.amountPaise });
+    // module 06 platform orders and module 12 society orders (12.1: captured through the webhook code path)
+    ok(res, await devPayOrder(String(req.params.orderId), (req.body ?? {}) as Record<string, never>));
+  }),
+);
+
+/** Module 12 alias by payment order id (`PO-<id>`): body `{ outcome: 'success' | 'fail' }`. */
+devRoutes.post(
+  '/payments/orders/:orderId/simulate',
+  asyncHandler(async (req, res) => {
+    ok(res, await devSimulateOrder(Number(req.params.orderId), (req.body ?? {}) as { outcome?: unknown }));
   }),
 );
 

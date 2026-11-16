@@ -28,6 +28,7 @@ import { billingSetupRoutes } from './modules/billing/billing.setup.routes';
 import { billingLedgerRoutes } from './modules/billing/billing.ledger.routes';
 import { billingDuesRoutes } from './modules/billing/billing.dues.routes';
 import { billingResidentRoutes } from './modules/billing/billing.resident.routes';
+import { paymentsOnlineRoutes } from './modules/payments/payments.online.routes';
 import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
@@ -107,6 +108,8 @@ export function createApp(): Express {
   api.use(billingResidentRoutes);
   // module 11 (11.4): invoices, ad-hoc invoices, credit and debit notes, cancellation, write-off, PDFs
   api.use(billingInvoicesRoutes);
+  // module 12 (12.1): pay list, payment orders, payment links, public pay routes, gateway webhook
+  api.use(paymentsOnlineRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

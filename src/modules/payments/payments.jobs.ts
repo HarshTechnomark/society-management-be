@@ -5,6 +5,7 @@ import { moneyTx } from './payments.shared';
 import { JOBS, PAYMENTS_QUEUE } from './payments.constants';
 import { applyAdvancesForUnit } from './payments.advances';
 import { refreshCollectionTotals } from './payments.alloc.totals';
+import { registerOnlineJobs } from './payments.online.jobs';
 
 /**
  * Registry of the jobs of queue `payments` (section 9.1). The foundation registers the two jobs its core needs
@@ -26,4 +27,5 @@ export function registerPaymentJobs(): void {
     logger.debug({ paymentId: data.paymentId }, 'payments:render-receipt placeholder (12.3 renders the PDF)');
   });
   // parts add their registration here, one line each:
+  registerOnlineJobs(); // 12.1: process-webhook, reconcile-orders, recovery-nudge, expire-links, purge-webhook-events
 }
