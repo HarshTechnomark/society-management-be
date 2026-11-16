@@ -1,6 +1,6 @@
 import type { Request, RequestHandler } from 'express';
 import { env } from '../lib/env';
-import { appForOrigin, originOf } from '../modules/auth/auth.apps';
+import { appForOrigin, isUnifiedOrigin, originOf } from '../modules/auth/auth.apps';
 import { COOKIES } from '../modules/auth/auth.tokens';
 
 /** Origin of the caller: `Origin`, else the `Referer` origin, else the request host when it is an app host. */
@@ -20,6 +20,10 @@ export const appContext: RequestHandler = (req, _res, next) => {
   const app = appForOrigin(origin);
   if (app) {
     req.ctx.clientApp = app;
+    req.ctx.origin = origin;
+  } else if (isUnifiedOrigin(origin)) {
+    // the single sign-in address: no app until a session exists (then `authMiddleware` sets it from the session)
+    req.ctx.unified = true;
     req.ctx.origin = origin;
   }
   const device = req.cookies?.[COOKIES.device];

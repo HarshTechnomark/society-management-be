@@ -7,7 +7,7 @@ import { AppError, ConflictError, ForbiddenError, ValidationError } from '../../
 import { audit } from '../../utils/audit';
 import type { Ctx } from '../../types/context';
 import { hashPassword } from './auth.crypto';
-import { appUrl, assertMethod, requireApp } from './auth.apps';
+import { appUrl, assertMethod, requireAppOrUnified } from './auth.apps';
 import { resetLock } from './auth.lockout';
 import {
   classify,
@@ -29,7 +29,7 @@ const SETUP_NO_INVITE_TTL = 72 * 3_600_000;
 
 /** Section 8.17. Same response for every email; nothing happens for unknown, system or unverified accounts. */
 export async function forgotPassword(ctx: Ctx, email: string): Promise<void> {
-  const app = requireApp(ctx.clientApp);
+  const app = requireAppOrUnified(ctx);
   assertMethod(app, 'password');
   await withMinDuration(async () => {
     const user = await User.findOne({ where: { email } });

@@ -26,11 +26,11 @@ import {
   userWithSecrets,
   type TotpSetupView,
 } from './auth.mfa';
-import { assertMethod, requireApp } from './auth.apps';
+import { assertMethod, requireApp, requireAppOrUnified } from './auth.apps';
 import { ports } from './auth.ports';
 import { createSession, userRequiresMfa } from './auth.sessions';
 import type { SessionCookies } from './auth.tokens';
-import { type Amr, type ClientApp, type SignInResult } from './auth.types';
+import { APP_RULES, type Amr, type ClientApp, type SignInResult } from './auth.types';
 import { rateLimitHit, safeAfterCommit, txOutcome } from './auth.util';
 
 export type FirstFactor = 'OTP' | 'PASSWORD' | 'PASSKEY';
@@ -49,7 +49,12 @@ export async function createLoginChallenge(
   ctx: Ctx,
   tx: Transaction,
   user: User,
-  v: { clientApp: ClientApp; firstFactor: FirstFactor; next: 'MFA' | 'MFA_ENROLL' },
+  v: {
+    clientApp: ClientApp | null;
+    firstFactor: FirstFactor;
+    next: 'MFA' | 'MFA_ENROLL' | 'APP';
+    apps?: ClientApp[];
+  },
 ): Promise<{ raw: string; expiresAt: Date }> {
   const raw = randomToken('lc_');
   const expiresAt = addMs(now(), LOGIN_CHALLENGE_TTL_MS);
@@ -63,6 +68,7 @@ export async function createLoginChallenge(
         clientApp: v.clientApp,
         firstFactor: v.firstFactor,
         next: v.next,
+        apps: v.apps ?? null,
         deviceIdHash: ctx.deviceId ? sha256Hex(ctx.deviceId) : null,
       },
       attemptCount: 0,
@@ -88,12 +94,80 @@ export async function completeFirstFactor(
   user: User,
   firstFactor: FirstFactor,
 ): Promise<OrError<SignInOutcome>> {
-  const app = requireApp(ctx.clientApp);
+  const fixed = requireAppOrUnified(ctx);
   if (user.status === 'DISABLED')
     return { error: new ForbiddenError('ACCOUNT_DISABLED', 'This account is disabled') };
-  if (!(await ports().authAccess.hasAppAccess(user.id!, app)))
-    return { error: new ForbiddenError('NO_ACCESS_FOR_APP', 'This account has no access to this app') };
+  if (fixed) {
+    if (!(await ports().authAccess.hasAppAccess(user.id!, fixed)))
+      return { error: new ForbiddenError('NO_ACCESS_FOR_APP', 'This account has no access to this app') };
+    return continueSignIn(ctx, tx, user, firstFactor, fixed);
+  }
 
+  // single sign-in address: the app is decided here, from what the person may open with this first factor
+  const { apps, hadAccess } = await candidateAppsFor(user.id!, firstFactor);
+  if (!apps.length)
+    return {
+      error: hadAccess
+        ? new AppError(
+            400,
+            'LOGIN_METHOD_NOT_ALLOWED',
+            'This sign-in method is not available for your account',
+          )
+        : new ForbiddenError('NO_ACCESS_FOR_APP', 'This account has no access to this app'),
+    };
+  if (apps.length > 1) {
+    const c = await createLoginChallenge(ctx, tx, user, { clientApp: null, firstFactor, next: 'APP', apps });
+    return {
+      message: 'Choose where to go',
+      result: {
+        status: 'APP_CHOICE_REQUIRED',
+        challengeToken: c.raw,
+        apps,
+        expiresAt: c.expiresAt.toISOString(),
+      },
+    };
+  }
+  return continueSignIn(ctx, tx, user, firstFactor, apps[0]!);
+}
+
+const APP_ORDER: ClientApp[] = ['PLATFORM', 'ADMIN', 'WORK', 'GATE', 'RESIDENT'];
+const METHOD_OF: Record<FirstFactor, 'otp' | 'password' | 'passkey'> = {
+  OTP: 'otp',
+  PASSWORD: 'password',
+  PASSKEY: 'passkey',
+};
+
+/**
+ * The apps a person can open on the single sign-in address with this first factor (BR-02-42, BR-02-43): the apps they have
+ * access to whose sign-in rules allow the factor (a platform account never signs in by OTP; a resident has no password).
+ * Everybody can be a resident, so that app is offered next to a real role only when the person has a resident link too; this
+ * keeps a committee member who is not also a resident from being asked every time.
+ */
+export async function candidateAppsFor(
+  userId: number,
+  factor: FirstFactor,
+): Promise<{ apps: ClientApp[]; hadAccess: boolean }> {
+  const access = ports().authAccess;
+  const have: ClientApp[] = [];
+  for (const a of APP_ORDER) if (await access.hasAppAccess(userId, a)) have.push(a);
+  const usable = have.filter(a => APP_RULES[a][METHOD_OF[factor]]);
+  const roles = usable.filter(a => a !== 'RESIDENT');
+  let apps = usable;
+  if (usable.includes('RESIDENT') && roles.length) {
+    const resident = (await access.listMemberships(userId)).some(m => m.roleScope === 'resident');
+    if (!resident) apps = roles;
+  }
+  return { apps, hadAccess: have.length > 0 };
+}
+
+/** The second step (BR-02-23) or the session, once the app is known. */
+async function continueSignIn(
+  ctx: Ctx,
+  tx: Transaction,
+  user: User,
+  firstFactor: FirstFactor,
+  app: ClientApp,
+): Promise<OrError<SignInOutcome>> {
   const mfaOn = user.mfaEnabledAt !== null;
   const mfaRequired = await userRequiresMfa(user);
   if (firstFactor === 'PASSKEY') {
@@ -158,8 +232,7 @@ export async function passwordLogin(
   ctx: Ctx,
   input: { email: string; password: string },
 ): Promise<SignInOutcome> {
-  const app = requireApp(ctx.clientApp);
-  assertMethod(app, 'password');
+  assertMethod(requireAppOrUnified(ctx), 'password');
   await assertNotLocked('PASSWORD', input.email);
   await rateLimitHit('login-email', input.email, 10, 900);
   return txOutcome<SignInOutcome>(async tx => {
@@ -203,6 +276,10 @@ interface LoadedChallenge {
   token: AuthToken;
   user: User;
   firstFactor: FirstFactor;
+  /** The app the sign-in is for; `null` until it is chosen (single sign-in address). */
+  app: ClientApp | null;
+  /** The apps to choose from (only for the `APP` step). */
+  apps: ClientApp[];
 }
 
 /**
@@ -213,7 +290,7 @@ async function loadLoginChallenge(
   ctx: Ctx,
   tx: Transaction,
   raw: string,
-  next: 'MFA' | 'MFA_ENROLL',
+  next: 'MFA' | 'MFA_ENROLL' | 'APP',
   checkLock: boolean,
 ): Promise<OrError<LoadedChallenge>> {
   const invalid = {
@@ -226,14 +303,22 @@ async function loadLoginChallenge(
   });
   if (!token || !token.userId) return invalid;
   const p = token.payload ?? {};
-  if (p.next !== next || p.clientApp !== ctx.clientApp) return invalid;
+  // a per-role address only takes its own challenges; the single sign-in address takes any (the app is in the challenge)
+  const appOk = ctx.clientApp ? p.clientApp === ctx.clientApp : Boolean(ctx.unified);
+  if (p.next !== next || !appOk) return invalid;
   if (checkLock) {
     const s = await lockRemainingSeconds('MFA', String(token.userId), tx);
     if (s > 0) return { error: lockedError(s) };
   }
   if (token.consumedAt || token.revokedAt || token.expiresAt <= now()) return invalid;
   const user = await userWithSecrets(token.userId, tx);
-  return { token, user, firstFactor: p.firstFactor as FirstFactor };
+  return {
+    token,
+    user,
+    firstFactor: p.firstFactor as FirstFactor,
+    app: (p.clientApp as ClientApp | null | undefined) ?? null,
+    apps: Array.isArray(p.apps) ? (p.apps as ClientApp[]) : [],
+  };
 }
 
 async function consumeToken(tx: Transaction, id: number): Promise<boolean> {
@@ -249,7 +334,7 @@ export async function verifyMfa(
   ctx: Ctx,
   input: { challengeToken: string; method: 'TOTP' | 'RECOVERY_CODE'; code: string },
 ): Promise<SignInOutcome> {
-  requireApp(ctx.clientApp);
+  requireAppOrUnified(ctx);
   return txOutcome<SignInOutcome>(async tx => {
     const ch = await loadLoginChallenge(ctx, tx, input.challengeToken, 'MFA', true);
     if (isError(ch)) return ch;
@@ -279,7 +364,14 @@ export async function verifyMfa(
     if (!(await consumeToken(tx, token.id!)))
       return { error: new AppError(401, 'CHALLENGE_INVALID', 'Your sign-in took too long. Start again.') };
     await resetLock('MFA', String(user.id), tx);
-    const out = await signedIn(ctx, tx, user, requireApp(ctx.clientApp), [firstFactor, input.method], true);
+    const out = await signedIn(
+      ctx,
+      tx,
+      user,
+      ch.app ?? requireApp(ctx.clientApp),
+      [firstFactor, input.method],
+      true,
+    );
     if (recoveryUsed) {
       await setRecoveryCodeSession(tx, user.id!, input.code, out.sessionId);
       await audit(
@@ -299,7 +391,7 @@ export async function verifyMfa(
 }
 
 export async function mfaEnrollStart(ctx: Ctx, input: { challengeToken: string }): Promise<TotpSetupView> {
-  requireApp(ctx.clientApp);
+  requireAppOrUnified(ctx);
   return txOutcome<TotpSetupView>(async tx => {
     const ch = await loadLoginChallenge(ctx, tx, input.challengeToken, 'MFA_ENROLL', false);
     if (isError(ch)) return ch;
@@ -311,7 +403,7 @@ export async function mfaEnrollConfirm(
   ctx: Ctx,
   input: { challengeToken: string; code: string },
 ): Promise<SignInOutcome> {
-  requireApp(ctx.clientApp);
+  requireAppOrUnified(ctx);
   return txOutcome<SignInOutcome>(async tx => {
     const ch = await loadLoginChallenge(ctx, tx, input.challengeToken, 'MFA_ENROLL', true);
     if (isError(ch)) return ch;
@@ -336,6 +428,38 @@ export async function mfaEnrollConfirm(
       tx,
     );
     safeAfterCommit(tx, () => notify('auth.mfa_enabled', [{ userId: user.id! }], {}));
-    return signedIn(ctx, tx, user, requireApp(ctx.clientApp), [firstFactor, 'TOTP'], true, { recoveryCodes });
+    return signedIn(ctx, tx, user, ch.app ?? requireApp(ctx.clientApp), [firstFactor, 'TOTP'], true, {
+      recoveryCodes,
+    });
+  });
+}
+
+/**
+ * `POST /auth/app/choose` (single sign-in address only): a person who may open more than one app picked one. The challenge from
+ * the first factor is single use; the second step and the session follow as for any sign-in.
+ */
+export async function chooseApp(
+  ctx: Ctx,
+  input: { challengeToken: string; app: ClientApp },
+): Promise<SignInOutcome> {
+  if (requireAppOrUnified(ctx))
+    throw new AppError(
+      400,
+      'LOGIN_METHOD_NOT_ALLOWED',
+      'Choosing an app is only needed on the single sign-in address',
+    );
+  return txOutcome<SignInOutcome>(async tx => {
+    const ch = await loadLoginChallenge(ctx, tx, input.challengeToken, 'APP', false);
+    if (isError(ch)) return ch;
+    const { token, user, firstFactor, apps } = ch;
+    if (!apps.includes(input.app))
+      return { error: new AppError(400, 'APP_NOT_ALLOWED', 'You cannot open that app with this sign-in') };
+    if (user.status === 'DISABLED')
+      return { error: new ForbiddenError('ACCOUNT_DISABLED', 'This account is disabled') };
+    if (!(await ports().authAccess.hasAppAccess(user.id!, input.app)))
+      return { error: new ForbiddenError('NO_ACCESS_FOR_APP', 'This account has no access to this app') };
+    if (!(await consumeToken(tx, token.id!)))
+      return { error: new AppError(401, 'CHALLENGE_INVALID', 'Your sign-in took too long. Start again.') };
+    return continueSignIn(ctx, tx, user, firstFactor, input.app);
   });
 }

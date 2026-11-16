@@ -56,6 +56,12 @@ authRoutes.post(
   rateLimit({ name: 'passkey-verify-ip', limit: 30, windowSeconds: 900, key: ip }),
   c.passkeyVerify,
 );
+authRoutes.post(
+  '/app/choose',
+  validate({ body: s.appChoose }),
+  rateLimit({ name: 'app-choose-ip', limit: 30, windowSeconds: 900, key: ip }),
+  c.appChoose,
+);
 authRoutes.post('/mfa/verify', validate({ body: s.mfaVerify }), c.mfaVerify);
 authRoutes.post('/mfa/enroll/start', validate({ body: s.mfaEnrollStart }), c.mfaEnrollStart);
 authRoutes.post('/mfa/enroll/confirm', validate({ body: s.mfaEnrollConfirm }), c.mfaEnrollConfirm);
@@ -116,6 +122,8 @@ authRoutes.post('/logout', validate({ body: s.logout }), c.logout);
 authRoutes.get('/me', c.me);
 authRoutes.patch('/me', validate({ body: s.patchMe }), c.patchMe);
 authRoutes.post('/switch-society', validate({ body: s.switchSociety }), c.switchSociety);
+authRoutes.get('/apps', c.apps);
+authRoutes.post('/switch-app', validate({ body: s.switchApp }), c.switchApp);
 authRoutes.post(
   '/reauth/otp',
   validate({ body: s.reauthOtp }),

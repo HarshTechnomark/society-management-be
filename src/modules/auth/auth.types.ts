@@ -82,6 +82,8 @@ export interface AuthMe {
 
 export type SignInResult =
   | { status: 'SIGNED_IN'; me: AuthMe; recoveryCodes?: string[] }
+  /** Single sign-in address only: the person may open more than one app and picks one (`POST /auth/app/choose`). */
+  | { status: 'APP_CHOICE_REQUIRED'; challengeToken: string; apps: ClientApp[]; expiresAt: string }
   | {
       status: 'MFA_REQUIRED' | 'MFA_ENROLL_REQUIRED';
       challengeToken: string;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CLIENT_APPS } from '../../models/session.model';
 import { LOCALES } from '../../models/user.model';
 import { emailSchema, mobileSchema, nameSchema } from './auth.normalise';
 import { normaliseRecoveryCode, RECOVERY_CODE_RE } from './auth.crypto';
@@ -108,6 +109,8 @@ export const authSchemas = {
       path: ['name'],
     }),
   switchSociety: z.object({ societyId: z.number().int().positive() }).strict(),
+  appChoose: z.object({ challengeToken, app: z.enum(CLIENT_APPS) }).strict(),
+  switchApp: z.object({ app: z.enum(CLIENT_APPS) }).strict(),
   reauthOtp: z.object({ channel: channel.optional() }).strict(),
   reauth: z
     .object({

@@ -14,7 +14,7 @@ import { notify } from '../../lib/notify';
 import { AppError, ConflictError, NotFoundError } from '../../utils/errors';
 import { audit } from '../../utils/audit';
 import type { Ctx } from '../../types/context';
-import { assertMethod, requireApp } from './auth.apps';
+import { assertMethod, requireAppOrUnified } from './auth.apps';
 import { issueToken, ttl } from './auth.links';
 import { completeFirstFactor, consumeToken, isError, type OrError, type SignInOutcome } from './auth.signin';
 import { hashToken } from './auth.crypto';
@@ -99,8 +99,7 @@ export const passkeyView = (p: UserPasskey): PasskeyView => ({
 
 // ------------------------------------------------------------------ sign-in (8.6, 8.7)
 export async function passkeyLoginOptions(ctx: Ctx) {
-  const app = requireApp(ctx.clientApp);
-  assertMethod(app, 'passkey');
+  assertMethod(requireAppOrUnified(ctx), 'passkey');
   const o = await generateAuthenticationOptions({
     rpID: env().WEBAUTHN_RP_ID,
     timeout: 120_000,
@@ -163,8 +162,7 @@ export async function passkeyLogin(
   ctx: Ctx,
   input: { challengeId: string; credential: AuthenticationResponseJSON },
 ): Promise<SignInOutcome> {
-  const app = requireApp(ctx.clientApp);
-  assertMethod(app, 'passkey');
+  assertMethod(requireAppOrUnified(ctx), 'passkey');
   return txOutcome<SignInOutcome>(async tx => {
     let expected: string;
     try {

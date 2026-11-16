@@ -22,6 +22,7 @@ export const PUBLIC_ROUTES: Rule[] = [
   { method: 'POST', path: '/auth/password/setup' },
   { method: 'POST', path: '/auth/passkey/options' },
   { method: 'POST', path: '/auth/passkey/verify' },
+  { method: 'POST', path: '/auth/app/choose' },
   { method: 'POST', path: '/auth/mfa/verify' },
   { method: 'POST', path: '/auth/mfa/enroll/start' },
   { method: 'POST', path: '/auth/mfa/enroll/confirm' },
