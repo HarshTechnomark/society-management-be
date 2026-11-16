@@ -16,6 +16,8 @@ import {
 } from './payments.orders.gateway';
 import { pullFromGateway } from './payments.orders.service';
 import { paymentsPorts, type GatewayAccountDto } from './payments.ports';
+import { handleMandateEvent } from './payments.autopay.service';
+import { handleRefundEvent } from './payments.refunds.service';
 import { reversePaymentCore } from './payments.reverse.core';
 import { moneyTx, n } from './payments.shared';
 import type { AnyCtx } from './payments.types';
@@ -199,6 +201,42 @@ async function handleDispute(
   return 'PROCESSED';
 }
 
+/** 12.4 refund results; `NOT_FOUND` retries (the approval that created the refund may still be committing). */
+async function handleRefund(
+  ev: PaymentWebhookEvent,
+  account: GatewayAccountDto,
+  ctx: AnyCtx,
+): Promise<HandlerResult> {
+  if (!ev.gatewayRefundId) return 'IGNORED';
+  const r = await handleRefundEvent(ctx, {
+    societyId: account.societyId,
+    type: ev.eventType as 'refund.processed' | 'refund.failed',
+    gatewayRefundId: ev.gatewayRefundId,
+    eventId: ev.providerEventId,
+  });
+  if (r === 'NOT_FOUND') throw new Error('Refund not found yet');
+  return r === 'IGNORED' ? 'IGNORED' : 'PROCESSED';
+}
+
+/** 12.4 mandate results (nothing else activates a mandate); `NOT_FOUND` retries. */
+async function handleMandate(
+  ev: PaymentWebhookEvent,
+  account: GatewayAccountDto,
+  ctx: AnyCtx,
+): Promise<HandlerResult> {
+  if (!ev.gatewayMandateId) return 'IGNORED';
+  const r = await handleMandateEvent(ctx, {
+    societyId: account.societyId,
+    type: ev.eventType as 'mandate.activated' | 'mandate.rejected' | 'mandate.cancelled',
+    gatewayMandateId: ev.gatewayMandateId,
+    eventId: ev.providerEventId,
+  });
+  if (r === 'NOT_FOUND') throw new Error('Mandate not found yet');
+  return r === 'IGNORED' ? 'IGNORED' : 'PROCESSED';
+}
+
+registerWebhookHandler(['refund.processed', 'refund.failed'], handleRefund);
+registerWebhookHandler(['mandate.activated', 'mandate.rejected', 'mandate.cancelled'], handleMandate);
 registerWebhookHandler(['payment.captured', 'order.paid', 'payment.failed'], handleCapture);
 registerWebhookHandler(['payment.dispute.created', 'payment.dispute.lost'], handleDispute);
 

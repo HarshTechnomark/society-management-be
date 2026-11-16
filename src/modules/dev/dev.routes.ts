@@ -6,7 +6,7 @@ import { putPlaceholderFile } from '../society-setup/society-setup.ports';
 import { AppError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
-import { devPayOrder, devSimulateOrder } from './dev.payments';
+import { devActivateMandate, devPayOrder, devSimulateOrder } from './dev.payments';
 import { systemCtx, type Ctx } from '../../types/context';
 import { approveRequest, rejectRequest } from '../residents/residents.public';
 import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
@@ -14,6 +14,8 @@ import { approvalStore } from '../residents/residents.part3.ports';
 import { approvalStub } from '../residents/residents.part2.ports';
 import { placeholderApprovalRequests } from '../billing/billing.ports';
 import { placeholderPaymentApprovals } from '../payments/payments.ports';
+import { APPROVAL_TYPES as PAYMENT_APPROVAL_TYPES } from '../payments/payments.constants';
+import * as refundApprovals from '../payments/payments.refunds.approvals-hook';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
@@ -95,6 +97,14 @@ devRoutes.post(
   asyncHandler(async (req, res) => {
     // module 06 platform orders and module 12 society orders (12.1: captured through the webhook code path)
     ok(res, await devPayOrder(String(req.params.orderId), (req.body ?? {}) as Record<string, never>));
+  }),
+);
+
+/** Module 12 (12.4): the fake gateway confirms an AutoPay mandate (`mandate.activated` through the webhook path). */
+devRoutes.post(
+  '/payments/mandates/:gatewayMandateId/activate',
+  asyncHandler(async (req, res) => {
+    ok(res, await devActivateMandate(String(req.params.gatewayMandateId)));
   }),
 );
 
@@ -198,7 +208,9 @@ const BILLING_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
  * 12.2 `OFFLINE_PAYMENT`, 12.4 `PAYMENT_REFUND`, 12.5 `COLLECTION_PUBLISH` (`APPROVAL_TYPES` of `payments.constants`).
  * A hook gets the placeholder request id (`placeholderPaymentApprovals.get(id)` has the entity) and the deciding context.
  */
-const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {};
+const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
+  [PAYMENT_APPROVAL_TYPES.paymentRefund]: refundApprovals, // 12.4
+};
 
 async function decidePayments(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderPaymentApprovals.get(id);

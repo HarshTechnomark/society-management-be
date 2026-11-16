@@ -30,6 +30,8 @@ import { billingDuesRoutes } from './modules/billing/billing.dues.routes';
 import { billingResidentRoutes } from './modules/billing/billing.resident.routes';
 import { paymentsOnlineRoutes } from './modules/payments/payments.online.routes';
 import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes';
+import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes';
+import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -110,6 +112,9 @@ export function createApp(): Express {
   api.use(billingInvoicesRoutes);
   // module 12 (12.1): pay list, payment orders, payment links, public pay routes, gateway webhook
   api.use(paymentsOnlineRoutes);
+  // module 12 (12.4): refunds and AutoPay mandates
+  api.use(paymentsRefundRoutes);
+  api.use(paymentsAutopayRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

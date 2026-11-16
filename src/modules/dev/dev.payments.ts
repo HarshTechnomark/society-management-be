@@ -1,6 +1,6 @@
 import { paymentGateway } from '../../adapters';
 import { FakePaymentGateway, signWebhookBody } from '../../adapters/payments/payment-gateway';
-import { PaymentOrder } from '../../models';
+import { AutopayMandate, PaymentOrder } from '../../models';
 import { AppError } from '../../utils/errors';
 import { paymentsPorts } from '../payments/payments.ports';
 import { ingestWebhook, processWebhookEvent } from '../payments/payments.webhooks.service';
@@ -67,4 +67,24 @@ export async function devSimulateOrder(paymentOrderId: number, body: { outcome?:
   const po = await PaymentOrder.findByPk(paymentOrderId);
   if (!po || !po.gatewayOrderId) throw new AppError(404, 'NOT_FOUND', 'Order not found');
   return devPayOrder(po.gatewayOrderId, { outcome: body.outcome ?? 'success' });
+}
+
+/** `POST /dev/payments/mandates/:gatewayMandateId/activate`: the fake gateway confirms a mandate; a signed `mandate.activated` webhook runs through the real webhook path (which calls `handleMandateEvent`). */
+export async function devActivateMandate(gatewayMandateId: string) {
+  const m = await AutopayMandate.findOne({ where: { gatewayMandateId } });
+  if (!m) throw new AppError(404, 'NOT_FOUND', 'Mandate not found');
+  const account = await paymentsPorts().gateways.getAccount(Number(m.gatewayAccountId));
+  if (!account || !(paymentsPorts().gateways.clientFor(account) instanceof FakePaymentGateway))
+    throw new AppError(404, 'NOT_FOUND', 'Not found');
+  const raw = Buffer.from(
+    JSON.stringify({
+      id: `evt_mandate_${gatewayMandateId}_activated`,
+      event: 'mandate.activated',
+      payload: { mandate: { entity: { id: gatewayMandateId } } },
+    }),
+  );
+  const r = await ingestWebhook(account.id, raw, signWebhookBody(raw, account.webhookSecret), account);
+  const eventStatus = r.eventId ? await processWebhookEvent(r.eventId) : 'DUPLICATE';
+  const fresh = await AutopayMandate.findByPk(m.id);
+  return { mandateId: Number(m.id), gatewayMandateId, status: fresh?.status, eventStatus };
 }
