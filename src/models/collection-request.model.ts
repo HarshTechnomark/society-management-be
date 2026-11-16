@@ -19,16 +19,16 @@ export class CollectionRequest extends Model<
   declare collectionId: number;
   declare unitId: number;
   declare billToResidentId: number | null;
-  declare amountPaise: number;
-  declare minAmountPaise: number;
-  declare paidPaise: number;
-  declare status: RequestStatus;
+  declare amountPaise: CreationOptional<number>;
+  declare minAmountPaise: CreationOptional<number>;
+  declare paidPaise: CreationOptional<number>;
+  declare status: CreationOptional<RequestStatus>;
   declare invoiceId: number | null;
   declare lastPaidAt: Date | null;
   declare waivedReason: string | null;
   declare createdBy: number | null;
   declare updatedBy: number | null;
-  declare version: number;
+  declare version: CreationOptional<number>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 

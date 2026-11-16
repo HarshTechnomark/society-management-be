@@ -26,8 +26,8 @@ export class PaymentWebhookEvent extends Model<
   declare gatewayMandateId: string | null;
   declare amountPaise: number | null;
   declare payload: Record<string, unknown>;
-  declare status: WebhookStatus;
-  declare attempts: number;
+  declare status: CreationOptional<WebhookStatus>;
+  declare attempts: CreationOptional<number>;
   declare lastError: string | null;
   declare processedAt: Date | null;
   declare reviewedBy: number | null;

@@ -28,10 +28,12 @@ import { registerResidents } from '../src/modules/residents/residents.public';
 import { seedResidents } from '../seeders/residents';
 import { registerCommittee } from '../src/modules/committee/committee.public';
 import { registerBilling } from '../src/modules/billing/billing.public';
+import { registerPayments } from '../src/modules/payments/payments.public';
 import { seedCommittee } from '../seeders/committee';
 import { seedBillingSetup } from '../seeders/billing-setup';
 import { seedBillingOpening } from '../seeders/billing-opening';
 import { seedBillingDues } from '../seeders/billing-dues';
+import { seedPayments } from '../seeders/payments';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -49,6 +51,7 @@ async function main(): Promise<void> {
   registerResidents();
   registerCommittee();
   registerBilling();
+  registerPayments();
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
@@ -110,6 +113,9 @@ async function main(): Promise<void> {
     out(
       `billing-dues: created ${bd.created.join('; ') || 'none'}, skipped ${bd.skipped.join('; ') || 'none'}`,
     );
+    // module 12: demo payments, cheques, refund and collections (each part registers its seeder in seeders/payments.ts)
+    const pay = await seedPayments();
+    out(`payments: created ${pay.created.join('; ') || 'none'}, skipped ${pay.skipped.join('; ') || 'none'}`);
     const pb = await seedPlatformBilling();
     out(
       `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,

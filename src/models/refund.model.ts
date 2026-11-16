@@ -17,9 +17,9 @@ export class Refund extends Model<InferAttributes<Refund>, InferCreationAttribut
   declare unitId: number;
   declare paymentId: number;
   declare amountPaise: number;
-  declare freedFromAllocationsPaise: number;
+  declare freedFromAllocationsPaise: CreationOptional<number>;
   declare mode: RefundMode;
-  declare status: RefundStatus;
+  declare status: CreationOptional<RefundStatus>;
   declare reason: string;
   declare payeeName: string | null;
   declare payeeAccountMasked: string | null;
@@ -35,7 +35,7 @@ export class Refund extends Model<InferAttributes<Refund>, InferCreationAttribut
   declare lastCheckedAt: Date | null;
   declare createdBy: number | null;
   declare updatedBy: number | null;
-  declare version: number;
+  declare version: CreationOptional<number>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 
