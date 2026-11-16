@@ -1,0 +1,23 @@
+# Contract tests: they break when ANY module adds tables, routes, permissions, settings, queues or approvals.
+# Format: <test file> # reason. Run with `npm run test:contracts`. Also added to every test:module and test:changed run.
+tests/modules/societies/exports-purge.test.ts # every society table needs an export provider (registry contract)
+tests/modules/society-setup/access.test.ts # module 08 route table counts routes by path prefix; tenant isolation of its ids
+tests/modules/residents/access.test.ts # module 09 route table counts routes by path prefix
+tests/modules/access-control/permission-matrix.test.ts # every route is tagged; per-module platform route counts; permission matrix
+tests/modules/access-control/tenant-isolation.test.ts # every route that takes an id must be covered by the generator
+tests/modules/access-control/catalogue.test.ts # permission catalogue counts and default role matrix
+tests/modules/access-control/sync-seed.test.ts # catalogue sync, key counts, default roles per society
+tests/modules/auth/routes.test.ts # module 02 route table, public route list, CSRF and strict bodies on all routes
+tests/modules/subscriptions/unit.test.ts # feature and limit catalogue counts, features used by routes
+tests/modules/subscriptions/entitlements.test.ts # entitlement resolution against the catalogue
+tests/modules/societies/notes-health.test.ts # every society GET route is checked for health/notes behaviour
+tests/modules/platform-ops/queues.test.ts # registered queue names and counts
+tests/modules/platform-ops/settings.test.ts # settings registry listing by category
+tests/modules/platform-ops/sla.test.ts # settings registry has exactly 40 keys with valid defaults
+tests/modules/platform-ops/schema.test.ts # module 07 route registry and table checks
+tests/modules/platform-billing/retention.test.ts # export provider of platform-billing is registered
+tests/modules/billing/dev-approvals.test.ts # development approval dispatch table (approval types)
+tests/modules/billing/access.test.ts # module 11 route registry, tenant isolation, demo seed
+tests/modules/committee/access.test.ts # committee route registry by path prefix
+tests/env.test.ts # environment variable validation (new env variables)
+tests/health.test.ts # liveness, readiness and unknown-route behaviour
