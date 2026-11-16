@@ -319,6 +319,13 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /billing/units/:unitId/statement',
       'POST /billing/opening-balances/:id/reverse',
       'DELETE /billing/opening-balances/:id',
+      // module 12 (12.1): another society's payment order id (or another unit's on /me routes) is 404 PAYMENT_ORDER_NOT_FOUND (tests/modules/payments/payments.online.orders.test.ts)
+      'POST /me/payables/payment-orders/:id/verify',
+      'GET /me/payment-orders/:id',
+      'POST /me/payment-orders/:id/cancel',
+      'GET /payment-orders/:id',
+      'POST /payment-orders/:id/cancel',
+      'POST /payment-orders/:id/check',
       // module 11 (11.3): another society's billing run id (or an item of it) is 404 RUN_NOT_FOUND on every run route (tests/modules/billing/runs.test.ts, T11-40)
       'GET /billing/runs/:id',
       'GET /billing/runs/:id/items',
