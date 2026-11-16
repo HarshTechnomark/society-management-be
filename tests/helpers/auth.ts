@@ -55,6 +55,22 @@ export async function resetAll(): Promise<void> {
       events.push({ room: 'socket', event: 'disconnect', payload: { sessionId } }),
   });
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
+  // module 13: TRUNCATE (posted journals cannot be DELETEd: model hooks and triggers keep them immutable)
+  for (const t of [
+    'bank_statement_lines',
+    'bank_statement_imports',
+    'settlements',
+    'expenses',
+    'deposits',
+    'balance_history',
+    'society_balances',
+    'journal_lines',
+    'journal_entries',
+    'bank_accounts',
+    'funds',
+    'ledger_accounts',
+  ])
+    await sequelize.query(`TRUNCATE TABLE ${t}`);
   for (const t of [
     // module 12 (children first)
     'payment_webhook_events',

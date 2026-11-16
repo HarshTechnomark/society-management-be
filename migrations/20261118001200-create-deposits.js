@@ -1,0 +1,61 @@
+'use strict';
+/** Module 13 section 7.12: refundable deposits. `refundApprovalRequestId` (module 14) is a plain id; unit, resident and invoice are real FKs. */
+module.exports = {
+  async up(qi) {
+    await qi.sequelize.query(`
+      CREATE TABLE deposits (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        societyId BIGINT UNSIGNED NOT NULL,
+        unitId BIGINT UNSIGNED NOT NULL,
+        residentId BIGINT UNSIGNED NULL,
+        kind VARCHAR(30) NOT NULL,
+        ledgerAccountId BIGINT UNSIGNED NOT NULL,
+        title VARCHAR(120) NOT NULL,
+        refType VARCHAR(40) NULL,
+        refId BIGINT UNSIGNED NULL,
+        amountPaise BIGINT NOT NULL,
+        receivedPaise BIGINT NOT NULL DEFAULT 0,
+        deductedPaise BIGINT NOT NULL DEFAULT 0,
+        refundedPaise BIGINT NOT NULL DEFAULT 0,
+        refundRequestedPaise BIGINT NOT NULL DEFAULT 0,
+        invoiceId BIGINT UNSIGNED NULL,
+        isOpening TINYINT(1) NOT NULL DEFAULT 0,
+        dueDate DATE NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'AWAITING_PAYMENT',
+        adjustments JSON NOT NULL,
+        refundApprovalRequestId BIGINT UNSIGNED NULL,
+        refundMode VARCHAR(30) NULL,
+        refundReference VARCHAR(30) NULL,
+        refundPaidFromLedgerAccountId BIGINT UNSIGNED NULL,
+        receivedAt DATETIME(3) NULL,
+        refundedAt DATETIME(3) NULL,
+        cancelReason VARCHAR(500) NULL,
+        notes VARCHAR(500) NULL,
+        version INT UNSIGNED NOT NULL DEFAULT 1,
+        createdBy BIGINT UNSIGNED NULL,
+        updatedBy BIGINT UNSIGNED NULL,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_deposits_source (societyId, refType, refId, kind),
+        KEY ix_deposits_unit (societyId, unitId, status),
+        KEY ix_deposits_status (societyId, status, createdAt),
+        KEY ix_deposits_ledger (ledgerAccountId),
+        CONSTRAINT fk_deposits_society FOREIGN KEY (societyId) REFERENCES societies (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_deposits_unit FOREIGN KEY (unitId) REFERENCES units (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_deposits_resident FOREIGN KEY (residentId) REFERENCES residents (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_deposits_ledger FOREIGN KEY (ledgerAccountId) REFERENCES ledger_accounts (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_deposits_invoice FOREIGN KEY (invoiceId) REFERENCES invoices (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_deposits_refund_ledger FOREIGN KEY (refundPaidFromLedgerAccountId) REFERENCES ledger_accounts (id) ON DELETE RESTRICT,
+        CONSTRAINT ck_deposits_kind CHECK (kind IN ('MOVE','RENOVATION','AMENITY','ACCESS_CARD','KEY','OTHER')),
+        CONSTRAINT ck_deposits_amount CHECK (amountPaise BETWEEN 100 AND 100000000),
+        CONSTRAINT ck_deposits_received CHECK (receivedPaise <= amountPaise),
+        CONSTRAINT ck_deposits_held CHECK (deductedPaise + refundedPaise + refundRequestedPaise <= receivedPaise),
+        CONSTRAINT ck_deposits_status CHECK (status IN ('AWAITING_PAYMENT','HELD','REFUND_PENDING','REFUND_APPROVED','REFUNDED','FORFEITED','CANCELLED')),
+        CONSTRAINT ck_deposits_refund_mode CHECK (refundMode IS NULL OR refundMode IN ('CASH','UPI','NEFT','RTGS','IMPS','CHEQUE'))
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
+  },
+  async down(qi) {
+    await qi.sequelize.query('DROP TABLE IF EXISTS deposits');
+  },
+};
