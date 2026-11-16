@@ -54,7 +54,7 @@ export class Deposit extends Model<InferAttributes<Deposit>, InferCreationAttrib
   declare updatedAt: CreationOptional<Date>;
 
   static initModel(sequelize: Sequelize): void {
-    const big = { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 };
+    const big = () => ({ type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 });
     Deposit.init(
       {
         id: idColumn,
@@ -67,10 +67,10 @@ export class Deposit extends Model<InferAttributes<Deposit>, InferCreationAttrib
         refType: { type: DataTypes.STRING(40), allowNull: true, defaultValue: null },
         refId: fkColumn(true),
         amountPaise: { type: DataTypes.BIGINT, allowNull: false },
-        receivedPaise: big,
-        deductedPaise: big,
-        refundedPaise: big,
-        refundRequestedPaise: big,
+        receivedPaise: big(),
+        deductedPaise: big(),
+        refundedPaise: big(),
+        refundRequestedPaise: big(),
         invoiceId: fkColumn(true),
         isOpening: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
         dueDate: { type: DataTypes.DATEONLY, allowNull: true, defaultValue: null },

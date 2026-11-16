@@ -558,6 +558,18 @@ export {
   UnitAdvance,
   Collection,
   CollectionRequest,
+  LedgerAccount,
+  Fund,
+  JournalEntry,
+  JournalLine,
+  SocietyBalance,
+  BalanceHistory,
+  BankAccount,
+  Expense,
+  Settlement,
+  BankStatementImport,
+  BankStatementLine,
+  Deposit,
 };
 
 export async function closeDb(): Promise<void> {

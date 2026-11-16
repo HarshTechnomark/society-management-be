@@ -34,7 +34,7 @@ export class BalanceHistory extends Model<
   declare createdAt: CreationOptional<Date>;
 
   static initModel(sequelize: Sequelize): void {
-    const big = { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 };
+    const big = () => ({ type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 });
     BalanceHistory.init(
       {
         id: idColumn,
@@ -43,13 +43,13 @@ export class BalanceHistory extends Model<
         changedAt: { type: DataTypes.DATE(3), allowNull: false },
         entryDate: { type: DataTypes.DATEONLY, allowNull: false },
         direction: { type: DataTypes.STRING(30), allowNull: false },
-        deltaTotalPaise: big,
-        inBankPaise: big,
-        clearingPaise: big,
-        cashPaise: big,
-        chequesPaise: big,
-        totalPaise: big,
-        earmarkedFundsPaise: big,
+        deltaTotalPaise: big(),
+        inBankPaise: big(),
+        clearingPaise: big(),
+        cashPaise: big(),
+        chequesPaise: big(),
+        totalPaise: big(),
+        earmarkedFundsPaise: big(),
         label: { type: DataTypes.STRING(160), allowNull: false },
         refType: { type: DataTypes.STRING(40), allowNull: false },
         createdBy: fkColumn(true),

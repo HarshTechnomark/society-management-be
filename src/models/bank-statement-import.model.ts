@@ -41,8 +41,8 @@ export class BankStatementImport extends Model<
   declare updatedAt: CreationOptional<Date>;
 
   static initModel(sequelize: Sequelize): void {
-    const big = { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 };
-    const int = { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 };
+    const big = () => ({ type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 });
+    const int = () => ({ type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 });
     BankStatementImport.init(
       {
         id: idColumn,
@@ -56,11 +56,11 @@ export class BankStatementImport extends Model<
         periodTo: { type: DataTypes.DATEONLY, allowNull: true, defaultValue: null },
         openingBalancePaise: { type: DataTypes.BIGINT, allowNull: true, defaultValue: null },
         closingBalancePaise: { type: DataTypes.BIGINT, allowNull: true, defaultValue: null },
-        lineCount: int,
-        duplicateCount: int,
-        creditTotalPaise: big,
-        debitTotalPaise: big,
-        matchedCount: int,
+        lineCount: int(),
+        duplicateCount: int(),
+        creditTotalPaise: big(),
+        debitTotalPaise: big(),
+        matchedCount: int(),
         status: { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'UPLOADED' },
         errorMessage: { type: DataTypes.STRING(500), allowNull: true, defaultValue: null },
         reconciledBy: fkColumn(true),

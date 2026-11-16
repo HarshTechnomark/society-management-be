@@ -51,7 +51,7 @@ export class Settlement extends Model<InferAttributes<Settlement>, InferCreation
   declare updatedAt: CreationOptional<Date>;
 
   static initModel(sequelize: Sequelize): void {
-    const big = { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 };
+    const big = () => ({ type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 });
     Settlement.init(
       {
         id: idColumn,
@@ -61,12 +61,12 @@ export class Settlement extends Model<InferAttributes<Settlement>, InferCreation
         bankAccountId: fkColumn(true),
         settlementDate: { type: DataTypes.DATEONLY, allowNull: false },
         utr: { type: DataTypes.STRING(30), allowNull: true, defaultValue: null },
-        grossPaise: big,
-        refundsPaise: big,
-        feePaise: big,
-        feeGstPaise: big,
-        adjustmentPaise: big,
-        netPaise: big,
+        grossPaise: big(),
+        refundsPaise: big(),
+        feePaise: big(),
+        feeGstPaise: big(),
+        adjustmentPaise: big(),
+        netPaise: big(),
         paymentCount: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },
         items: { type: DataTypes.JSON, allowNull: false },
         unmatchedItems: { type: DataTypes.JSON, allowNull: true, defaultValue: null },

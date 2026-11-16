@@ -39,18 +39,18 @@ export class SocietyBalance extends Model<
   declare updatedAt: CreationOptional<Date>;
 
   static initModel(sequelize: Sequelize): void {
-    const big = { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 };
+    const big = () => ({ type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 });
     SocietyBalance.init(
       {
         id: idColumn,
         societyId: fkColumn(false),
-        inBankPaise: big,
-        clearingPaise: big,
-        cashPaise: big,
-        chequesPaise: big,
-        totalPaise: big,
-        investmentsPaise: big,
-        earmarkedFundsPaise: big,
+        inBankPaise: big(),
+        clearingPaise: big(),
+        cashPaise: big(),
+        chequesPaise: big(),
+        totalPaise: big(),
+        investmentsPaise: big(),
+        earmarkedFundsPaise: big(),
         lastJournalEntryId: fkColumn(true),
         lastChangedAt: dateColumn(),
         booksLockedThrough: { type: DataTypes.DATEONLY, allowNull: true, defaultValue: null },
