@@ -1,10 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { AuditLog, Invoice, Payment, Refund, UnitAdvance, closeDb } from '../../../src/models';
+import { AuditLog, Invoice, Payment, Refund, Society, UnitAdvance, closeDb } from '../../../src/models';
 import { advance, now } from '../../../src/lib/clock';
 import { drainQueues } from '../../../src/lib/queue';
 import { listRoutes } from '../../../src/modules/access-control/access-control.registry';
 import { advanceBalance } from '../../../src/modules/payments/payments.advances';
-import { paymentsPortCalls, placeholderPaymentApprovals } from '../../../src/modules/payments/payments.ports';
+import { flushAcl } from '../../../src/modules/access-control/access-control.cache';
+import {
+  paymentsPortCalls,
+  placeholderPaymentApprovalTypes,
+  placeholderPaymentApprovals,
+} from '../../../src/modules/payments/payments.ports';
 import { settleInput } from '../../../src/modules/payments/payments.settle';
 import { moneyTx } from '../../../src/modules/payments/payments.shared';
 import { approve, reject } from '../../../src/modules/payments/payments.refunds.approvals-hook';
@@ -311,7 +316,6 @@ describe('approval and payout (6.3)', () => {
   it('the module 14 withdrawal and expiry callbacks cancel the refund and release the hold', async () => {
     const { w, payment } = await advanceWorld();
     const r = await ask(w, body(Number(payment.id)));
-    const { placeholderPaymentApprovalTypes } = await import('../../../src/modules/payments/payments.ports');
     const hooks = placeholderPaymentApprovalTypes.get('PAYMENT_REFUND')!;
     await moneyTx(t => hooks.onCancelled!(ctxFor(w, w.user.id!), r.body.data.id, t));
     expect((await Refund.findByPk(r.body.data.id))!.status).toBe('CANCELLED');
@@ -520,13 +524,11 @@ describe('GET /refunds and /refunds/:id', () => {
 
   it('a society suspended blocks a refund request (default policy)', async () => {
     const { w, payment } = await advanceWorld();
-    const { Society } = await import('../../../src/models');
     await Society.update(
       { status: 'SUSPENDED', suspendedAt: new Date(), suspensionCause: 'MANUAL' } as never,
       { where: { id: w.society.id! } },
     );
-    const { invalidateSociety } = await import('../../../src/modules/access-control/access-control.public');
-    await invalidateSociety(w.society.id!);
+    await flushAcl();
     const r = await ask(w, body(Number(payment.id)));
     expect(r.status).toBe(423);
     void memberOf;
