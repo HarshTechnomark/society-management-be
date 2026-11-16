@@ -21,6 +21,7 @@ import {
   lockUnit,
   moneyTx,
   n,
+  societyToday,
   unitLabelOf,
   userName,
   withSociety,
@@ -328,7 +329,7 @@ async function markAttempt(
       payerName: (await userName(order.payerUserId)) ?? `Unit ${label}`,
       amountPaise: Math.max(gp.amountPaise, 1),
       grossAmountPaise: Math.max(gp.amountPaise, 1),
-      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentDate: await societyToday(n(order.societyId)), // the society's date, not UTC
       gatewayAccountId: n(order.gatewayAccountId),
       gatewayPaymentId: gp.id,
       failureReason: 'Payment attempt failed',
@@ -416,7 +417,7 @@ export async function settleCapture(
       amountPaise: amount,
       convenienceFeePaise: advanceOnly ? 0 : n(order.convenienceFeePaise),
       convenienceFeeGstPaise: advanceOnly ? 0 : n(order.convenienceFeeGstPaise),
-      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentDate: await societyToday(n(order.societyId)), // the society's date, not UTC
       paymentOrderId: n(order.id),
       gatewayAccountId,
       gatewayPaymentId: gp.id,
