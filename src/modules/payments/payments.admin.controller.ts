@@ -40,9 +40,16 @@ export const paymentsAdminController = {
     return res.status(200).send(file);
   }),
   receiptUrl: h(async (req, res) => ok(res, await adminReceiptUrl(sid(req), v(req).params.id))),
-  resend: h(async (req, res) =>
-    ok(res, await resendReceipt(req.ctx, sid(req), v(req).params.id, v(req).body), 'Receipt sent'),
-  ),
+  resend: h(async (req, res) => {
+    const out = await resendReceipt(req.ctx, sid(req), v(req).params.id, v(req).body);
+    ok(
+      res,
+      out,
+      out.sent
+        ? `Receipt queued on ${out.sent} channel${out.sent === 1 ? '' : 's'}`
+        : 'No one to send this receipt to',
+    );
+  }),
   reviewDone: h(async (req, res) =>
     ok(res, await reviewDone(req.ctx, sid(req), v(req).params.id, v(req).body), 'Review cleared'),
   ),

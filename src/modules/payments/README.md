@@ -149,3 +149,13 @@ paymentOrderId, orderStatus, eventStatus }`. Module 06 platform orders still get
 - `POST /api/v1/dev/payments/orders/:orderId/simulate` body `{ outcome: 'success'|'fail' }`, `:orderId` is the payment order id; same response.
 - `POST /api/v1/dev/payments/mandates/:gatewayMandateId/activate` (no body): `mandate.activated` through the webhook path; `data`:
   `{ mandateId, gatewayMandateId, status, eventStatus }`.
+
+### Payment item status fields
+
+`GET /payments`, `/payments/:id`, `/me/payments` rows carry `refundedPaise`, `refundStatus` (`NONE|PART|FULL`, derived from `refundedPaise`; the stored
+`status` stays `CAPTURED`/`RECEIVED` after a refund) and `displayStatus` (`PAID` for every status whose money counts: CAPTURED, CONFIRMED,
+RECEIVED, DEPOSITED, CLEARED; other statuses as stored). `status` itself is unchanged, and `?status=` filters the stored status.
+Admin detail adds `recordedByName` (the user who created the payment).
+
+- `POST /api/v1/dev/payments/refunds/:gatewayRefundId/process` body `{ outcome?: 'processed'|'failed' }`: finishes a gateway refund through
+  a signed `refund.processed|failed` webhook (`handleRefundEvent`); `data`: `{ refundId, gatewayRefundId, status, eventStatus }`.
