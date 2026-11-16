@@ -15,6 +15,7 @@ import { settleInput } from '../../../src/modules/payments/payments.settle';
 import { reversePaymentCore } from '../../../src/modules/payments/payments.reverse.core';
 import { moneyTx } from '../../../src/modules/payments/payments.shared';
 import { registerAccounts } from '../../../src/modules/accounts/accounts.public';
+import { ensureBooks } from '../../../src/modules/accounts/accounts.chart';
 import { readSocietyBalance } from '../../../src/modules/accounts/accounts.lookup';
 import { realBankAccountsPort, realFundsPort } from '../../../src/modules/accounts/accounts.ports-wiring';
 import { mkInvoice, offline, paymentsWorld, resetPayments, sysCtx } from '../../helpers/payments';
@@ -147,9 +148,7 @@ describe('modules 11 and 12 post through the real engine', () => {
   it('the fund and bank account lookups of 13.2 are ready but not installed yet', async () => {
     const w = await paymentsWorld({ flats: 1 });
     const sid = w.society.id!;
-    await sequelize.transaction(async t =>
-      (await import('../../../src/modules/accounts/accounts.chart')).ensureBooks(t, sid),
-    );
+    await sequelize.transaction(t => ensureBooks(t, sid));
     const fundId = await fundIdByType(sid, 'REPAIR');
     expect(await realFundsPort.exists(sid, fundId)).toBe(true);
     expect(await realFundsPort.name(sid, fundId)).toBe('Repair and maintenance fund');

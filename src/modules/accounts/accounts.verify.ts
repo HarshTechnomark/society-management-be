@@ -39,8 +39,8 @@ export async function verifyBalances(societyId: number): Promise<DriftReport | n
       id: number;
       code: string;
       subtype: string;
-      stored: string;
-      real: string;
+      storedPaise: string;
+      rebuiltPaise: string;
     }>(
       `SELECT a.id, a.code, a.subtype, a.balancePaise AS storedPaise,
               COALESCE(SUM(CASE WHEN e.status = 'POSTED' THEN l.debitPaise - l.creditPaise END), 0) AS rebuiltPaise

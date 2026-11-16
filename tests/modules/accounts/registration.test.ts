@@ -22,6 +22,7 @@ import {
   settlements,
   expenses,
   accountReports,
+  accounts,
   cashBook,
   expenseReports,
   ReadTimeoutError,
@@ -33,7 +34,9 @@ import { ACCOUNTS_SEEDERS, seedAccounts } from '../../../seeders/accounts';
 import {
   ACCOUNT_SUBTYPES,
   APPROVAL_TYPES,
+  ENT,
   ERR,
+  PERM,
   SYSTEM_KEYS,
 } from '../../../src/modules/accounts/accounts.constants';
 import { isKnownKey } from '../../../src/modules/access-control/access-control.permissions';
@@ -85,7 +88,6 @@ describe('start-up registration', () => {
   });
 
   it('the permission and entitlement keys of the constants exist in the catalogues', async () => {
-    const { PERM, ENT } = await import('../../../src/modules/accounts/accounts.constants');
     for (const k of Object.values(PERM)) expect(isKnownKey(k), k).toBe(true);
     const features = new Set(FEATURE_ROWS.map(r => r[0]));
     for (const k of Object.values(ENT)) expect(features.has(k), k).toBe(true);
@@ -111,7 +113,6 @@ describe('public interface of section 8.20 and 8.21', () => {
       isCollectionAccount: true,
       verificationStatus: 'UNVERIFIED',
     });
-    const { accounts } = await import('../../../src/modules/accounts/accounts.public');
     expect(await accounts.bankLedgerCode(w.sid, id)).toBe('1110-001');
     expect(await accounts.collectionBankAccount(w.sid)).toEqual({ id, ledgerCode: '1110-001' });
     expect(await accounts.isDateLocked(w.sid, '2026-01-01')).toBe(false);

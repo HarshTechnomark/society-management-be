@@ -25,6 +25,7 @@ import { accountsPortCalls, setAccountsPorts } from '../../../src/modules/accoun
 import { verifyBalances } from '../../../src/modules/accounts/accounts.verify';
 import type { PostJournalInput } from '../../../src/modules/accounts/accounts.types';
 import { events } from '../../helpers/auth';
+import { setSetting } from '../../helpers/billing-runs';
 import {
   accountsSociety,
   addBankLedger,
@@ -361,7 +362,6 @@ describe('posting effects (BR-13-4, 7, 10 to 12, T13-04)', () => {
     const w = await accountsSociety();
     await post(w.sys, base(50, { lines: lines('1140', '1300', 100) }));
     expect(events.filter(e => e.room === `society:${w.sid}:public`)).toHaveLength(0);
-    const { setSetting } = await import('../../helpers/billing-runs');
     await setSetting(w.sid, 'finance.showFinancesToResidents', true);
     events.length = 0;
     await post(w.sys, base(51, { lines: lines('1140', '1300', 100) }));
