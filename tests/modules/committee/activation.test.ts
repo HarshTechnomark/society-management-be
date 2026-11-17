@@ -556,7 +556,7 @@ describe('T10-10 blockers (BR-10-5, BR-10-7, BR-10-8, BR-10-9)', () => {
       expect(r.body.errors[0].seatIds).toEqual(['S3']);
       expect(spy.calls, label).toEqual([]);
     }
-  });
+  }, 90_000); // several sign-ins and term changes: about 36 s when the full suite runs in parallel
 
   it('BR-10-9: a holder with a staff role needs replaceExistingRole; with it the role is stored as roleBeforeKey', async () => {
     const x = await handoverWorld();
