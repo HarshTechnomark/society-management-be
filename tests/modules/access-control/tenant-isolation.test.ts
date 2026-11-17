@@ -374,6 +374,8 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /me/payments/:id',
       'GET /me/payments/:id/receipt-url',
       'GET /units/:unitId/advances',
+      // module 13 (13.1): another society's ledger account id is 404 LEDGER_ACCOUNT_NOT_FOUND (tests/modules/accounts/accounts.ledger.test.ts)
+      'PATCH /accounts/ledger-accounts/:id',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

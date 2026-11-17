@@ -23,6 +23,7 @@ import {
   readSocietyBalance,
 } from './accounts.lookup';
 import { assertAccountsPortsReady } from './accounts.ports';
+import { balanceHistory } from './accounts.balance.service';
 import { installRealJournal } from './accounts.ports-wiring';
 import { PURGE_TABLES, deleteRetainedAccounts, purgeAccounts } from './accounts.purge';
 import { notImplemented } from './accounts.shared';
@@ -56,10 +57,8 @@ export const accounts = {
 
 export const balance = {
   get: readSocietyBalance,
-  /** 13.1 */
-  history: async (): Promise<never> => {
-    throw notImplemented('balance.history');
-  },
+  /** 13.1 (section 8.2): one point per day of `from..to` (at most 366 days, `to` not after today). */
+  history: balanceHistory,
 };
 
 export const ledgerAccounts = { exists: ledgerAccountExists };

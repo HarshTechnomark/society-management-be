@@ -28,6 +28,9 @@ import { billingSetupRoutes } from './modules/billing/billing.setup.routes';
 import { billingLedgerRoutes } from './modules/billing/billing.ledger.routes';
 import { billingDuesRoutes } from './modules/billing/billing.dues.routes';
 import { billingResidentRoutes } from './modules/billing/billing.resident.routes';
+import { accountsBalanceRoutes } from './modules/accounts/accounts.balance.routes';
+import { accountsLedgerRoutes } from './modules/accounts/accounts.ledger.routes';
+import { accountsOpeningRoutes } from './modules/accounts/accounts.opening.routes';
 import { paymentsAdminRoutes } from './modules/payments/payments.admin.routes';
 import { paymentsOnlineRoutes } from './modules/payments/payments.online.routes';
 import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes';
@@ -124,6 +127,10 @@ export function createApp(): Express {
   api.use(paymentsOfflineRoutes);
   // module 12 (12.5): collections
   api.use(paymentsCollectionsRoutes);
+  // module 13 (13.1): society balance and history, chart of accounts, opening balances
+  api.use(accountsBalanceRoutes);
+  api.use(accountsLedgerRoutes);
+  api.use(accountsOpeningRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 
