@@ -20,7 +20,7 @@ export async function loadExpense(societyId: number, id: number): Promise<Expens
 }
 
 type Labels = Awaited<ReturnType<typeof ledgerLabels>>;
-export function expenseDto(e: Expense, labels: Labels) {
+export function expenseDto(e: Expense, labels: Labels, makers?: Map<number, string>) {
   const head = labels.get(n(e.ledgerAccountId)) ?? null;
   const paidFrom = labels.get(n(e.paidFromLedgerAccountId)) ?? null;
   return {
@@ -55,6 +55,7 @@ export function expenseDto(e: Expense, labels: Labels) {
     postedAt: e.postedAt ? e.postedAt.toISOString() : null,
     reversedAt: e.reversedAt ? e.reversedAt.toISOString() : null,
     createdBy: n(e.createdBy),
+    createdByName: makers?.get(n(e.createdBy)) || null,
     createdAt: e.createdAt.toISOString(),
     version: n(e.version),
   };
@@ -63,11 +64,20 @@ export function expenseDto(e: Expense, labels: Labels) {
 const labelIds = (rows: Expense[]): number[] =>
   rows.flatMap(e => [n(e.ledgerAccountId), n(e.paidFromLedgerAccountId)]);
 
+/** The names of the makers, so the list can say who entered each expense. */
+async function makerNames(rows: Expense[]): Promise<Map<number, string>> {
+  const ids = [...new Set(rows.map(e => n(e.createdBy)).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const users = await User.findAll({ where: { id: ids }, attributes: ['id', 'name'] });
+  return new Map(users.map(u => [n(u.id), u.name ?? '']));
+}
+
 /** The list item shape, or the same plus the 8.5 detail parts. */
 export async function viewExpense(ctx: Ctx, id: number, detail = false) {
   const e = await loadExpense(ctx.society!.id, id);
   const labels = await ledgerLabels(labelIds([e]));
-  const dto = expenseDto(e, labels);
+  const makers = await makerNames([e]);
+  const dto = expenseDto(e, labels, makers);
   if (!detail) return dto;
 
   const files = billFiles()
@@ -85,10 +95,8 @@ export async function viewExpense(ctx: Ctx, id: number, detail = false) {
   const mine = ctx.user?.id === n(e.createdBy);
   const canApprove = e.status === 'PENDING_APPROVAL' && ctx.permissions?.has(PERM.expensesApprove) && !mine;
   const canReverse = e.status === 'POSTED' && ctx.permissions?.has(PERM.expensesApprove) && !mine;
-  const maker = await User.findByPk(n(e.createdBy), { attributes: ['name'] });
   return {
     ...dto,
-    createdByName: maker?.name ?? null,
     files,
     approval: e.approvalRequestId ? { requestId: n(e.approvalRequestId), status: req?.status ?? null } : null,
     journal: e.journalEntryId
@@ -155,8 +163,9 @@ export async function listExpenses(ctx: Ctx, q: ExpenseListQuery) {
     offset: (q.page - 1) * q.limit,
   });
   const labels = await ledgerLabels(labelIds(rows));
+  const makers = await makerNames(rows);
   return {
-    data: rows.map(e => expenseDto(e, labels)),
+    data: rows.map(e => expenseDto(e, labels, makers)),
     pagination: {
       page: q.page,
       limit: q.limit,

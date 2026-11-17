@@ -189,6 +189,16 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
     expect((await w.c('post', '/expenses', expBody(w))).status).toBe(400);
   });
 
+  it('the list and the detail carry the name of the maker', async () => {
+    const w = await expWorld();
+    const r = await post(w, expBody(w, { submit: false }));
+    const list = await w.c('get', '/expenses');
+    const row = list.body.data.find((x: { id: number }) => x.id === r.body.data.id);
+    expect(typeof row.createdByName).toBe('string');
+    expect(row.createdByName.length).toBeGreaterThan(0);
+    const one = await w.c('get', `/expenses/${r.body.data.id}`);
+    expect(one.body.data.createdByName).toBe(row.createdByName);
+  });
   it('submit=false saves a DRAFT without an approval request', async () => {
     const w = await expWorld();
     const r = await post(w, expBody(w, { submit: false }));
