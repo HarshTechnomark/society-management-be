@@ -26,6 +26,7 @@ import { assertAccountsPortsReady } from './accounts.ports';
 import { installRealJournal } from './accounts.ports-wiring';
 import { PURGE_TABLES, deleteRetainedAccounts, purgeAccounts } from './accounts.purge';
 import { notImplemented } from './accounts.shared';
+import { ingestSettlement, type SettlementIngestInput } from './accounts.settlements.service';
 import type { DepositKind } from './accounts.constants';
 import type { Ctx, FundDto, Transaction } from './accounts.types';
 
@@ -127,9 +128,7 @@ export const deposits = {
 
 export const settlements = {
   /** 13.3 (section 8.15). */
-  ingest: async (..._args: unknown[]): Promise<never> => {
-    throw notImplemented('settlements.ingest');
-  },
+  ingest: (ctx: Ctx, input: SettlementIngestInput, t: Transaction) => ingestSettlement(ctx, input, t),
 };
 
 export { backfillBooks };

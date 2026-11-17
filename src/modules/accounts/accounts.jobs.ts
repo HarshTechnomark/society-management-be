@@ -1,5 +1,6 @@
 import { registerProcessor, registerRepeatable } from '../../lib/queue';
 import { ACCOUNTS_QUEUE, JOBS } from './accounts.constants';
+import { registerSettlementJobs } from './accounts.settlements.jobs';
 import { verifyJob } from './accounts.verify';
 
 /**
@@ -13,6 +14,7 @@ export function registerAccountsJobs(): void {
   // parts add their registration here, one line each:
   // registerJournalJobs(); // 13.1: MANUAL_JOURNAL approval type
   // registerExpenseJobs(); // 13.2: EXPENSE and FUND_TRANSFER approval types
+  registerSettlementJobs(); // 13.3a: settlement-reconcile, clearing-age
   // registerStatementJobs(); // 13.3: settlement-reconcile, statement-parse, auto-match, clearing-age
   // registerPeriodJobs(); // 13.4: deposit-sync, relock, year-close, report-export, PERIOD_UNLOCK and DEPOSIT_REFUND approval types
 }
