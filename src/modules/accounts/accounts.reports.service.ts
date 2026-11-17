@@ -1,7 +1,7 @@
 import { daysInclusive } from '../billing/billing.calc.period';
 import { financialYearOf } from '../../utils/numberSequences';
 import { NotFoundError, ValidationError } from '../../utils/errors';
-import { ERR } from './accounts.constants';
+import { CODE, ERR } from './accounts.constants';
 import { n, societyToday } from './accounts.shared';
 import {
   CASH_SUBTYPES,
@@ -135,7 +135,10 @@ async function incomeExpenditure(
   const chart = await loadChart(societyId, opts);
   rollUp(
     chart,
-    await sumsByAccount({ societyId, from: p.from, to: p.to, noClosing: true, fundId: q.fundId }, opts),
+    await sumsByAccount(
+      { societyId, from: p.from, to: p.to, noClosing: true, noFundConsumption: true, fundId: q.fundId },
+      opts,
+    ),
   );
   const rows = visibleNodes(chart, q.level ?? 4)
     .filter(a => a.accountType === 'INCOME' || a.accountType === 'EXPENSE')
@@ -373,10 +376,23 @@ async function receiptsPayments(
               WHERE l2.societyId = :societyId AND a2.subtype IN ${CASH_SUBTYPES} AND l2.entryDate BETWEEN :from AND :to
               GROUP BY l2.journalEntryId) x ON x.entryId = e.id
       WHERE l.societyId = :societyId AND e.status = 'POSTED' AND a.subtype NOT IN ${CASH_SUBTYPES} AND x.net <> 0
+        AND NOT (a.code = '${CODE.fundTransferIn}' OR (a.accountType = 'FUND' AND EXISTS (
+              SELECT 1 FROM journal_lines f JOIN ledger_accounts fa ON fa.id = f.ledgerAccountId
+               WHERE f.journalEntryId = e.id AND fa.code = '${CODE.fundTransferIn}')))
       GROUP BY a.id, a.code, a.name ORDER BY a.code`,
     { societyId, from: p.from, to: p.to },
     opts,
   );
+  // an account that is a cost inside a receipt (gateway charges netted from a settlement) or a recovery inside a payment (TDS held back)
+  // ends negative on its side: it moves to the other side as a positive amount
+  for (const l of lines) {
+    let r = n(l.receipts);
+    let q = n(l.payments);
+    if (r < 0) [r, q] = [0, q - r];
+    if (q < 0) [r, q] = [r - q, 0];
+    l.receipts = String(r);
+    l.payments = String(q);
+  }
   const rows: Record<string, unknown>[] = [];
   for (const l of lines)
     if (n(l.receipts) !== 0)
