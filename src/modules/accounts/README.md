@@ -144,4 +144,4 @@ Spec: 8.3, 8.17, 8.18, 8.19, 8.21 and 8.20 deposits; F05, F16, F20 to F22; secti
 - [ ] 13.1 journal, balance, opening balances
 - [ ] 13.2 expenses, funds, bank accounts, cash book
 - [ ] 13.3 settlements and statements
-- [ ] 13.4 deposits, periods, reports
+- [ ] 13.4 deposits, periods, reports (13.4a deposits, periods and year close done; reports and resident finances follow in 13.4b)
