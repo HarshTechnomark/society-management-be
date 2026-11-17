@@ -227,6 +227,11 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
       amountPaise: 50_000,
       payload: { date: '2026-11-03' },
     });
+    // the development approvals page shows what is asked
+    expect([...placeholderAccountsApprovals.values()].find(r => r.entityId === d.id)).toMatchObject({
+      title: 'Bank charges adjustment',
+      amountPaise: 50_000,
+    });
     // pending: no edit, no second submit, no cancel via DELETE, lines frozen by the trigger or model hook
     expect(
       (await w.treasurer.c('patch', `/accounts/journals/${d.id}`, { version: 2, narration: 'Changed again' }))
