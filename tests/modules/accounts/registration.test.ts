@@ -116,13 +116,6 @@ describe('public interface of section 8.20 and 8.21', () => {
     await expect(accounts.bankLedgerCode(w.sid, 99999)).rejects.toMatchObject({
       code: 'BANK_ACCOUNT_NOT_FOUND',
     });
-    const stubs: (() => Promise<unknown>)[] = [
-      () => accountReports.run(w.sid, 'trial-balance', {}, { deadlineMs: 100 }),
-      () => accountReports.fundStatement(w.sid, 1, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
-      () => cashBook.monthlyTotals(w.sid, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
-      () => expenseReports.byHead(w.sid, { from: '2026-04-01', to: '2027-03-31' }, { deadlineMs: 100 }),
-      () => expenseReports.tdsDeposited(w.sid, { from: '2026-04-01', to: '2027-03-31' }, { deadlineMs: 100 }),
-    ];
     expect(await expenses.listForCollection(w.sid, 1)).toEqual([]); // filled by 13.2a
     // deposits.request, requestRefund and registerOwner are real since 13.4a (tests/modules/accounts/accounts.deposits.flow.test.ts)
     expect(deposits.registerOwner).toBeTypeOf('function');
