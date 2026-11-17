@@ -35,6 +35,8 @@ export const registerTemplates = (t: Record<string, Template>): void => {
   for (const [k, v] of Object.entries(t)) templates.set(k, v);
 };
 
+export const hasTemplate = (key: string): boolean => templates.has(key);
+
 type ContactResolver = (userId: number) => Promise<{ mobile: string | null; email: string | null } | null>;
 let resolver: ContactResolver | undefined;
 export const setContactResolver = (r: ContactResolver): void => {
