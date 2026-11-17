@@ -364,6 +364,12 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /payments/:id/cheque/clear',
       'POST /payments/:id/cheque/bounce',
       'POST /payments/:id/cheque/return',
+      // module 13 (13.1b): another society's journal id is 404 JOURNAL_NOT_FOUND on every route (tests/modules/accounts/accounts.journal.test.ts, T13-35)
+      'GET /accounts/journals/:id',
+      'PATCH /accounts/journals/:id',
+      'POST /accounts/journals/:id/submit',
+      'DELETE /accounts/journals/:id',
+      'POST /accounts/journals/:id/reverse',
       // module 12 (12.3): another society's payment is 404 PAYMENT_NOT_FOUND, another flat's payment or advance 404 PAYMENT_NOT_FOUND / UNIT_NOT_FOUND (tests/modules/payments/payments.admin.list.test.ts, payments.receipts.test.ts and payments.reverse.test.ts, T12-34, T12-35)
       'GET /payments/:id',
       'GET /payments/:id/receipt-url',

@@ -38,6 +38,7 @@ import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes
 import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
 import { paymentsOfflineRoutes } from './modules/payments/payments.offline.routes';
 import { paymentsCollectionsRoutes } from './modules/payments/payments.collections.routes';
+import { accountsJournalRoutes } from './modules/accounts/accounts.journal.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -131,6 +132,8 @@ export function createApp(): Express {
   api.use(accountsBalanceRoutes);
   api.use(accountsLedgerRoutes);
   api.use(accountsOpeningRoutes);
+  // module 13 (13.1b): journals list and detail, manual journal drafts, submit, cancel, reverse
+  api.use(accountsJournalRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 
