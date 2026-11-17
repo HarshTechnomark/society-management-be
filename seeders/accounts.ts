@@ -24,8 +24,8 @@ async function seedChart(): Promise<AccountsSeedReport> {
 
 export const ACCOUNTS_SEEDERS: { name: string; run: () => Promise<AccountsSeedReport> }[] = [
   { name: 'chart', run: seedChart },
+  { name: 'bank', run: seedAccountsBank }, // 13.2 (before opening: the opening voucher uses the bank ledger)
   { name: 'opening', run: seedAccountsOpening },
-  { name: 'bank', run: seedAccountsBank }, // 13.2
 ];
 
 export async function seedAccounts(): Promise<AccountsSeedReport> {

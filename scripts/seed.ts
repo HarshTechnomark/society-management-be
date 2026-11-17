@@ -116,12 +116,12 @@ async function main(): Promise<void> {
     out(
       `billing-dues: created ${bd.created.join('; ') || 'none'}, skipped ${bd.skipped.join('; ') || 'none'}`,
     );
+    // module 13 (before module 12: payments post to the collection bank account): the chart of accounts for every society (each part registers its demo seeder in seeders/accounts.ts)
+    const acc = await seedAccounts();
+    out(`accounts: created ${acc.created.join('; ') || 'none'}, skipped ${acc.skipped.join('; ') || 'none'}`);
     // module 12: demo payments, cheques, refund and collections (each part registers its seeder in seeders/payments.ts)
     const pay = await seedPayments();
     out(`payments: created ${pay.created.join('; ') || 'none'}, skipped ${pay.skipped.join('; ') || 'none'}`);
-    // module 13: the chart of accounts for every society (each part registers its demo seeder in seeders/accounts.ts)
-    const acc = await seedAccounts();
-    out(`accounts: created ${acc.created.join('; ') || 'none'}, skipped ${acc.skipped.join('; ') || 'none'}`);
     const pb = await seedPlatformBilling();
     out(
       `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,
