@@ -78,6 +78,9 @@ export interface PeriodYear {
 export interface PeriodState {
   booksLockedThrough: string | null;
   unlock: { fromDate: string; until: string; approvalRequestId: number | null } | null;
+  /** Additive to spec 8.18: the unlock request still waiting for the committee, and the cap the form shows. */
+  pendingUnlock: { approvalRequestId: number; fromDate: string; hours: number; reason: string } | null;
+  maxUnlockHours: number;
   lastClosedFinancialYear: string | null;
   version: number;
   years: PeriodYear[];
@@ -153,6 +156,41 @@ async function firstPostedFy(societyId: number): Promise<string | null> {
   return r?.fy ?? null;
 }
 
+async function pendingUnlockOf(b: SocietyBalance | null): Promise<PeriodState['pendingUnlock']> {
+  const requestId = b?.unlockApprovalRequestId ?? null;
+  if (!b || !requestId || unlockActive(b)) return null;
+  const rows = await AuditLog.findAll({
+    where: {
+      societyId: n(b.societyId),
+      action: AUDIT.periodUnlockRequested,
+      entityType: 'society_balance',
+      entityId: String(n(b.id)),
+    },
+    order: [['id', 'DESC']],
+    limit: 20,
+  });
+  for (const r of rows) {
+    const a = r.after as { approvalRequestId?: number; fromDate?: string; hours?: number } | null;
+    if (a && Number(a.approvalRequestId) === Number(requestId) && a.fromDate && a.hours)
+      return {
+        approvalRequestId: Number(requestId),
+        fromDate: a.fromDate,
+        hours: Number(a.hours),
+        reason: r.reason ?? '',
+      };
+  }
+  return null;
+}
+
+async function maxUnlockHoursOf(societyId: number): Promise<number> {
+  const d: number = SETTING_DEFAULTS['finance.maxUnlockHours'];
+  try {
+    return Number(await settings.get(societyId, 'finance.maxUnlockHours' as never)) || d;
+  } catch {
+    return d;
+  }
+}
+
 export async function getPeriods(societyId: number): Promise<PeriodState> {
   const b = await SocietyBalance.findOne({ where: { societyId } });
   const books = {
@@ -185,6 +223,8 @@ export async function getPeriods(societyId: number): Promise<PeriodState> {
           approvalRequestId: b?.unlockApprovalRequestId ?? null,
         }
       : null,
+    pendingUnlock: await pendingUnlockOf(b),
+    maxUnlockHours: await maxUnlockHoursOf(societyId),
     lastClosedFinancialYear: books.lastClosedFinancialYear,
     version: n(b?.version ?? 1),
     years,
@@ -285,12 +325,7 @@ export async function requestUnlock(
   input: { fromDate: string; hours: number; reason: string },
 ): Promise<{ approvalRequestId: number; status: string; periods: PeriodState }> {
   const societyId = societyIdOf(ctx);
-  let maxHours: number = SETTING_DEFAULTS['finance.maxUnlockHours'];
-  try {
-    maxHours = Number(await settings.get(societyId, 'finance.maxUnlockHours' as never)) || maxHours;
-  } catch {
-    // default
-  }
+  const maxHours = await maxUnlockHoursOf(societyId);
   if (input.hours < 1 || input.hours > maxHours)
     throw new ValidationError([{ field: 'hours', message: `Between 1 and ${maxHours} hours` }]);
   const r = await moneyTx(async t => {

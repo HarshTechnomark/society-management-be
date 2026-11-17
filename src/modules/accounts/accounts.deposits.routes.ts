@@ -27,6 +27,13 @@ r.get(
   c.list,
 );
 r.get(
+  '/accounts/deposits/summary',
+  society(),
+  can(PERM.accountsView),
+  feature(ENT.deposits, read),
+  c.summary,
+);
+r.get(
   '/accounts/deposits/:id',
   society(),
   can(PERM.accountsView),

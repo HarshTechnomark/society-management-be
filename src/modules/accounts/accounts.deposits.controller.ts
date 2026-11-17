@@ -13,6 +13,7 @@ export const depositController = {
     const r = await deposits.listDeposits(societyIdOf(req.ctx), v(req).query as deposits.DepositListQuery);
     res.status(200).json({ success: true, data: r.items, message: 'OK', pagination: r.pagination });
   }),
+  summary: h(async (req, res) => ok(res, await deposits.depositSummary(societyIdOf(req.ctx)))),
   get: h(async (req, res) =>
     ok(res, await deposits.getDeposit(societyIdOf(req.ctx), v(req).params.id as number)),
   ),

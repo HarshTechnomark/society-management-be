@@ -246,6 +246,23 @@ export async function listDeposits(societyId: number, q: DepositListQuery) {
   };
 }
 
+/** Tiles of the deposits screen (additive to spec 8.17): held now, refunded so far, kept back by forfeit. All deposits, no filter. */
+export async function depositSummary(societyId: number) {
+  const rows = await Deposit.findAll({
+    where: { societyId, status: { [Op.ne]: 'CANCELLED' } },
+    attributes: ['status', 'receivedPaise', 'deductedPaise', 'refundedPaise', 'adjustments'],
+  });
+  let heldPaise = 0;
+  let refundedPaise = 0;
+  let forfeitedPaise = 0;
+  for (const d of rows) {
+    if (['HELD', 'REFUND_PENDING', 'REFUND_APPROVED'].includes(d.status)) heldPaise += heldOf(d);
+    refundedPaise += n(d.refundedPaise);
+    for (const a of d.adjustments ?? []) if (a.kind === 'FORFEIT') forfeitedPaise += n(a.amountPaise);
+  }
+  return { heldPaise, refundedPaise, forfeitedPaise };
+}
+
 export async function getDeposit(societyId: number, id: number): Promise<DepositDto> {
   const d = await Deposit.findOne({ where: { id, societyId } });
   if (!d) throw depositNotFound();

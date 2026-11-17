@@ -501,6 +501,37 @@ describe('routes and isolation (T13-35)', () => {
     });
     expect(cancel.body.data.status).toBe('CANCELLED');
   });
+
+  it('GET /accounts/deposits/summary totals held, refunded and forfeited over every deposit', async () => {
+    const mk = async (title: string, amountPaise: number) =>
+      (
+        await w.c(
+          'post',
+          '/accounts/deposits',
+          {
+            unitId: w.units[0]!.id,
+            kind: 'KEY',
+            title,
+            amountPaise,
+            isOpening: true,
+            openingDate: '2026-10-01',
+          },
+          { headers: idemH() },
+        )
+      ).body.data;
+    const a = await mk('Key deposit A', 50_000);
+    await mk('Key deposit B', 20_000);
+    const f = await w.c(
+      'post',
+      `/accounts/deposits/${a.id}/forfeit`,
+      { reason: 'Keys never returned', date: '2026-11-02', version: a.version },
+      { headers: idemH() },
+    );
+    expect(f.status, JSON.stringify(f.body)).toBe(200);
+    const sum = await w.c('get', '/accounts/deposits/summary');
+    expect(sum.status, JSON.stringify(sum.body)).toBe(200);
+    expect(sum.body.data).toEqual({ heldPaise: 20_000, refundedPaise: 0, forfeitedPaise: 50_000 });
+  });
 });
 
 describe('resident view', () => {
