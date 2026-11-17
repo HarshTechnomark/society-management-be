@@ -1,26 +1,27 @@
 #!/bin/bash
 # Runs the full backend suite in N parallel vitest shards (default 8), each on its own scratch
-# database on the RAM MySQL (port 3308, see scripts/test-ram-mysql.sh). Usage: test-shards.sh [N]
+# database `societyapp_shard_<i>` on the normal local MySQL (127.0.0.1:3307, the same server as the dev
+# database; the shard databases are created and dropped here). Usage: test-shards.sh [N]
+# Opt-in only: TEST_DB=ram uses the RAM MySQL of scripts/test-ram-mysql.sh (port 3308) instead.
 # DATABASE_URL set in the environment beats .env / .env.test (dotenv never overrides), for both
 # sequelize-cli and vitest.
 set -u
 N=${1:-8}
 # Cheap password hashes for fixture users (tests/setup/fast-argon.ts); TEST_FAST=0 scripts/test-shards.sh turns it off.
 export TEST_FAST=${TEST_FAST:-1}
-PORT=3308
-SOCK=/dev/shm/societyapp-mysql-test/run/mysql.sock
+if [ "${TEST_DB:-}" = "ram" ]; then PORT=3308; else PORT=3307; fi
 cd "$(dirname "$0")/.." || exit 1
 ROOT=$PWD
 LOGS=$(mktemp -d "${TMPDIR:-/tmp}/shards.XXXXXX")
 
-"$ROOT/scripts/test-ram-mysql.sh" start >/dev/null || { echo "RAM MySQL not available" >&2; exit 1; }
+if [ "${TEST_DB:-}" = "ram" ]; then
+  "$ROOT/scripts/test-ram-mysql.sh" start >/dev/null || { echo "RAM MySQL not available" >&2; exit 1; }
+else
+  (echo > /dev/tcp/127.0.0.1/3307) 2>/dev/null || { echo "MySQL on 127.0.0.1:3307 is not running (see BUILD_BRIEF.md rule 4)" >&2; exit 1; }
+fi
 
 dbs() { # $1 = drop|create
-  node -e "
-const m=require('$ROOT/node_modules/mysql2/promise');(async()=>{const c=await m.createConnection({socketPath:'$SOCK',user:'root'});
-for(let i=1;i<=$N;i++){const d='societyapp_shard_'+i;await c.query('DROP DATABASE IF EXISTS '+d);
-if(process.argv[1]==='create')await c.query('CREATE DATABASE '+d+' CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci');}
-await c.end()})().catch(e=>{console.error(e.message);process.exit(1)})" "$1"
+  node "$ROOT/scripts/test-db-admin.cjs" "$1" "$N" "${TEST_DB:-}"
 }
 
 T0=$(date +%s)

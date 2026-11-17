@@ -1,4 +1,6 @@
-# Faster full test runs (RAM MySQL + 8 shards)
+# Faster full test runs (8 shards on the normal local MySQL)
+
+**Default: `npm run test:shards` uses the normal local MySQL on 127.0.0.1:3307** (scratch databases `societyapp_shard_1..N`, created and dropped by the script). The RAM MySQL described below is opt-in only (`TEST_DB=ram npm run test:shards`) and is not used by default.
 
 The full suite is slow mainly because of MySQL disk writes and because files run one after another.
 Two scripts fix this: a second private MySQL whose data lives in RAM, and a shard runner.
