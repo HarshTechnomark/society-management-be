@@ -73,6 +73,13 @@ export async function societyFinances(societyId: number) {
   };
 }
 
+export interface FundStatementLine {
+  kind: 'EXPENSE' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'CONTRIBUTION';
+  date: string;
+  label: string;
+  amountPaise: number;
+}
+
 export async function fundStatementForResident(societyId: number, fundId: number) {
   await assertVisible(societyId);
   const [fund] = await readRows<Record<string, unknown>>(
@@ -129,8 +136,38 @@ export async function fundStatementForResident(societyId: number, fundId: number
   const grouped = new Map<string, number>();
   for (const s of spend)
     grouped.set(s.category ?? OTHER, (grouped.get(s.category ?? OTHER) ?? 0) + n(s.amount));
+  // typed lines so the figures add up: balance = collected + movedIn - spent - movedOut. Labels are generic: no narration, payee or unit
+  const lineRows = await readRows<{
+    entryDate: string;
+    refType: string | null;
+    d: string;
+    c: string;
+    category: string | null;
+  }>(
+    `SELECT l.entryDate, e.refType, l.debitPaise AS d, l.creditPaise AS c,
+            (SELECT a.transparencyCategory FROM journal_lines x JOIN ledger_accounts a ON a.id = x.ledgerAccountId
+              WHERE x.journalEntryId = e.id AND a.accountType = 'EXPENSE' ORDER BY x.id LIMIT 1) AS category
+       FROM journal_lines l JOIN journal_entries e ON e.id = l.journalEntryId
+      WHERE l.societyId = :societyId AND e.status = 'POSTED' AND l.ledgerAccountId = :ledgerId
+      ORDER BY l.entryDate, l.id LIMIT 1000`,
+    { societyId, ledgerId },
+    DEADLINE,
+  );
+  const lines: FundStatementLine[] = lineRows.map(r => {
+    const debit = n(r.d);
+    const credit = n(r.c);
+    const date = String(r.entryDate).slice(0, 10);
+    if (r.refType === 'expense')
+      return { kind: 'EXPENSE', date, label: `Spent on ${r.category ?? OTHER}`, amountPaise: debit - credit };
+    if (r.refType === 'fund_transfer')
+      return credit > 0
+        ? { kind: 'TRANSFER_IN', date, label: 'Moved in from another fund', amountPaise: credit }
+        : { kind: 'TRANSFER_OUT', date, label: 'Moved out to another fund', amountPaise: debit };
+    return { kind: 'CONTRIBUTION', date, label: 'Contributions collected', amountPaise: credit - debit };
+  });
   return {
     fund: { id: n(fund.id), name: String(fund.name), fundType: String(fund.fundType) },
+    lines,
     collectedPaise,
     spentPaise,
     movedInPaise,

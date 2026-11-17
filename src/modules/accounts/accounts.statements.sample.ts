@@ -6,10 +6,10 @@ import { n } from './accounts.shared';
 import { bankNotFound } from './accounts.statements.shared';
 
 /**
- * Dev only (`GET /api/v1/dev/accounts/sample-statement?bankAccountId=`): a statement CSV built from the last 60 days of posted lines on
- * the bank's ledger (payments, settlements, expenses...), so a browser test can import it and see auto-match work. Lines that carry
+ * Dev only (`GET /api/v1/dev/accounts/sample-statement?bankAccountId=`): a statement CSV built from the posted lines on
+ * the bank's ledger, from a few days before the earliest one (payments, settlements, expenses...), so a browser test can import it and see auto-match work. Lines that carry
  * an instrument reference (UTR, cheque number) appear with it (pass 1), the rest by amount and date (pass 2). Two lines are added that match nothing: a bank charge of Rs 23.60 (debit, "Create entry" 5600)
- * and an interest credit of Rs 1,042.00. The opening balance is the ledger balance at the start of the period and the running balance is signed. Columns: Date, Description, Reference, Debit, Credit, Balance.
+ * and an interest credit of Rs 1,042.00. The opening balance is the ledger balance at the start of the period (the opening-balance voucher included) and the running balance is signed. Columns: Date, Description, Reference, Debit, Credit, Balance.
  */
 const HEADER = ['Date', 'Description', 'Reference', 'Debit', 'Credit', 'Balance'];
 
@@ -23,7 +23,15 @@ export async function sampleStatementCsv(bankAccountId: number): Promise<{ csv: 
   const bank = await BankAccount.findByPk(bankAccountId);
   if (!bank) throw bankNotFound();
   const today = istDate(now());
-  const from = new Date(Date.parse(`${today}T00:00:00Z`) - 60 * 86_400_000).toISOString().slice(0, 10);
+  // the period starts a few days before the earliest bank posting (opening-balance vouchers excluded), so every posting is on the statement
+  const [first] = await sequelize.query<{ d: string | null }>(
+    `SELECT MIN(jl.entryDate) AS d FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journalEntryId
+      WHERE jl.societyId = :societyId AND jl.ledgerAccountId = :ledger AND je.status = 'POSTED' AND je.voucherType <> 'OPENING_BALANCE'`,
+    { replacements: { societyId: bank.societyId, ledger: bank.ledgerAccountId }, type: QueryTypes.SELECT },
+  );
+  const from = new Date(Date.parse(`${String(first?.d ?? today).slice(0, 10)}T00:00:00Z`) - 3 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   const rows = await sequelize.query<{
     entryDate: string;
     debitPaise: string;
@@ -37,17 +45,18 @@ export async function sampleStatementCsv(bankAccountId: number): Promise<{ csv: 
        FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journalEntryId
        LEFT JOIN payments p ON p.societyId = je.societyId AND p.id = (CASE WHEN je.refType = 'payment' THEN CAST(je.refId AS UNSIGNED) END)
       WHERE jl.societyId = :societyId AND jl.ledgerAccountId = :ledger AND je.status = 'POSTED'
-        AND je.voucherType <> 'OPENING_BALANCE' AND jl.entryDate >= :from
-      ORDER BY jl.entryDate, jl.id LIMIT 200`,
+        AND je.voucherType <> 'OPENING_BALANCE' AND jl.entryDate >= :from AND jl.entryDate <= :today
+      ORDER BY jl.entryDate, jl.id LIMIT 2000`,
     {
-      replacements: { societyId: bank.societyId, ledger: bank.ledgerAccountId, from },
+      replacements: { societyId: bank.societyId, ledger: bank.ledgerAccountId, from, today },
       type: QueryTypes.SELECT,
     },
   );
   const [before] = await sequelize.query<{ b: string | null }>(
     `SELECT COALESCE(SUM(jl.debitPaise - jl.creditPaise), 0) AS b FROM journal_lines jl
        JOIN journal_entries je ON je.id = jl.journalEntryId
-      WHERE jl.societyId = :societyId AND jl.ledgerAccountId = :ledger AND je.status = 'POSTED' AND jl.entryDate < :from`,
+      WHERE jl.societyId = :societyId AND jl.ledgerAccountId = :ledger AND je.status = 'POSTED'
+        AND (jl.entryDate < :from OR je.voucherType = 'OPENING_BALANCE')`,
     {
       replacements: { societyId: bank.societyId, ledger: bank.ledgerAccountId, from },
       type: QueryTypes.SELECT,

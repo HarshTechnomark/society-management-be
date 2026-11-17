@@ -12,6 +12,7 @@ import { loadBank } from './accounts.statements.shared';
  *   unmatched statement credits and debits = lines of the account's statements (not failed) dated up to `asOf` not matched to a
  *   journal line (IGNORED lines are still bank items that are not in the books, so they count);
  *   computed bank balance = book − uncleared debits + uncleared credits + unmatched statement credits − unmatched statement debits;
+ *   a book line dated BEFORE the statement's period start is already in the statement's opening balance, so it is not listed as uncleared;
  *   statement balance = closing balance of the latest statement ending on or before `asOf`; difference = statement − computed
  *   (0 when reconciled; `null` while no statement has been imported).
  */
@@ -72,6 +73,22 @@ export async function bankReconciliation(
       WHERE jl.societyId = :societyId AND jl.ledgerAccountId = :ledgerId AND je.status = 'POSTED' AND jl.entryDate <= :asOf`,
     rep,
   );
+  const stmt = await BankStatementImport.findOne({
+    where: {
+      societyId,
+      bankAccountId,
+      status: ['PARSED', 'RECONCILED'],
+      periodTo: { [Op.lte]: asOf },
+      closingBalancePaise: { [Op.ne]: null },
+    },
+    order: [
+      ['periodTo', 'DESC'],
+      ['id', 'DESC'],
+    ],
+  });
+
+  // a book entry dated before the statement's first day is already in its opening balance: not an uncleared item (see the README)
+  const rep2 = { ...rep, periodFrom: stmt?.periodFrom ?? '0000-01-01' };
   const bookRows = await q<{
     id: number;
     journalEntryId: number;
@@ -87,9 +104,9 @@ export async function bankReconciliation(
        JOIN journal_entries je ON je.id = jl.journalEntryId
        LEFT JOIN bank_statement_lines sl ON sl.matchedJournalLineId = jl.id
       WHERE jl.societyId = :societyId AND jl.ledgerAccountId = :ledgerId AND je.status = 'POSTED'
-        AND je.voucherType <> 'OPENING_BALANCE' AND sl.id IS NULL AND jl.entryDate <= :asOf
+        AND je.voucherType <> 'OPENING_BALANCE' AND sl.id IS NULL AND jl.entryDate <= :asOf AND jl.entryDate >= :periodFrom
       ORDER BY jl.entryDate, jl.id`,
-    rep,
+    rep2,
   );
   const stmtRows = await q<{
     id: number;
@@ -109,20 +126,6 @@ export async function bankReconciliation(
       ORDER BY sl.txnDate, sl.id`,
     rep,
   );
-  const stmt = await BankStatementImport.findOne({
-    where: {
-      societyId,
-      bankAccountId,
-      status: ['PARSED', 'RECONCILED'],
-      periodTo: { [Op.lte]: asOf },
-      closingBalancePaise: { [Op.ne]: null },
-    },
-    order: [
-      ['periodTo', 'DESC'],
-      ['id', 'DESC'],
-    ],
-  });
-
   const items: BrsItem[] = [];
   let unclearedIn = 0;
   let unclearedOut = 0;

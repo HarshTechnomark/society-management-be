@@ -340,9 +340,23 @@ describe('resident finances (8.3)', () => {
     expect(st.movedOutPaise).toBe(30_000);
     expect(st.movedInPaise).toBe(0);
     expect(st.spend).toEqual([{ category: 'Repairs and maintenance', amountPaise: 45_000 }]);
+    expect(st.lines.filter((x: { kind: string }) => x.kind !== 'CONTRIBUTION')).toEqual([
+      { kind: 'EXPENSE', date: '2026-08-01', label: 'Spent on Repairs and maintenance', amountPaise: 45_000 },
+      { kind: 'TRANSFER_OUT', date: '2026-08-02', label: 'Moved out to another fund', amountPaise: 30_000 },
+    ]);
+    expect(
+      st.lines
+        .filter((x: { kind: string }) => x.kind === 'CONTRIBUTION')
+        .reduce((a: number, x: { amountPaise: number }) => a + x.amountPaise, 0),
+    ).toBe(st.collectedPaise);
+    expect(st.balancePaise).toBe(st.collectedPaise + st.movedInPaise - st.spentPaise - st.movedOutPaise);
     const rp = (await u.c('get', `/me/society-finances/funds/${repair}/statement`)).body.data;
     expect(rp.spentPaise).toBe(0);
     expect(rp.movedInPaise).toBe(30_000);
     expect(rp.spend).toEqual([]);
+    expect(rp.lines.filter((x: { kind: string }) => x.kind !== 'CONTRIBUTION')).toEqual([
+      { kind: 'TRANSFER_IN', date: '2026-08-02', label: 'Moved in from another fund', amountPaise: 30_000 },
+    ]);
+    expect(rp.balancePaise).toBe(rp.collectedPaise + rp.movedInPaise - rp.spentPaise - rp.movedOutPaise);
   });
 });
