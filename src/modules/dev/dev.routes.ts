@@ -36,7 +36,6 @@ import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.
 import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
 import { sampleStatementCsv } from '../accounts/accounts.statements.sample';
 import * as accountsPeriodApprovals from '../accounts/accounts.periods.approvals-hook';
-import { APPROVAL_TYPES as ACCOUNTS_APPROVAL_TYPES } from '../accounts/accounts.constants';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 

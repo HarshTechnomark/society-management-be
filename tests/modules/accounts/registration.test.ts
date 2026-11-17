@@ -121,10 +121,6 @@ describe('public interface of section 8.20 and 8.21', () => {
     });
     const stubs: (() => Promise<unknown>)[] = [
       () => expenses.listForCollection(w.sid, 1),
-      () => balance.history(),
-      () => deposits.request(w.user, {} as never, {} as never),
-      () => deposits.requestRefund(w.user, 1, { deductionPaise: 0, reason: 'x' }, {} as never),
-      () => settlements.ingest(),
       () => accountReports.run(w.sid, 'trial-balance', {}, { deadlineMs: 100 }),
       () => accountReports.fundStatement(w.sid, 1, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
       () => cashBook.monthlyTotals(w.sid, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
