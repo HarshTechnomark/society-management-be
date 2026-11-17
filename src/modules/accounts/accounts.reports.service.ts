@@ -81,7 +81,7 @@ export async function resolvePeriod(
   return { from, to, financialYear: financialYearOf(from) };
 }
 
-const row = (a: AccountNode, extra: Record<string, unknown>) => ({
+const row = (a: AccountNode, extra: Record<string, unknown>): Record<string, unknown> => ({
   code: a.code,
   name: a.name,
   ...extra,
@@ -430,7 +430,7 @@ async function gstSummary(
   const rows = [...byMonth.entries()].map(([month, m]) => {
     m.outputTotalPaise = m.outputCgstPaise! + m.outputSgstPaise! + m.outputIgstPaise!;
     m.netPayablePaise = m.outputTotalPaise - m.inputCreditPaise!;
-    return { month, ...m };
+    return { ...m, month } as Record<string, number | string>;
   });
   const totals = {
     outputCgstPaise: 0,
@@ -440,7 +440,8 @@ async function gstSummary(
     inputCreditPaise: 0,
     netPayablePaise: 0,
   };
-  for (const r of rows) for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += r[k];
+  for (const r of rows)
+    for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += r[k] as number;
   return {
     body: { from: p.from, to: p.to, financialYear: p.financialYear, rows, totals },
     totals: { debitPaise: totals.inputCreditPaise, creditPaise: totals.outputTotalPaise },
@@ -460,7 +461,7 @@ async function tdsRegister(
             x.vendorId, x.challanNo, l.creditPaise, l.debitPaise
        FROM journal_lines l JOIN journal_entries e ON e.id = l.journalEntryId
        JOIN ledger_accounts a ON a.id = l.ledgerAccountId AND a.code = '2140'
-       LEFT JOIN expenses x ON x.societyId = :societyId AND e.refType = 'expense' AND x.id = CAST(e.refId AS UNSIGNED)
+       LEFT JOIN expenses x ON x.societyId = :societyId AND x.journalEntryId = e.id
       WHERE l.societyId = :societyId AND e.status = 'POSTED' AND e.reversalOfId IS NULL AND e.reversedByEntryId IS NULL
         AND l.entryDate BETWEEN :from AND :to
       ORDER BY l.entryDate, e.id, l.id`,

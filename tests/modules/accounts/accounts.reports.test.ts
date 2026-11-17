@@ -51,7 +51,12 @@ describe('trial balance (T13-51)', () => {
 
   it('includeZero shows the zero accounts, an earlier date only counts earlier lines, a group level rolls up', async () => {
     const { w } = await world();
-    const all = await accountReports.run(w.sid, 'trial-balance', { asOf: '2026-07-31', includeZero: true }, opts);
+    const all = await accountReports.run(
+      w.sid,
+      'trial-balance',
+      { asOf: '2026-07-31', includeZero: true },
+      opts,
+    );
     expect((all.rows as Row[]).find(x => x.code === '2140')).toMatchObject({ debitPaise: 0, creditPaise: 0 });
     const early = await accountReports.run(w.sid, 'trial-balance', { asOf: '2026-05-31' }, opts);
     expect(early.totals).toEqual({ debitPaise: 1_220_000, creditPaise: 1_220_000 });
@@ -92,9 +97,16 @@ describe('trial balance (T13-51)', () => {
 describe('income and expenditure', () => {
   it('income minus expenditure of the period, ignoring balance sheet accounts', async () => {
     const { w } = await world();
-    const r = await accountReports.run(w.sid, 'income-expenditure', { from: '2026-04-01', to: '2026-07-31' }, opts);
+    const r = await accountReports.run(
+      w.sid,
+      'income-expenditure',
+      { from: '2026-04-01', to: '2026-07-31' },
+      opts,
+    );
     const rows = r.rows as Row[];
-    expect(rows.filter(x => x.section === 'INCOME').map(x => [x.code, x.amountPaise])).toEqual([['4100', 300_000]]);
+    expect(rows.filter(x => x.section === 'INCOME').map(x => [x.code, x.amountPaise])).toEqual([
+      ['4100', 300_000],
+    ]);
     expect(rows.filter(x => x.section === 'EXPENDITURE').map(x => [x.code, x.amountPaise])).toEqual([
       ['5330', 125_000],
     ]);
@@ -103,7 +115,12 @@ describe('income and expenditure', () => {
 
   it('matches the journal lines of the period (June only has the cash receipt of 50,000)', async () => {
     const { w } = await world();
-    const r = await accountReports.run(w.sid, 'income-expenditure', { from: '2026-06-01', to: '2026-06-30' }, opts);
+    const r = await accountReports.run(
+      w.sid,
+      'income-expenditure',
+      { from: '2026-06-01', to: '2026-06-30' },
+      opts,
+    );
     expect(r.totals).toEqual({ debitPaise: 0, creditPaise: 50_000 });
     const [raw] = await sequelize.query<{ c: string }>(
       `SELECT SUM(l.creditPaise - l.debitPaise) c FROM journal_lines l JOIN ledger_accounts a ON a.id = l.ledgerAccountId
@@ -134,7 +151,9 @@ describe('balance sheet', () => {
       expect(r.totals?.debitPaise, asOf).toBe(r.totals?.creditPaise);
     }
     const next = await accountReports.run(w.sid, 'balance-sheet', { asOf: '2027-04-30' }, opts);
-    expect((next.rows as Row[]).find(x => x.name.startsWith('Surplus (deficit) of earlier'))!.amountPaise).toBe(175_000);
+    expect(
+      (next.rows as Row[]).find(x => x.name.startsWith('Surplus (deficit) of earlier'))!.amountPaise,
+    ).toBe(175_000);
   });
 });
 
@@ -223,7 +242,12 @@ describe('period rules', () => {
 describe('receipts and payments', () => {
   it('groups cash and bank movements by counter account, leaves out contra and closes to the cash ledgers', async () => {
     const { w } = await world();
-    const r = await accountReports.run(w.sid, 'receipts-payments', { from: '2026-04-01', to: '2026-07-31' }, opts);
+    const r = await accountReports.run(
+      w.sid,
+      'receipts-payments',
+      { from: '2026-04-01', to: '2026-07-31' },
+      opts,
+    );
     const rows = r.rows as Row[];
     const side = (s: string) => rows.filter(x => x.side === s).map(x => [x.code, x.amountPaise]);
     expect(side('RECEIPT')).toEqual([
@@ -244,7 +268,12 @@ describe('receipts and payments', () => {
 
   it('a later window starts from the cash and bank balance at its start', async () => {
     const { w } = await world();
-    const r = await accountReports.run(w.sid, 'receipts-payments', { from: '2026-07-01', to: '2026-07-31' }, opts);
+    const r = await accountReports.run(
+      w.sid,
+      'receipts-payments',
+      { from: '2026-07-01', to: '2026-07-31' },
+      opts,
+    );
     // before 1 July: bank 1,372,000 (+10,000 contra) and cash 60,000 - 10,000... both ledgers together
     expect(r.totals?.debitPaise).toBe(r.totals?.creditPaise);
   });
@@ -253,9 +282,19 @@ describe('receipts and payments', () => {
 describe('GST summary and TDS register', () => {
   it('output and input per month', async () => {
     const { w } = await world();
-    const r = await accountReports.run(w.sid, 'gst-summary' as never, { from: '2026-04-01', to: '2026-07-31' }, opts);
+    const r = await accountReports.run(
+      w.sid,
+      'gst-summary' as never,
+      { from: '2026-04-01', to: '2026-07-31' },
+      opts,
+    );
     expect(r.rows).toEqual([
-      expect.objectContaining({ month: '2026-05', inputCreditPaise: 18_000, outputTotalPaise: 0, netPayablePaise: -18_000 }),
+      expect.objectContaining({
+        month: '2026-05',
+        inputCreditPaise: 18_000,
+        outputTotalPaise: 0,
+        netPayablePaise: -18_000,
+      }),
       expect.objectContaining({
         month: '2026-07',
         outputCgstPaise: 9_000,
@@ -292,8 +331,15 @@ describe('GST summary and TDS register', () => {
       section: '194C',
       bankLedgerId: Number(bank.id),
     });
-    await sequelize.transaction(t => reverseEntry(w.user, j.id, { date: '2026-07-21', reason: 'Wrong amount' }, t));
-    const r = await accountReports.run(w.sid, 'tds-register' as never, { from: '2026-04-01', to: '2026-07-31' }, opts);
+    await sequelize.transaction(t =>
+      reverseEntry(w.user, j.id, { date: '2026-07-21', reason: 'Wrong amount' }, t),
+    );
+    const r = await accountReports.run(
+      w.sid,
+      'tds-register' as never,
+      { from: '2026-04-01', to: '2026-07-31' },
+      opts,
+    );
     expect(r.rows).toEqual([
       expect.objectContaining({
         date: '2026-05-20',
@@ -334,11 +380,15 @@ describe('fund statement and cash book', () => {
   it('an unknown fund or one of another society is FUND_NOT_FOUND', async () => {
     const { w, sinking } = await world();
     const o = await accountsSociety('Other CHS');
-    await expect(accountReports.fundStatement(o.sid, sinking, '2026-04-01', '2026-12-31', opts)).rejects.toMatchObject({
+    await expect(
+      accountReports.fundStatement(o.sid, sinking, '2026-04-01', '2026-12-31', opts),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'FUND_NOT_FOUND',
     });
-    await expect(accountReports.fundStatement(w.sid, 999999, '2026-04-01', '2026-12-31', opts)).rejects.toMatchObject({
+    await expect(
+      accountReports.fundStatement(w.sid, 999999, '2026-04-01', '2026-12-31', opts),
+    ).rejects.toMatchObject({
       code: 'FUND_NOT_FOUND',
     });
   });
@@ -375,13 +425,23 @@ describe('expense readers (T13-51, T13-54)', () => {
     });
     const r = await expenseReports.byHead(w.sid, { ...FY }, opts);
     expect(r.rows).toEqual([
-      expect.objectContaining({ code: '5330', head: expect.any(String), transparencyCategory: 'Repairs', count: 2, amountPaise: 143_000 }),
+      expect.objectContaining({
+        code: '5330',
+        head: expect.any(String),
+        transparencyCategory: 'Repairs',
+        count: 2,
+        amountPaise: 143_000,
+      }),
       expect.objectContaining({ code: '2140', count: 1, amountPaise: 20_000, transparencyCategory: null }),
     ]);
     expect(r.totals).toEqual({ count: 3, amountPaise: 163_000 });
     const f = await expenseReports.byHead(w.sid, { ...FY, fundId: sinking }, opts);
     expect(f.rows.map(x => [x.code, x.amountPaise])).toEqual([['5330', 25_000]]);
-    const sorted = await expenseReports.byHead(w.sid, { ...FY, sortBy: 'head', sortDir: 'asc', limit: 1, page: 2 }, opts);
+    const sorted = await expenseReports.byHead(
+      w.sid,
+      { ...FY, sortBy: 'head', sortDir: 'asc', limit: 1, page: 2 },
+      opts,
+    );
     expect(sorted.rows).toHaveLength(1);
     expect(sorted.total).toBe(2);
     const o = await accountsSociety('Other CHS');
@@ -426,7 +486,11 @@ describe('expense readers (T13-51, T13-54)', () => {
     expect(r.totals).toEqual({ deductedPaise: 70_000, depositedPaise: 20_000 });
     const none = await expenseReports.tdsDeposited(w.sid, { ...FY, vendorId: 4242 }, opts);
     expect(none).toEqual({ rows: [], total: 0, totals: { deductedPaise: 0, depositedPaise: 0 } });
-    const desc = await expenseReports.tdsDeposited(w.sid, { ...FY, sortBy: 'deductedPaise', sortDir: 'desc' }, opts);
+    const desc = await expenseReports.tdsDeposited(
+      w.sid,
+      { ...FY, sortBy: 'deductedPaise', sortDir: 'desc' },
+      opts,
+    );
     expect(desc.rows.map(x => x.tdsSection)).toEqual(['194J', '194C']);
   });
 });

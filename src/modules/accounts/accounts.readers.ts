@@ -35,7 +35,14 @@ export interface ReportQuery {
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }
-export type ReportName = 'trial-balance' | 'income-expenditure' | 'balance-sheet' | 'general-ledger';
+export type ReportName =
+  | 'trial-balance'
+  | 'income-expenditure'
+  | 'balance-sheet'
+  | 'general-ledger'
+  | 'receipts-payments'
+  | 'gst-summary'
+  | 'tds-register';
 
 const page = <T>(rows: T[], p?: number, l?: number): T[] =>
   l ? rows.slice(((p ?? 1) - 1) * l, (p ?? 1) * l) : rows;
