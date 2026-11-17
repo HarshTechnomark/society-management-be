@@ -82,6 +82,7 @@ export async function resolvePeriod(
 }
 
 const row = (a: AccountNode, extra: Record<string, unknown>): Record<string, unknown> => ({
+  ledgerAccountId: a.id,
   code: a.code,
   name: a.name,
   ...extra,

@@ -40,6 +40,8 @@ export const reportSchemas = {
     .strict(),
 };
 
+export const exportParam = z.object({ id: z.string().uuid() });
+
 export const residentSchemas = {
   id: z.object({ id: idParam }),
 };
