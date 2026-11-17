@@ -35,7 +35,10 @@ async function byCategory(societyId: number, type: 'INCOME' | 'EXPENSE'): Promis
   const chart = await loadChart(societyId, DEADLINE);
   rollUp(
     chart,
-    await sumsByAccount({ societyId, from: fyRange(fy).from, to: today, noClosing: true }, DEADLINE),
+    await sumsByAccount(
+      { societyId, from: fyRange(fy).from, to: today, noClosing: true, noFundConsumption: true },
+      DEADLINE,
+    ),
   );
   const out = new Map<string, number>();
   for (const a of chart.values()) {
@@ -80,29 +83,49 @@ export async function fundStatementForResident(societyId: number, fundId: number
   );
   if (!fund) throw new NotFoundError(ERR.fundNotFound, 'Fund not found');
   const ledgerId = n(fund.ledgerAccountId);
-  const [totals] = await readRows<{ c: string | null; d: string | null }>(
-    `SELECT SUM(l.creditPaise) AS c, SUM(l.debitPaise) AS d
+  const [totals] = await readRows<{
+    c: string | null;
+    d: string | null;
+    sc: string | null;
+    sd: string | null;
+    mi: string | null;
+    mo: string | null;
+  }>(
+    `SELECT SUM(CASE WHEN e.refType NOT IN ('fund_transfer','expense') THEN l.creditPaise - l.debitPaise ELSE 0 END) AS c,
+            SUM(CASE WHEN e.refType = 'expense' THEN l.debitPaise - l.creditPaise ELSE 0 END) AS sd,
+            SUM(CASE WHEN e.refType = 'fund_transfer' THEN l.creditPaise ELSE 0 END) AS mi,
+            SUM(CASE WHEN e.refType = 'fund_transfer' THEN l.debitPaise ELSE 0 END) AS mo,
+            SUM(l.creditPaise) AS sc, SUM(l.debitPaise) AS d
        FROM journal_lines l JOIN journal_entries e ON e.id = l.journalEntryId
       WHERE l.societyId = :societyId AND e.status = 'POSTED' AND l.ledgerAccountId = :ledgerId`,
     { societyId, ledgerId },
     DEADLINE,
   );
+  // the expense head sits on another line of the same voucher that consumed this fund
   const spend = await readRows<{ category: string | null; amount: string }>(
     `SELECT a.transparencyCategory AS category, SUM(l.debitPaise - l.creditPaise) AS amount
        FROM journal_lines l JOIN journal_entries e ON e.id = l.journalEntryId JOIN ledger_accounts a ON a.id = l.ledgerAccountId
-      WHERE l.societyId = :societyId AND e.status = 'POSTED' AND l.fundId = :fundId AND a.accountType = 'EXPENSE'
+      WHERE l.societyId = :societyId AND e.status = 'POSTED' AND a.accountType = 'EXPENSE' AND e.refType = 'expense'
+        AND EXISTS (SELECT 1 FROM journal_lines f WHERE f.journalEntryId = e.id AND f.fundId = :fundId AND f.ledgerAccountId = :ledgerId)
       GROUP BY a.transparencyCategory HAVING amount <> 0 ORDER BY amount DESC`,
-    { societyId, fundId },
+    { societyId, fundId, ledgerId },
     DEADLINE,
   );
   const [contrib] = await readRows<{ cnt: string }>(
-    `SELECT COUNT(DISTINCT r.unitId) AS cnt FROM collection_requests r JOIN collections c ON c.id = r.collectionId
-      WHERE r.societyId = :societyId AND c.fundId = :fundId AND r.paidPaise > 0`,
+    `SELECT COUNT(*) AS cnt FROM (
+       SELECT r.unitId FROM collection_requests r JOIN collections c ON c.id = r.collectionId
+        WHERE r.societyId = :societyId AND c.fundId = :fundId AND r.paidPaise > 0
+       UNION
+       SELECT i.unitId FROM invoices i JOIN invoice_lines il ON il.invoiceId = i.id JOIN charge_heads h ON h.id = il.chargeHeadId
+        WHERE i.societyId = :societyId AND h.fundId = :fundId AND i.paidPaise > 0
+     ) u`,
     { societyId, fundId },
     DEADLINE,
   );
   const collectedPaise = n(totals?.c);
-  const spentPaise = n(totals?.d);
+  const spentPaise = n(totals?.sd);
+  const movedInPaise = n(totals?.mi);
+  const movedOutPaise = n(totals?.mo);
   const grouped = new Map<string, number>();
   for (const s of spend)
     grouped.set(s.category ?? OTHER, (grouped.get(s.category ?? OTHER) ?? 0) + n(s.amount));
@@ -110,7 +133,9 @@ export async function fundStatementForResident(societyId: number, fundId: number
     fund: { id: n(fund.id), name: String(fund.name), fundType: String(fund.fundType) },
     collectedPaise,
     spentPaise,
-    balancePaise: collectedPaise - spentPaise,
+    movedInPaise,
+    movedOutPaise,
+    balancePaise: collectedPaise + movedInPaise - spentPaise - movedOutPaise,
     contributors: n(contrib?.cnt),
     spend: [...grouped.entries()].map(([category, amountPaise]) => ({ category, amountPaise })),
   };

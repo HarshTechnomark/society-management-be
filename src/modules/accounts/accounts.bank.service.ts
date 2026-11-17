@@ -309,7 +309,15 @@ export async function patchBankAccount(ctx: Ctx, id: number, input: BankPatchInp
     if (input.displayName !== undefined) b.displayName = input.displayName;
     if (input.branchName !== undefined) b.branchName = input.branchName;
     if (input.statementFormat !== undefined) b.statementFormat = input.statementFormat;
-    if (input.accountHolderName !== undefined) b.accountHolderName = input.accountHolderName;
+    if (input.accountHolderName !== undefined) {
+      if (input.accountHolderName !== b.accountHolderName && b.verificationStatus === 'VERIFIED') {
+        // a different holder is a different account as far as the second person's check goes
+        b.verificationStatus = 'UNVERIFIED';
+        b.verifiedBy = null;
+        b.verifiedAt = null;
+      }
+      b.accountHolderName = input.accountHolderName;
+    }
     b.updatedBy = ctx.user?.id ?? null;
     b.version = n(b.version) + 1;
     await b.save({ transaction: t });

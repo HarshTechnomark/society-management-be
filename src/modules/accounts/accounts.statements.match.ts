@@ -71,9 +71,11 @@ async function openJournalLines(
   const rows = await sequelize.query<JRow>(
     `SELECT jl.id AS id, jl.journalEntryId AS journalEntryId, jl.entryDate AS entryDate, jl.debitPaise AS debitPaise,
             jl.creditPaise AS creditPaise, je.voucherNo AS voucherNo, je.narration AS narration,
-            je.instrumentRef AS instrumentRef, je.voucherType AS voucherType
+            COALESCE(je.instrumentRef, pay.referenceNo) AS instrumentRef, je.voucherType AS voucherType
        FROM journal_lines jl
        JOIN journal_entries je ON je.id = jl.journalEntryId
+       LEFT JOIN payments pay ON pay.societyId = je.societyId
+         AND pay.id = (CASE WHEN je.refType = 'payment' THEN CAST(je.refId AS UNSIGNED) END)
        LEFT JOIN bank_statement_lines sl ON sl.matchedJournalLineId = jl.id
       WHERE jl.societyId = :societyId AND jl.ledgerAccountId = :ledgerAccountId AND je.status = 'POSTED'
         AND je.voucherType <> 'OPENING_BALANCE' AND sl.id IS NULL AND jl.entryDate BETWEEN :from AND :to

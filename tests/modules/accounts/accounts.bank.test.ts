@@ -368,9 +368,19 @@ describe('edit and verify (BR-13-36, T13-32)', () => {
     const b = await add(w, { displayName: 'Other', ifsc: 'HDFC0007777' });
     const r = await w.c('patch', `/accounts/bank-accounts/${b.id}`, { ifsc: 'HDFC0008888', version: 1 });
     expect(r.body.data).toMatchObject({ ifsc: 'HDFC0008888', verificationStatus: 'UNVERIFIED' });
+    // a different account holder resets a verified account too
+    await BankAccount.update(
+      { verificationStatus: 'VERIFIED', verifiedBy: w.user.id, verifiedAt: new Date() } as never,
+      { where: { id: b.id } },
+    );
+    const holder = await w.c('patch', `/accounts/bank-accounts/${b.id}`, {
+      accountHolderName: 'Someone Else Housing Society',
+      version: 2,
+    });
+    expect(holder.body.data).toMatchObject({ verificationStatus: 'UNVERIFIED', verifiedBy: null });
     const row = (await BankAccount.findByPk(b.id))!;
     expect(row.accountNumberHash).toBe(accountNumberHash('HDFC0008888', '50200012344821'));
-    const clash = await w.c('patch', `/accounts/bank-accounts/${b.id}`, { ifsc: 'HDFC0001234', version: 2 });
+    const clash = await w.c('patch', `/accounts/bank-accounts/${b.id}`, { ifsc: 'HDFC0001234', version: 3 });
     expect([clash.status, clash.body.code]).toEqual([409, 'DUPLICATE_BANK_ACCOUNT']);
     const mm = await w.c('patch', `/accounts/bank-accounts/${a.id}`, {
       accountNumber: '50200099990000',

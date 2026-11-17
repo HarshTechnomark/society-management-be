@@ -10,7 +10,7 @@ import { societyPorts } from '../societies/societies.ports';
 import { systemCtx } from '../../types/context';
 import { QueryTypes } from 'sequelize';
 import { toCsv } from '../society-setup/society-setup.csv';
-import { PAGE_H, PAGE_W, PdfDoc } from '../platform-billing/platform-billing.pdf-writer';
+import { PAGE_H, PAGE_W, PdfDoc, textWidth } from '../platform-billing/platform-billing.pdf-writer';
 import { AUDIT, ENTITY, ERR, JOBS, NOTIFY, ACCOUNTS_QUEUE } from './accounts.constants';
 import { accountsPorts } from './accounts.ports';
 import { loadChart } from './accounts.reports.queries';
@@ -263,13 +263,57 @@ export async function renderXlsx(t: Table, society: string): Promise<Buffer> {
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
+/** `1234567.5` shown as `₹12,34,567.50` (Indian grouping; the PDF writer prints the rupee sign as "Rs."). */
+export function inrPdf(v: string | number): string {
+  const s = String(v);
+  const m = /^(-?)(\d+)\.(\d{2})$/.exec(s);
+  if (!m) return s;
+  const whole = m[2]!;
+  const last3 = whole.slice(-3);
+  const rest = whole.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  return `${m[1]}₹${rest ? `${rest},` : ''}${last3}.${m[3]}`;
+}
+
+/** Breaks `text` into lines that fit `maxWidth` at `size` (on spaces; a long word is cut). */
+function wrapText(text: string, size: number, bold: boolean, maxWidth: number): string[] {
+  const lines: string[] = [];
+  let cur = '';
+  for (const word of text.split(' ')) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (textWidth(next, size, bold) <= maxWidth) cur = next;
+    else {
+      if (cur) lines.push(cur);
+      let w = word;
+      while (textWidth(w, size, bold) > maxWidth && w.length > 1) {
+        let k = w.length - 1;
+        while (k > 1 && textWidth(w.slice(0, k), size, bold) > maxWidth) k--;
+        lines.push(w.slice(0, k));
+        w = w.slice(k);
+      }
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+
 export function renderPdf(t: Table, society: string): Buffer {
   const d = new PdfDoc();
   const L = 36;
   const Rt = PAGE_W - 36;
-  const cols = t.header.length;
-  const width = (Rt - L) / cols;
-  const xOf = (i: number) => L + i * width;
+  // column widths follow the longest content (capped), amounts always get room for ₹ and grouping
+  const weight = t.header.map((h, i) => {
+    const longest = Math.max(
+      String(h).length,
+      ...[...t.rows, ...t.footer].map(r =>
+        t.numeric.includes(i) ? inrPdf(r[i] ?? '').length : String(r[i] ?? '').length,
+      ),
+    );
+    return Math.min(Math.max(longest, 6), t.numeric.includes(i) ? 16 : 40);
+  });
+  const total = weight.reduce((a, b) => a + b, 0);
+  const widths = weight.map(w => ((Rt - L) * w) / total);
+  const xs = widths.map((_, i) => L + widths.slice(0, i).reduce((a, b) => a + b, 0));
   const head = (y0: number) => {
     d.text(L, y0, society, { size: 12, bold: true });
     d.text(L, y0 + 15, t.title, { size: 10.5, bold: true });
@@ -277,8 +321,13 @@ export function renderPdf(t: Table, society: string): Buffer {
     let y = y0 + 46;
     t.header.forEach((h, i) =>
       t.numeric.includes(i)
-        ? d.text(xOf(i) + width - 4, y, h, { size: 8, bold: true, align: 'right', maxWidth: width - 6 })
-        : d.text(xOf(i) + 2, y, h, { size: 8, bold: true, maxWidth: width - 6 }),
+        ? d.text(xs[i]! + widths[i]! - 4, y, h, {
+            size: 8,
+            bold: true,
+            align: 'right',
+            maxWidth: widths[i]! - 6,
+          })
+        : d.text(xs[i]! + 2, y, h, { size: 8, bold: true, maxWidth: widths[i]! - 6 }),
     );
     y += 4;
     d.line(L, y, Rt, y, 0.8);
@@ -286,16 +335,22 @@ export function renderPdf(t: Table, society: string): Buffer {
   };
   let y = head(48);
   const put = (r: (string | number)[], bold: boolean) => {
-    if (y > PAGE_H - 50) {
+    const cells = r.map((v, i) =>
+      t.numeric.includes(i) ? [inrPdf(v)] : wrapText(String(v), 8, bold, widths[i]! - 6),
+    );
+    const height = Math.max(...cells.map(c => c.length)) * 10 + 2;
+    if (y + height > PAGE_H - 50) {
       d.addPage();
       y = head(48);
     }
-    r.forEach((v, i) =>
-      t.numeric.includes(i)
-        ? d.text(xOf(i) + width - 4, y, String(v), { size: 8, bold, align: 'right', maxWidth: width - 6 })
-        : d.text(xOf(i) + 2, y, String(v), { size: 8, bold, maxWidth: width - 6 }),
+    cells.forEach((lines, i) =>
+      lines.forEach((line, k) =>
+        t.numeric.includes(i)
+          ? d.text(xs[i]! + widths[i]! - 4, y + k * 10, line, { size: 8, bold, align: 'right' })
+          : d.text(xs[i]! + 2, y + k * 10, line, { size: 8, bold }),
+      ),
     );
-    y += 12;
+    y += height;
   };
   for (const r of t.rows) put(r, false);
   d.line(L, y - 8, Rt, y - 8, 0.5);

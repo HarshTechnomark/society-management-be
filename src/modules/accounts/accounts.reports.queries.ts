@@ -1,3 +1,4 @@
+import { CODE } from './accounts.constants';
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../../models';
 import { ReadTimeoutError } from './accounts.readers';
@@ -89,6 +90,8 @@ export interface SumFilter {
   to?: string;
   /** Leave the `CLOSING` voucher out (income and expenditure of a period). */
   noClosing?: boolean;
+  /** Leave out ledger 4900, the fund-consumption side of a fund-paid expense: a movement between funds, not income. */
+  noFundConsumption?: boolean;
   fundId?: number;
 }
 
@@ -102,7 +105,8 @@ export async function sumsByAccount(
        FROM journal_lines l JOIN journal_entries e ON e.id = l.journalEntryId
       WHERE l.societyId = :societyId AND e.societyId = :societyId AND e.status = 'POSTED'
         ${f.from ? 'AND l.entryDate >= :from' : ''} ${f.to ? 'AND l.entryDate <= :to' : ''}
-        ${f.noClosing ? "AND e.voucherType <> 'CLOSING'" : ''} ${f.fundId ? 'AND l.fundId = :fundId' : ''}
+        ${f.noClosing ? "AND e.voucherType <> 'CLOSING'" : ''}
+        ${f.noFundConsumption ? `AND l.ledgerAccountId NOT IN (SELECT x.id FROM ledger_accounts x WHERE x.societyId = :societyId AND x.code = '${CODE.fundTransferIn}')` : ''} ${f.fundId ? 'AND l.fundId = :fundId' : ''}
       GROUP BY l.ledgerAccountId`,
     { societyId: f.societyId, from: f.from, to: f.to, fundId: f.fundId },
     opts,

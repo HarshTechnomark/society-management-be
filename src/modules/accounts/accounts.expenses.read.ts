@@ -1,10 +1,10 @@
 import { Op, type WhereOptions } from 'sequelize';
-import { Expense, JournalLine, LedgerAccount, User } from '../../models';
+import { AuditLog, Expense, Fund, JournalLine, LedgerAccount, User } from '../../models';
 import type { Ctx } from '../../types/context';
 import { audit } from '../../utils/audit';
 import { NotFoundError } from '../../utils/errors';
 import { toCsv } from '../society-setup/society-setup.csv';
-import { AUDIT, ERR, PERM } from './accounts.constants';
+import { AUDIT, ENTITY, ERR, PERM } from './accounts.constants';
 import { placeholderAccountsApprovals } from './accounts.ports';
 import { n } from './accounts.shared';
 import { billFileInfo, billFiles } from './accounts.expenses.files';
@@ -19,8 +19,19 @@ export async function loadExpense(societyId: number, id: number): Promise<Expens
   return e;
 }
 
+/**
+ * Module 14 rule `EXPENSE` (spec 13 BR-13-25, module 14 7.5): up to Rs 5,000 auto-approves, above it a second person decides. The
+ * development approvals placeholder does not auto-approve yet, so today `approvalRequired` is true for every submitted expense.
+ */
+export const EXPENSE_AUTO_APPROVE_PAISE = 500_000;
+
 type Labels = Awaited<ReturnType<typeof ledgerLabels>>;
-export function expenseDto(e: Expense, labels: Labels, makers?: Map<number, string>) {
+export interface DtoNames {
+  makers?: Map<number, string>;
+  funds?: Map<number, string>;
+}
+export function expenseDto(e: Expense, labels: Labels, names: DtoNames = {}) {
+  const makers = names.makers;
   const head = labels.get(n(e.ledgerAccountId)) ?? null;
   const paidFrom = labels.get(n(e.paidFromLedgerAccountId)) ?? null;
   return {
@@ -44,6 +55,7 @@ export function expenseDto(e: Expense, labels: Labels, makers?: Map<number, stri
     paymentMode: e.paymentMode,
     paymentReference: e.paymentReference,
     fundId: e.fundId ? n(e.fundId) : null,
+    fundName: e.fundId ? (names.funds?.get(n(e.fundId)) ?? null) : null,
     collectionId: e.collectionId ? n(e.collectionId) : null,
     vendorId: e.vendorId ? n(e.vendorId) : null,
     vendorBillId: e.vendorBillId ? n(e.vendorBillId) : null,
@@ -52,6 +64,12 @@ export function expenseDto(e: Expense, labels: Labels, makers?: Map<number, stri
     rejectionReason: e.rejectionReason,
     cancelReason: e.cancelReason,
     reversalReason: e.reversalReason,
+    journalEntryId: e.journalEntryId ? n(e.journalEntryId) : null,
+    approvedBy: e.approvedBy ? n(e.approvedBy) : null,
+    approvedByName: e.approvedBy ? (makers?.get(n(e.approvedBy)) ?? null) : null,
+    approvedAt: e.approvedBy && e.postedAt ? e.postedAt.toISOString() : null,
+    approvalRequired: true,
+    approvalThresholdPaise: EXPENSE_AUTO_APPROVE_PAISE,
     postedAt: e.postedAt ? e.postedAt.toISOString() : null,
     reversedAt: e.reversedAt ? e.reversedAt.toISOString() : null,
     createdBy: n(e.createdBy),
@@ -66,10 +84,17 @@ const labelIds = (rows: Expense[]): number[] =>
 
 /** The names of the makers, so the list can say who entered each expense. */
 async function makerNames(rows: Expense[]): Promise<Map<number, string>> {
-  const ids = [...new Set(rows.map(e => n(e.createdBy)).filter(Boolean))];
+  const ids = [...new Set(rows.flatMap(e => [n(e.createdBy), n(e.approvedBy)]).filter(Boolean))];
   if (!ids.length) return new Map();
   const users = await User.findAll({ where: { id: ids }, attributes: ['id', 'name'] });
   return new Map(users.map(u => [n(u.id), u.name ?? '']));
+}
+
+async function fundNames(societyId: number, rows: Expense[]): Promise<Map<number, string>> {
+  const ids = [...new Set(rows.map(e => n(e.fundId)).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const funds = await Fund.findAll({ where: { societyId, id: ids }, attributes: ['id', 'name'] });
+  return new Map(funds.map(f => [n(f.id), f.name]));
 }
 
 /** The list item shape, or the same plus the 8.5 detail parts. */
@@ -77,8 +102,21 @@ export async function viewExpense(ctx: Ctx, id: number, detail = false) {
   const e = await loadExpense(ctx.society!.id, id);
   const labels = await ledgerLabels(labelIds([e]));
   const makers = await makerNames([e]);
-  const dto = expenseDto(e, labels, makers);
+  const dto = expenseDto(e, labels, { makers, funds: await fundNames(ctx.society!.id, [e]) });
   if (!detail) return dto;
+  const log = await AuditLog.findAll({
+    where: { societyId: ctx.society!.id, entityType: ENTITY.expense, entityId: String(id) },
+    order: [
+      ['createdAt', 'ASC'],
+      ['id', 'ASC'],
+    ],
+  });
+  const timeline = log.map(a => ({
+    at: a.createdAt?.toISOString() ?? null,
+    action: a.action,
+    actorName: a.actorName,
+    reason: a.reason,
+  }));
 
   const files = billFiles()
     .list(id)
@@ -97,6 +135,7 @@ export async function viewExpense(ctx: Ctx, id: number, detail = false) {
   const canReverse = e.status === 'POSTED' && ctx.permissions?.has(PERM.expensesApprove) && !mine;
   return {
     ...dto,
+    timeline,
     files,
     approval: e.approvalRequestId ? { requestId: n(e.approvalRequestId), status: req?.status ?? null } : null,
     journal: e.journalEntryId
@@ -164,8 +203,9 @@ export async function listExpenses(ctx: Ctx, q: ExpenseListQuery) {
   });
   const labels = await ledgerLabels(labelIds(rows));
   const makers = await makerNames(rows);
+  const funds = await fundNames(ctx.society!.id, rows);
   return {
-    data: rows.map(e => expenseDto(e, labels, makers)),
+    data: rows.map(e => expenseDto(e, labels, { makers, funds })),
     pagination: {
       page: q.page,
       limit: q.limit,
@@ -192,6 +232,7 @@ export async function exportExpenses(ctx: Ctx, q: Omit<ExpenseListQuery, 'page' 
     limit: EXPORT_MAX_ROWS,
   });
   const labels = await ledgerLabels(labelIds(rows));
+  const funds = await fundNames(ctx.society!.id, rows);
   const file = toCsv(
     [
       'Expense',
@@ -209,11 +250,11 @@ export async function exportExpenses(ctx: Ctx, q: Omit<ExpenseListQuery, 'page' 
       'Paid from',
       'Mode',
       'Reference',
-      'Fund id',
+      'Fund',
       'Voucher',
     ],
     rows.map(e => {
-      const d = expenseDto(e, labels);
+      const d = expenseDto(e, labels, { funds });
       return [
         d.displayId,
         d.expenseDate,
@@ -230,7 +271,7 @@ export async function exportExpenses(ctx: Ctx, q: Omit<ExpenseListQuery, 'page' 
         d.paidFrom?.name ?? '',
         d.paymentMode,
         d.paymentReference ?? '',
-        d.fundId ?? '',
+        d.fundName ?? '',
         d.voucherNo ?? '',
       ];
     }),

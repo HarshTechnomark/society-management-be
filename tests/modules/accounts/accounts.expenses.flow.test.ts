@@ -174,6 +174,15 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
     expect(await balanceOf(w.sid, '4900')).toBe(-4_500_000);
     expect(await balanceOf(w.sid, '5330')).toBe(4_500_000);
     expect(await balanceOf(w.sid, '1110-001')).toBe(5_500_000);
+    // the list and the detail name the fund, the detail carries the journal link and a timeline
+    expect(r.body.data).toMatchObject({ fundName: 'Repair and maintenance fund', approvalRequired: true });
+    const detail = (await w.c('get', `/expenses/${r.body.data.id}`)).body.data;
+    expect(detail.journalEntryId).toEqual(expect.any(Number));
+    expect(detail.timeline.map((t: { action: string }) => t.action)).toContain('accounts.expense.created');
+    const list = (await w.c('get', '/expenses')).body.data;
+    expect(list.find((x: { id: number }) => x.id === r.body.data.id).fundName).toBe(
+      'Repair and maintenance fund',
+    );
   });
 
   it('T13-40: the same Idempotency-Key gives one expense; the same key with another body is 409', async () => {

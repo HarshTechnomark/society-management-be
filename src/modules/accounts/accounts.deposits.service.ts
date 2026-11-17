@@ -1,5 +1,5 @@
 import { Op, UniqueConstraintError, type WhereOptions } from 'sequelize';
-import { Deposit, Invoice, LedgerAccount, PaymentOrder, Unit } from '../../models';
+import { AuditLog, Deposit, Invoice, LedgerAccount, PaymentOrder, Unit } from '../../models';
 import type { DepositAdjustment } from '../../models/deposit.model';
 import { now } from '../../lib/clock';
 import { formatRupees } from '../../lib/money';
@@ -263,10 +263,32 @@ export async function depositSummary(societyId: number) {
   return { heldPaise, refundedPaise, forfeitedPaise };
 }
 
-export async function getDeposit(societyId: number, id: number): Promise<DepositDto> {
+export async function getDeposit(
+  societyId: number,
+  id: number,
+): Promise<
+  DepositDto & {
+    timeline?: { at: string | null; action: string; actorName: string | null; reason: string | null }[];
+  }
+> {
   const d = await Deposit.findOne({ where: { id, societyId } });
   if (!d) throw depositNotFound();
-  return depositDto(d, await unitLabelOf(societyId, n(d.unitId)));
+  const log = await AuditLog.findAll({
+    where: { societyId, entityType: 'deposit', entityId: String(id) },
+    order: [
+      ['createdAt', 'ASC'],
+      ['id', 'ASC'],
+    ],
+  });
+  return {
+    ...depositDto(d, await unitLabelOf(societyId, n(d.unitId))),
+    timeline: log.map(a => ({
+      at: a.createdAt?.toISOString() ?? null,
+      action: a.action,
+      actorName: a.actorName,
+      reason: a.reason,
+    })),
+  };
 }
 
 /** `GET /me/deposits`: the deposits of the caller's units. */
@@ -1048,7 +1070,18 @@ export async function cancelDeposit(
     if (d.invoiceId) {
       const inv = await Invoice.findByPk(n(d.invoiceId), { transaction: t });
       if (inv && (n(inv.paidPaise) > 0 || inv.status === 'PAID'))
-        throw wrongState('A payment was already made against the deposit invoice');
+        throw new AppError(
+          409,
+          ERR.invalidState,
+          'A payment has already been applied to this deposit; reverse it first or request a refund',
+          [
+            {
+              field: 'id',
+              message:
+                'A payment has already been applied to this deposit; reverse it first or request a refund',
+            },
+          ],
+        );
       await invoices.requestCancel(ctx, n(d.invoiceId), input.reason, t);
     }
     const before = snap(d);

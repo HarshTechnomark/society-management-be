@@ -1,3 +1,4 @@
+import './accounts.notices.templates';
 import { registerProcessor, registerRepeatable } from '../../lib/queue';
 import { ACCOUNTS_QUEUE, JOBS } from './accounts.constants';
 import { registerSettlementJobs } from './accounts.settlements.jobs';
