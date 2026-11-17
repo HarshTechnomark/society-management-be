@@ -41,8 +41,8 @@ import type { AccountsSeedReport } from './accounts';
  * journal, a renovation deposit held for one flat, an access card deposit refunded, a posted fund transfer and a PARSED bank
  * statement whose lines match the demo payments. Green Park CHS gets two posted expenses. Everything goes through the module's services
  * (never written by hand) as the society's chairman. Each piece is idempotent by its own marker, so a second run adds nothing.
- * The statement is the bank's view of the HDFC ledger for the last 60 days (`sampleStatementCsv`): opening = book balance at the start of
- * the period, one line per bank posting with its own reference, signed running balance, closing = opening + credits - debits. Two lines are
+ * The statement is the bank's view of the HDFC ledger from 3 days before the earliest bank posting of the demo data (`sampleStatementCsv`), so no book entry
+ * predates it: opening = book balance at the start of the period (the opening entry), one line per bank posting with its own reference, signed running balance, closing = opening + credits - debits. Two lines are
  * deliberately not in the books: a bank charge of Rs 23.60 (debit) and an interest credit of Rs 1,042.00. Once every other line is matched the
  * BRS difference is statement minus books = +Rs 1,018.40 (1,042.00 - 23.60); it is 0 after the user creates the two entries.
  * NOTE: the approvals port is the in-memory placeholder, so the pending expense's request vanishes with the seed process; module 14
