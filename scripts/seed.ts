@@ -102,6 +102,11 @@ async function main(): Promise<void> {
     );
     const cm = await seedCommittee();
     out(`committee: created ${cm.created.join('; ') || 'none'}, skipped ${cm.skipped.length}`);
+    // module 13: chart, bank accounts, funds and opening balances come BEFORE billing and payments (their journals need a collection bank account)
+    const accBooks = await seedAccounts('books');
+    out(
+      `accounts-books: created ${accBooks.created.join('; ') || 'none'}, skipped ${accBooks.skipped.join('; ') || 'none'}`,
+    );
     const bs = await seedBillingSetup();
     out(
       `billing-setup: heads for ${bs.heads.join(', ') || 'none'}, rules created ${bs.rules.length}, skipped ${bs.skipped.length}`,
@@ -119,9 +124,11 @@ async function main(): Promise<void> {
     // module 12: demo payments, cheques, refund and collections (each part registers its seeder in seeders/payments.ts)
     const pay = await seedPayments();
     out(`payments: created ${pay.created.join('; ') || 'none'}, skipped ${pay.skipped.join('; ') || 'none'}`);
-    // module 13: the chart of accounts for every society (each part registers its demo seeder in seeders/accounts.ts)
-    const acc = await seedAccounts();
-    out(`accounts: created ${acc.created.join('; ') || 'none'}, skipped ${acc.skipped.join('; ') || 'none'}`);
+    // module 13 demo data (expenses, journal, deposits, transfer, statement): needs the payments above
+    const acc = await seedAccounts('demo');
+    out(
+      `accounts-demo: created ${acc.created.join('; ') || 'none'}, skipped ${acc.skipped.join('; ') || 'none'}`,
+    );
     const pb = await seedPlatformBilling();
     out(
       `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,
