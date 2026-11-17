@@ -1,5 +1,7 @@
 import { Fund, JournalEntry, LedgerAccount, Society, sequelize } from '../src/models';
 import { istDate, now } from '../src/lib/clock';
+import { financialYearOf } from '../src/utils/numberSequences';
+import { fyRange } from '../src/modules/accounts/accounts.reports.service';
 import { ensureBooks } from '../src/modules/accounts/accounts.chart';
 import { postJournal } from '../src/modules/accounts/accounts.engine';
 import type { JournalLineInput } from '../src/modules/accounts/accounts.types';
@@ -73,7 +75,7 @@ export async function seedAccountsOpening(): Promise<AccountsSeedReport> {
       await postJournal(
         ctx,
         {
-          date: `${istDate(now()).slice(0, 8)}01`,
+          date: fyRange(financialYearOf(istDate(now()))).from, // 1 April: before every demo posting
           voucherType: 'OPENING_BALANCE',
           refType: 'opening',
           refId: REF,

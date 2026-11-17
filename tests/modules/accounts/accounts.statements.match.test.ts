@@ -440,41 +440,32 @@ describe('plan gating and isolation (2.2, T13-35)', () => {
 });
 
 describe('dev sample statement', () => {
-  it('lists identical amounts once, so the sample auto-matches, one manual match, the charge entry and the BRS reconcile to 0', async () => {
+  it('gives identical amounts their own references, so the sample auto-matches, the charge and the interest get entries and the BRS reconciles to 0', async () => {
     await bookIn(w, '2026-11-10', 1_000_000, { instrumentRef: 'UTR5550001112' });
-    for (let i = 0; i < 4; i++) await bookIn(w, '2026-11-11', 250_000);
+    for (let i = 0; i < 4; i++) await bookIn(w, '2026-11-11', 250_000, { instrumentRef: `UTR555000200${i}` });
     await bookIn(w, '2026-11-12', 77_700);
     const res = await request(app)
       .get('/api/v1/dev/accounts/sample-statement')
       .query({ bankAccountId: w.bankId });
     const { id } = await importFile(w, Buffer.from(res.text.replace(/^\uFEFF/, ''), 'utf8'));
-    // utr + one of the four identical + the unique amount + the bank charge
-    expect(await stmt(id)).toMatchObject({ status: 'PARSED', lineCount: 4, matchedCount: 2 });
-    const identical = (await BankStatementLine.findOne({
-      where: { importId: id, matchStatus: 'UNMATCHED', creditPaise: 250_000 },
-    }))!;
-    const cands = await w.c('get', `/accounts/bank-statement-lines/${identical.id}/candidates`);
-    expect(cands.body.data).toHaveLength(4);
-    const m = await post(`/accounts/bank-statement-lines/${identical.id}/match`, {
-      journalLineId: cands.body.data[0].journalLineId,
-      version: identical.version,
-    });
-    expect(m.status, JSON.stringify(m.body)).toBe(200);
-    const charge = (await BankStatementLine.findOne({ where: { importId: id, matchStatus: 'UNMATCHED' } }))!;
-    expect(
-      (
-        await post(`/accounts/bank-statement-lines/${charge.id}/create-entry`, {
-          ledgerAccountCode: '5600',
-          version: charge.version,
-        })
-      ).status,
-    ).toBe(201);
+    // six postings (five by reference, one by its unique amount), the bank charge and the interest credit
+    expect(await stmt(id)).toMatchObject({ status: 'PARSED', lineCount: 8, matchedCount: 6 });
+    const open = await BankStatementLine.findAll({ where: { importId: id, matchStatus: 'UNMATCHED' } });
+    expect(open).toHaveLength(2);
+    for (const l of open) {
+      const code = Number(l.creditPaise) > 0 ? '4300' : '5600';
+      const r = await post(`/accounts/bank-statement-lines/${l.id}/create-entry`, {
+        ledgerAccountCode: code,
+        version: l.version,
+      });
+      expect(r.status, JSON.stringify(r.body)).toBe(201);
+    }
     const fresh = await stmt(id);
     const rec = await post(`/accounts/bank-statements/${id}/mark-reconciled`, { version: fresh.version });
     expect(rec.status, JSON.stringify(rec.body)).toBe(200);
     const brs = (await w.c('get', `/accounts/bank-accounts/${w.bankId}/brs`)).body.data;
     expect(brs.differencePaise).toBe(0);
-    expect(brs.unclearedDebitsPaise).toBe(750_000);
+    expect(brs.unclearedDebitsPaise).toBe(0);
   });
 
   it('builds a CSV from the recent postings that imports and auto-matches, plus one unmatched bank charge', async () => {
@@ -487,7 +478,7 @@ describe('dev sample statement', () => {
     expect(res.headers['content-type']).toMatch(/text\/csv/);
     const { id } = await importFile(w, Buffer.from(res.text.replace(/^\uFEFF/, ''), 'utf8'));
     const s = await stmt(id);
-    expect(s).toMatchObject({ status: 'PARSED', lineCount: 3, matchedCount: 2 });
+    expect(s).toMatchObject({ status: 'PARSED', lineCount: 4, matchedCount: 2 });
     expect((await request(app).get('/api/v1/dev/accounts/sample-statement')).status).toBe(400);
     expect(
       (await request(app).get('/api/v1/dev/accounts/sample-statement').query({ bankAccountId: 999999 }))
