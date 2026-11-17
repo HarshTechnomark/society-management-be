@@ -38,6 +38,12 @@ const schema = z.object({
   // module 07 (platform operations): provider credential key ring `1:<base64>,2:<base64>` (32 bytes each), required in production
   PROVIDER_CREDENTIALS_KEYS: z.string().optional(),
   PROVIDER_CREDENTIALS_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).max(255).optional(),
+  // module 13 (accounts): AES-256-GCM key of bank account numbers (32 bytes, base64); required in production. Development and tests
+  // fall back to a fixed built-in key when it is unset (see accounts.bank.crypto.ts), so no helper has to edit its .env files.
+  BANK_ACCOUNT_ENCRYPTION_KEY: z
+    .string()
+    .refine(v => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes in base64')
+    .optional(),
   STATUS_PAGE_ORIGIN: z.string().url().optional(),
   AUDIT_ARCHIVE_PREFIX: z.string().min(1).default('platform/audit-archive'),
   COOKIE_SECURE: z
@@ -105,6 +111,8 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
     throw new Error(
       'Invalid environment:\n  PROVIDER_CREDENTIALS_KEYS: required in production (with PROVIDER_CREDENTIALS_ACTIVE_KEY_VERSION)',
     );
+  if (r.data.NODE_ENV === 'production' && !r.data.BANK_ACCOUNT_ENCRYPTION_KEY)
+    throw new Error('Invalid environment:\n  BANK_ACCOUNT_ENCRYPTION_KEY: required in production');
   if (r.data.PROVIDERS_MODE === 'real') {
     const unset = [
       'PLATFORM_GATEWAY_ACCOUNT_ID',

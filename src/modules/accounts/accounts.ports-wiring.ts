@@ -54,6 +54,7 @@ export function installRealJournal(): void {
     societyBalance: {
       get: async societyId => ({ balancePaise: (await readSocietyBalance(societyId)).totalPaise }),
     },
-    // TODO(13.2): funds: realFundsPort, bankAccounts: realBankAccountsPort (after the module 12 tests stop using made-up ids)
+    funds: realFundsPort,
+    bankAccounts: realBankAccountsPort,
   });
 }

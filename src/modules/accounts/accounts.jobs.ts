@@ -1,6 +1,7 @@
 import { registerProcessor, registerRepeatable } from '../../lib/queue';
 import { ACCOUNTS_QUEUE, JOBS } from './accounts.constants';
 import { verifyJob } from './accounts.verify';
+import { registerFundJobs } from './accounts.funds.jobs';
 
 /**
  * Registry of the jobs of queue `accounts` (section 9.1). The foundation registers `accounts:balance-verify` (daily 02:30 IST; with
@@ -11,6 +12,7 @@ export function registerAccountsJobs(): void {
   registerProcessor(ACCOUNTS_QUEUE, JOBS.balanceVerify, verifyJob);
   registerRepeatable(ACCOUNTS_QUEUE, JOBS.balanceVerify, { dailyAtIst: '02:30' });
   // parts add their registration here, one line each:
+  registerFundJobs(); // 13.2 funds: FUND_TRANSFER approval type
   // registerJournalJobs(); // 13.1: MANUAL_JOURNAL approval type
   // registerExpenseJobs(); // 13.2: EXPENSE and FUND_TRANSFER approval types
   // registerStatementJobs(); // 13.3: settlement-reconcile, statement-parse, auto-match, clearing-age

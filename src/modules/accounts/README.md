@@ -142,6 +142,6 @@ Spec: 8.3, 8.17, 8.18, 8.19, 8.21 and 8.20 deposits; F05, F16, F20 to F22; secti
 
 - [x] Foundation (13.0)
 - [ ] 13.1 journal, balance, opening balances
-- [ ] 13.2 expenses, funds, bank accounts, cash book
+- [ ] 13.2 expenses, funds, bank accounts, cash book (13.2b funds and bank accounts done: `accounts.funds.*`, `accounts.bank.*`, seeder `accounts-bank.ts`, module 12 ports `realFundsPort` / `realBankAccountsPort` installed; expenses and cash book (13.2a) pending)
 - [ ] 13.3 settlements and statements
 - [ ] 13.4 deposits, periods, reports

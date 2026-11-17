@@ -145,7 +145,7 @@ describe('modules 11 and 12 post through the real engine', () => {
     expect(await paymentsPorts().journal.isDateLocked(sid, '2026-10-15')).toBe(false);
   });
 
-  it('the fund and bank account lookups of 13.2 are ready but not installed yet', async () => {
+  it('the fund and bank account lookups of 13.2 are installed behind the module 12 ports', async () => {
     const w = await paymentsWorld({ flats: 1 });
     const sid = w.society.id!;
     await sequelize.transaction(t => ensureBooks(t, sid));
@@ -160,8 +160,10 @@ describe('modules 11 and 12 post through the real engine', () => {
       id: bankAccountId,
       label: 'Test bank (XXXXXX4821)',
     });
-    // module 12 keeps its permissive placeholders until 13.2 swaps them
-    expect(await paymentsPorts().funds.exists(sid, 999_999)).toBe(true);
-    expect(await paymentsPorts().bankAccounts.get(sid, 999_999)).not.toBeNull();
+    // module 12 now sees real funds and bank accounts (made-up ids are refused)
+    expect(await paymentsPorts().funds.exists(sid, 999_999)).toBe(false);
+    expect(await paymentsPorts().funds.exists(sid, fundId)).toBe(true);
+    expect(await paymentsPorts().bankAccounts.get(sid, 999_999)).toBeNull();
+    expect((await paymentsPorts().bankAccounts.get(sid, bankAccountId))!.id).toBe(bankAccountId);
   });
 });

@@ -1,4 +1,5 @@
 import { backfillBooks } from '../src/modules/accounts/accounts.public';
+import { seedAccountsBank } from './accounts-bank';
 
 /**
  * Module 13 demo seed (not run in production, except the chart which is also the backfill for existing societies). The foundation
@@ -22,6 +23,7 @@ async function seedChart(): Promise<AccountsSeedReport> {
 
 export const ACCOUNTS_SEEDERS: { name: string; run: () => Promise<AccountsSeedReport> }[] = [
   { name: 'chart', run: seedChart },
+  { name: 'bank', run: seedAccountsBank }, // 13.2
 ];
 
 export async function seedAccounts(): Promise<AccountsSeedReport> {
