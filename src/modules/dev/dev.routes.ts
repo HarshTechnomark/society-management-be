@@ -26,6 +26,7 @@ import * as journalApprovals from '../accounts/accounts.journal.approvals-hook';
 import { APPROVAL_TYPES as PAYMENT_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as refundApprovals from '../payments/payments.refunds.approvals-hook';
 import * as offlineApprovals from '../payments/payments.offline.approvals-hook';
+import { expenseApprovals } from '../accounts/accounts.expenses.approvals-hook';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
@@ -249,6 +250,7 @@ const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
  */
 const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [ACCOUNTS_APPROVAL_TYPES.manualJournal]: journalApprovals, // 13.1b
+  EXPENSE: expenseApprovals, // 13.2a
 };
 
 async function decideAccounts(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {

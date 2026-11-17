@@ -143,5 +143,7 @@ Spec: 8.3, 8.17, 8.18, 8.19, 8.21 and 8.20 deposits; F05, F16, F20 to F22; secti
 - [x] Foundation (13.0)
 - [ ] 13.1 journal, balance, opening balances
 - [ ] 13.2 expenses, funds, bank accounts, cash book
+  - [x] 13.2a expenses and cash book (prefix `accounts.expenses`, `accounts.cashbook`): routes 5 to 14 of section 8, `EXPENSE` approval type and dev hook, placeholder bill files port `accounts.expenses.files.ts`
+  - [ ] 13.2b funds and bank accounts
 - [ ] 13.3 settlements and statements
 - [ ] 13.4 deposits, periods, reports
