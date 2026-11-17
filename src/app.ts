@@ -44,6 +44,7 @@ import { accountsJournalRoutes } from './modules/accounts/accounts.journal.route
 import { accountsExpensesRoutes } from './modules/accounts/accounts.expenses.routes';
 import { accountsDepositsRoutes } from './modules/accounts/accounts.deposits.routes';
 import { accountsPeriodsRoutes } from './modules/accounts/accounts.periods.routes';
+import { accountsReportsRoutes } from './modules/accounts/accounts.reports.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -148,6 +149,7 @@ export function createApp(): Express {
   // module 13 (13.4a): deposits, period lock and year close
   api.use(accountsDepositsRoutes);
   api.use(accountsPeriodsRoutes);
+  api.use(accountsReportsRoutes); // module 13.4b: reports, exports, resident finances
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

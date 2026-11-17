@@ -412,6 +412,10 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /accounts/deposits/:id/refund-paid',
       'POST /accounts/deposits/:id/cancel',
       'POST /accounts/financial-years/:fy/close',
+      // module 13 (13.4b): another society's fund is 404 FUND_NOT_FOUND on the resident statement (tests/modules/accounts/accounts.reports.http.test.ts)
+      'GET /me/society-finances/funds/:id/statement',
+      // :report is a report name, not an id; ledgerAccountId and fundId of another society are 404 (tests/modules/accounts/accounts.reports.test.ts)
+      'GET /accounts/reports/:report',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
