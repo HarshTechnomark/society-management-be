@@ -75,6 +75,9 @@ export interface PlaceholderAccountsApproval {
   entityId: number;
   societyId: number | null;
   requestedBy: number | null;
+  /** For the development approvals page (title and amount of what is asked). */
+  title?: string;
+  amountPaise?: number;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
 }
 /** Requests the placeholder `approvals.request` created: the development approvals page (`?source=accounts`) decides them. */
@@ -95,6 +98,8 @@ export const defaultAccountsPorts: AccountsPorts = {
         entityId: input.entityId,
         societyId: ctx.society?.id ?? null,
         requestedBy: ctx.user?.id ?? null,
+        ...(typeof input.title === 'string' ? { title: input.title } : {}),
+        ...(typeof input.amountPaise === 'number' ? { amountPaise: input.amountPaise } : {}),
         status: 'PENDING',
       });
       return { id, status: 'PENDING' };
@@ -102,7 +107,11 @@ export const defaultAccountsPorts: AccountsPorts = {
     resubmit: async (_ctx, id, input, t) => {
       record('approvals.resubmit', { id, ...input }, t);
       const r = placeholderAccountsApprovals.get(id);
-      if (r) r.status = 'PENDING';
+      if (r) {
+        r.status = 'PENDING';
+        if (typeof input.title === 'string') r.title = input.title;
+        if (typeof input.amountPaise === 'number') r.amountPaise = input.amountPaise;
+      }
     },
     cancel: async (_ctx, id, reason, t) => {
       record('approvals.cancel', { id, reason }, t);

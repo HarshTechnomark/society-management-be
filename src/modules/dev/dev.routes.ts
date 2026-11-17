@@ -241,7 +241,11 @@ devRoutes.get(
     );
     const accountsPending = [...placeholderAccountsApprovals.values()]
       .filter(a => a.status === 'PENDING')
-      .map(a => row(a, 'accounts'));
+      .map(a => ({
+        ...row(a, 'accounts'),
+        ...(a.title ? { title: a.title } : {}),
+        ...(a.amountPaise ? { amountPaise: a.amountPaise } : {}),
+      }));
     ok(res, [...part2, ...part3, ...billing, ...paymentsPending, ...accountsPending]);
   }),
 );
