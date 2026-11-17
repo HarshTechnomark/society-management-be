@@ -92,7 +92,16 @@ export async function seedBillingOpening(): Promise<BillingOpeningSeedReport> {
     version: 1,
   });
   const [a, b, c, d, e, f] = billable;
-  const ctx: Ctx = systemCtx('seed-billing-opening');
+  const ctx: Ctx = {
+    ...systemCtx('seed-billing-opening'),
+    society: {
+      id: societyId,
+      name: society.name,
+      status: society.status,
+      timezone: 'Asia/Kolkata',
+      planKey: '',
+    },
+  };
   const toPost: [number, { id: number; label: string }, [number, number, number]][] = [
     [2, a!, [1_250_000, 0, 0]],
     [3, b!, [820_050, 63_550, 0]],
