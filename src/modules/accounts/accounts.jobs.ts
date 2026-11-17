@@ -7,6 +7,7 @@ import { verifyJob } from './accounts.verify';
 import { registerJournalJobs } from './accounts.journal.jobs';
 import { registerExpenseJobs } from './accounts.expenses.jobs';
 import { registerReportJobs } from './accounts.reports.jobs';
+import { registerFundJobs } from './accounts.funds.jobs';
 
 /**
  * Registry of the jobs of queue `accounts` (section 9.1). The foundation registers `accounts:balance-verify` (daily 02:30 IST; with
@@ -19,6 +20,7 @@ export function registerAccountsJobs(): void {
   // parts add their registration here, one line each:
   registerJournalJobs(); // 13.1b: MANUAL_JOURNAL approval type
   registerExpenseJobs(); // 13.2a: EXPENSE approval type
+  registerFundJobs(); // 13.2 funds: FUND_TRANSFER approval type
   // registerJournalJobs(); // 13.1: MANUAL_JOURNAL approval type
   // registerExpenseJobs(); // 13.2: EXPENSE and FUND_TRANSFER approval types
   registerSettlementJobs(); // 13.3a: settlement-reconcile, clearing-age

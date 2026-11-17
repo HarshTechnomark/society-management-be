@@ -78,6 +78,8 @@ export interface PlaceholderAccountsApproval {
   /** For the development approvals page (title and amount of what is asked). */
   title?: string;
   amountPaise?: number;
+  /** The `payload` of the request (13.2 fund transfers read it back on approval; module 14 keeps it on the request row). */
+  payload?: Record<string, unknown>;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
 }
 /** Requests the placeholder `approvals.request` created: the development approvals page (`?source=accounts`) decides them. */
@@ -93,6 +95,7 @@ export const defaultAccountsPorts: AccountsPorts = {
       const id = ++fakeSeq;
       placeholderAccountsApprovals.set(id, {
         id,
+        payload: input.payload,
         type: input.type,
         entityType: input.entityType,
         entityId: input.entityId,

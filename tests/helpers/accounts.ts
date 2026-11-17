@@ -5,6 +5,8 @@ import { setPaymentsPorts } from '../../src/modules/payments/payments.ports';
 import { setAccountsPorts } from '../../src/modules/accounts/accounts.ports';
 import { installRealJournal } from '../../src/modules/accounts/accounts.ports-wiring';
 import { ensureBooks } from '../../src/modules/accounts/accounts.chart';
+import { accountNumberHash, encryptAccountNumber } from '../../src/modules/accounts/accounts.bank.crypto';
+import { nextLedgerCode } from '../../src/modules/accounts/accounts.bank.shared';
 import { postJournal } from '../../src/modules/accounts/accounts.engine';
 import type { PostJournalInput } from '../../src/modules/accounts/accounts.types';
 import { systemCtx, type Ctx } from '../../src/types/context';
@@ -113,6 +115,74 @@ export async function addCollectionBank(societyId: number, ledgerId: number): Pr
      VALUES (?, ?, 'Test bank', 'Test Bank', 'HDFC0001234', 'Test CHS', 'enc', '4821', ?, 1, ?, ?)`,
     {
       replacements: [societyId, ledgerId, `h${ledgerId}${Date.now()}`.padEnd(64, '0'), at, at],
+      type: QueryTypes.INSERT,
+    },
+  );
+  return Number(res);
+}
+
+/** A real fund with its `2440-NNN` / `2450-NNN` ledger (what `POST /accounts/funds` creates), for tests that need a fund id of module 12. */
+export async function addFund(
+  societyId: number,
+  name = 'Test event fund',
+  fundType: 'COLLECTION' | 'CUSTOM' = 'COLLECTION',
+): Promise<number> {
+  return sequelize.transaction(async t => {
+    await ensureBooks(t, societyId);
+    const groupCode = fundType === 'CUSTOM' ? '2450' : '2440';
+    const group = (await LedgerAccount.findOne({ where: { societyId, code: groupCode }, transaction: t }))!;
+    const code = await nextLedgerCode(societyId, groupCode, t);
+    const ledger = await LedgerAccount.create(
+      {
+        societyId,
+        code,
+        name,
+        accountType: 'FUND',
+        subtype: 'FUND',
+        parentId: Number(group.id),
+        isSystem: true,
+      } as never,
+      { transaction: t },
+    );
+    const f = await Fund.create(
+      { societyId, fundType, name, nameKey: name.toLowerCase(), ledgerAccountId: Number(ledger.id) } as never,
+      { transaction: t },
+    );
+    return Number(f.id);
+  });
+}
+
+/** A real, verified bank account with its `1110-NNN` ledger (collection account unless `collection: false`). Returns the bank account id. */
+export async function addBankAccount(
+  societyId: number,
+  o: { collection?: boolean; number?: string; ifsc?: string; displayName?: string } = {},
+): Promise<number> {
+  const number = o.number ?? `5020${String(Date.now()).slice(-9)}${Math.floor(Math.random() * 90 + 10)}`;
+  const ifsc = o.ifsc ?? 'HDFC0001234';
+  const code = await sequelize.transaction(async t => {
+    await ensureBooks(t, societyId);
+    return nextLedgerCode(societyId, '1110', t);
+  });
+  const ledger = await addBankLedger(societyId, code, `Bank - ${o.displayName ?? 'Test'}`);
+  const at = new Date();
+  const [res] = await sequelize.query(
+    `INSERT INTO bank_accounts (societyId, ledgerAccountId, displayName, bankName, ifsc, accountHolderName, accountNumberEnc,
+       accountNumberLast4, accountNumberHash, isCollectionAccount, verificationStatus, verifiedAt, createdAt, updatedAt)
+     VALUES (?, ?, ?, 'HDFC Bank', ?, 'Test CHS', ?, ?, ?, ?, 'VERIFIED', ?, ?, ?)`,
+    {
+      replacements: [
+        societyId,
+        Number(ledger.id),
+        o.displayName ?? 'Test',
+        ifsc,
+        encryptAccountNumber(societyId, number),
+        number.slice(-4),
+        accountNumberHash(ifsc, number),
+        o.collection === false ? 0 : 1,
+        at,
+        at,
+        at,
+      ],
       type: QueryTypes.INSERT,
     },
   );

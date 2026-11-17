@@ -306,6 +306,15 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /collections/:id/requests/export',
       'POST /collection-requests/:id/waive',
       'GET /collections/:id/statement',
+      // module 13 (13.2): another society's fund or bank account id is 404 FUND_NOT_FOUND / BANK_ACCOUNT_NOT_FOUND (tests/modules/accounts/accounts.funds.test.ts and accounts.bank.test.ts)
+      'GET /accounts/funds/:id/statement',
+      'PATCH /accounts/funds/:id',
+      'GET /accounts/bank-accounts/:id',
+      'PATCH /accounts/bank-accounts/:id',
+      'POST /accounts/bank-accounts/:id/verify',
+      'POST /accounts/bank-accounts/:id/set-collection',
+      'POST /accounts/bank-accounts/:id/close',
+      'GET /accounts/bank-accounts/:id/reveal',
       // module 11 (11.1): another society's charge head, billing rule or split rule id is 404 CHARGE_HEAD_NOT_FOUND / RULE_NOT_FOUND / SPLIT_RULE_NOT_FOUND on every route (tests/modules/billing/access.test.ts, T11-40)
       'PATCH /billing/charge-heads/:id',
       'DELETE /billing/charge-heads/:id',
