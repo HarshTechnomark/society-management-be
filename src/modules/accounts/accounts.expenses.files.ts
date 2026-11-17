@@ -54,6 +54,7 @@ let current: BillFilesPort = defaultBillFiles;
 export const billFiles = (): BillFilesPort => current;
 /** Module 01 and tests replace the port; call with nothing to restore the placeholder. */
 export const setBillFiles = (p?: BillFilesPort): void => {
+  if (!p) placeholderBillLinks.clear();
   current = p ?? defaultBillFiles;
 };
 

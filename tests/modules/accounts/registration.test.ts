@@ -121,7 +121,6 @@ describe('public interface of section 8.20 and 8.21', () => {
     });
     const stubs: (() => Promise<unknown>)[] = [
       () => balance.history(),
-      () => expenses.listForCollection(w.sid, 1),
       () => deposits.request(w.user, {} as never, {} as never),
       () => deposits.requestRefund(w.user, 1, { deductionPaise: 0, reason: 'x' }, {} as never),
       () => settlements.ingest(),
@@ -131,6 +130,7 @@ describe('public interface of section 8.20 and 8.21', () => {
       () => expenseReports.byHead(w.sid, { from: '2026-04-01', to: '2027-03-31' }, { deadlineMs: 100 }),
       () => expenseReports.tdsDeposited(w.sid, { from: '2026-04-01', to: '2027-03-31' }, { deadlineMs: 100 }),
     ];
+    expect(await expenses.listForCollection(w.sid, 1)).toEqual([]); // filled by 13.2a
     for (const s of stubs)
       await expect(s()).rejects.toMatchObject({ status: 501, code: 'NOT_IMPLEMENTED_IN_FOUNDATION' });
     expect(() => deposits.registerOwner('booking', {} as never)).toThrow(/not implemented/);
