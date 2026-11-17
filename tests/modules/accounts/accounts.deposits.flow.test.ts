@@ -187,6 +187,9 @@ describe('deposit lifecycle (T13-26)', () => {
     await reject(p.refundApprovalRequestId!, 'Inspect first', decider);
     const back = await svc.getDeposit(sid(), d.id);
     expect(back).toMatchObject({ status: 'HELD', refundRequestedPaise: 0 });
+    expect(back.timeline!.find(e => e.action === 'accounts.deposit.refund_rejected')).toMatchObject({
+      reason: 'Inspect first',
+    });
     const again = await svc.requestDepositRefund(admin, d.id, { version: back.version });
     expect(again.status).toBe('REFUND_PENDING');
   });
@@ -306,6 +309,19 @@ describe('create, opening, cancel and sync', () => {
       svc.cancelDeposit(admin, h.id, { reason: 'Too late', version: h.version }),
     ).rejects.toMatchObject({
       status: 409,
+    });
+  });
+
+  it('cancel of a part-paid deposit says why', async () => {
+    const d = await make({ unitId: w.units[1]!.id });
+    const inv = (await Invoice.findByPk(d.invoiceId!))!;
+    await inv.update({ paidPaise: 1_000, outstandingPaise: Number(inv.totalPaise) - 1_000 });
+    await expect(
+      svc.cancelDeposit(admin, d.id, { reason: 'Raised by mistake', version: d.version }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'INVALID_STATE',
+      errors: [{ message: expect.stringContaining('payment has already been applied') }],
     });
   });
 
