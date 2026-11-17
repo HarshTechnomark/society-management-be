@@ -381,6 +381,14 @@ describe('routes (8.18)', () => {
       { headers: idemH() },
     );
     expect(again.body.code).toBe('UNLOCK_ALREADY_ACTIVE');
+    const g2 = await w.c('get', '/accounts/periods');
+    expect(g2.body.data.maxUnlockHours).toBe(72);
+    expect(g2.body.data.pendingUnlock).toMatchObject({
+      approvalRequestId: un.body.data.approvalRequestId,
+      fromDate: '2026-09-01',
+      hours: 3,
+      reason: 'Fix September entries',
+    });
   });
 
   it('year close answers 202 with a job id and 422 with the reasons', async () => {
