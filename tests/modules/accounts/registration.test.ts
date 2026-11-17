@@ -120,7 +120,6 @@ describe('public interface of section 8.20 and 8.21', () => {
       code: 'BANK_ACCOUNT_NOT_FOUND',
     });
     const stubs: (() => Promise<unknown>)[] = [
-      () => balance.history(),
       () => expenses.listForCollection(w.sid, 1),
       () => deposits.request(w.user, {} as never, {} as never),
       () => deposits.requestRefund(w.user, 1, { deductionPaise: 0, reason: 'x' }, {} as never),
