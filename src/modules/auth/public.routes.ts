@@ -41,6 +41,7 @@ export const PUBLIC_ROUTES: Rule[] = [
   { method: 'GET', path: /^\/public\/pay\/[^/]{1,64}$/ },
   { method: 'POST', path: /^\/public\/pay\/[^/]{1,64}\/(checkout|verify)$/ },
   { method: 'GET', path: '/dev/approvals' },
+  { method: 'GET', path: '/dev/accounts/sample-statement' }, // module 13 (13.3b): sample bank statement CSV for demos
   { method: 'POST', path: /^\/dev\/approvals\/\d+\/(approve|reject)$/ },
   { method: 'POST', path: /^\/webhooks\// },
 ];

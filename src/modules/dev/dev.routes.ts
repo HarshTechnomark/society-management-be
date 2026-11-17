@@ -34,11 +34,27 @@ import * as noteApprovals from '../billing/billing.notes.approvals-hook';
 import { APPROVAL_TYPES } from '../billing/billing.constants';
 import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
+import { sampleStatementCsv } from '../accounts/accounts.statements.sample';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
 /** Non-production only: the last messages the fake adapters recorded (module 01 section 8.9). */
 export const devRoutes = Router();
+
+/** Module 13 (13.3b): a sample bank statement CSV built from the recent postings on a bank account, to demo import and auto-match. */
+devRoutes.get(
+  '/accounts/sample-statement',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.query.bankAccountId);
+    if (!Number.isInteger(id) || id < 1)
+      throw new AppError(400, 'VALIDATION_FAILED', 'bankAccountId is required');
+    const { csv } = await sampleStatementCsv(id);
+    res
+      .type('text/csv')
+      .set('Content-Disposition', `attachment; filename="sample-statement-${id}.csv"`)
+      .send(csv);
+  }),
+);
 
 devRoutes.get(
   '/inbox',

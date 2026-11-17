@@ -38,6 +38,7 @@ import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes
 import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
 import { paymentsOfflineRoutes } from './modules/payments/payments.offline.routes';
 import { accountsSettlementRoutes } from './modules/accounts/accounts.settlements.routes';
+import { accountsStatementRoutes } from './modules/accounts/accounts.statements.routes';
 import { paymentsCollectionsRoutes } from './modules/payments/payments.collections.routes';
 import { accountsJournalRoutes } from './modules/accounts/accounts.journal.routes';
 import { accountsExpensesRoutes } from './modules/accounts/accounts.expenses.routes';
@@ -140,6 +141,8 @@ export function createApp(): Express {
   api.use(accountsExpensesRoutes);
   // module 13 (13.3a): gateway settlements
   api.use(accountsSettlementRoutes);
+  // module 13 (13.3b): bank statements, matching and the bank reconciliation statement
+  api.use(accountsStatementRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

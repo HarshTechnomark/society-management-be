@@ -393,6 +393,17 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /expenses/:id/submit',
       'POST /expenses/:id/withdraw',
       'POST /expenses/:id/reverse',
+      // module 13 (13.3b): another society's statement is 404 STATEMENT_NOT_FOUND, its line 404 STATEMENT_LINE_NOT_FOUND and its bank account's BRS 404 BANK_ACCOUNT_NOT_FOUND (tests/modules/accounts/accounts.statements.match.test.ts, T13-35)
+      'GET /accounts/bank-statements/:id',
+      'GET /accounts/bank-statements/:id/lines',
+      'POST /accounts/bank-statements/:id/auto-match',
+      'POST /accounts/bank-statements/:id/mark-reconciled',
+      'GET /accounts/bank-statement-lines/:id/candidates',
+      'POST /accounts/bank-statement-lines/:id/match',
+      'POST /accounts/bank-statement-lines/:id/unmatch',
+      'POST /accounts/bank-statement-lines/:id/ignore',
+      'POST /accounts/bank-statement-lines/:id/create-entry',
+      'GET /accounts/bank-accounts/:id/brs',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
