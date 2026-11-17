@@ -42,6 +42,8 @@ import { accountsStatementRoutes } from './modules/accounts/accounts.statements.
 import { paymentsCollectionsRoutes } from './modules/payments/payments.collections.routes';
 import { accountsJournalRoutes } from './modules/accounts/accounts.journal.routes';
 import { accountsExpensesRoutes } from './modules/accounts/accounts.expenses.routes';
+import { accountsDepositsRoutes } from './modules/accounts/accounts.deposits.routes';
+import { accountsPeriodsRoutes } from './modules/accounts/accounts.periods.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -143,6 +145,9 @@ export function createApp(): Express {
   api.use(accountsSettlementRoutes);
   // module 13 (13.3b): bank statements, matching and the bank reconciliation statement
   api.use(accountsStatementRoutes);
+  // module 13 (13.4a): deposits, period lock and year close
+  api.use(accountsDepositsRoutes);
+  api.use(accountsPeriodsRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

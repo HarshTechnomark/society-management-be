@@ -404,6 +404,14 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /accounts/bank-statement-lines/:id/ignore',
       'POST /accounts/bank-statement-lines/:id/create-entry',
       'GET /accounts/bank-accounts/:id/brs',
+      // module 13 (13.4a): another society's deposit is 404 DEPOSIT_NOT_FOUND on every deposit route; the year close path carries only the financial year of the caller's society (tests/modules/accounts/accounts.deposits.flow.test.ts and accounts.periods.test.ts, T13-35)
+      'GET /accounts/deposits/:id',
+      'POST /accounts/deposits/:id/deduct',
+      'POST /accounts/deposits/:id/forfeit',
+      'POST /accounts/deposits/:id/refund-request',
+      'POST /accounts/deposits/:id/refund-paid',
+      'POST /accounts/deposits/:id/cancel',
+      'POST /accounts/financial-years/:fy/close',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

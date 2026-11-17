@@ -35,6 +35,8 @@ import { APPROVAL_TYPES } from '../billing/billing.constants';
 import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
 import { sampleStatementCsv } from '../accounts/accounts.statements.sample';
+import * as accountsPeriodApprovals from '../accounts/accounts.periods.approvals-hook';
+import { APPROVAL_TYPES as ACCOUNTS_APPROVAL_TYPES } from '../accounts/accounts.constants';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
@@ -281,6 +283,8 @@ const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
 const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [ACCOUNTS_APPROVAL_TYPES.manualJournal]: journalApprovals, // 13.1b
   EXPENSE: expenseApprovals, // 13.2a
+  [ACCOUNTS_APPROVAL_TYPES.depositRefund]: accountsPeriodApprovals, // 13.4
+  [ACCOUNTS_APPROVAL_TYPES.periodUnlock]: accountsPeriodApprovals, // 13.4
 };
 
 async function decideAccounts(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {

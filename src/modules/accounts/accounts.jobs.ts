@@ -2,6 +2,7 @@ import { registerProcessor, registerRepeatable } from '../../lib/queue';
 import { ACCOUNTS_QUEUE, JOBS } from './accounts.constants';
 import { registerSettlementJobs } from './accounts.settlements.jobs';
 import { registerStatementJobs } from './accounts.statements.jobs';
+import { registerPeriodJobs } from './accounts.periods.jobs';
 import { verifyJob } from './accounts.verify';
 import { registerJournalJobs } from './accounts.journal.jobs';
 import { registerExpenseJobs } from './accounts.expenses.jobs';
@@ -23,4 +24,5 @@ export function registerAccountsJobs(): void {
   // registerStatementJobs(); // 13.3: settlement-reconcile, statement-parse, auto-match, clearing-age
   registerStatementJobs(); // 13.3b: statement-parse and auto-match (settlement-reconcile and clearing-age come with 13.3a)
   // registerPeriodJobs(); // 13.4: deposit-sync, relock, year-close, report-export, PERIOD_UNLOCK and DEPOSIT_REFUND approval types
+  registerPeriodJobs(); // 13.4: deposit-sync, relock, year-close, PERIOD_UNLOCK and DEPOSIT_REFUND approval types (report-export follows with 13.4b)
 }

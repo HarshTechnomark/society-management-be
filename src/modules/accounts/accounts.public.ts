@@ -31,6 +31,8 @@ import { notImplemented } from './accounts.shared';
 import { ingestSettlement, type SettlementIngestInput } from './accounts.settlements.service';
 import type { DepositKind } from './accounts.constants';
 import type { Ctx, FundDto, Transaction } from './accounts.types';
+import { registerOwner, requestDeposit, requestRefundForOwner } from './accounts.deposits.service';
+import type { FundDto } from './accounts.types';
 
 export { accountReports, cashBook, expenseReports, ReadTimeoutError } from './accounts.readers';
 export { setAccountsPorts } from './accounts.ports';
@@ -76,49 +78,18 @@ export const expenses = {
   listForCollection: listExpensesForCollection,
 };
 
-export interface DepositOwnerHooks {
-  onDepositPaid(
-    ctx: Ctx,
-    input: { refType: string; refId: number; depositId: number },
-    t: Transaction,
-  ): Promise<void>;
-  onDepositRefunded(
-    ctx: Ctx,
-    input: { refType: string; refId: number; depositId: number; refundedPaise: number },
-    t: Transaction,
-  ): Promise<void>;
-}
+export type { DepositOwnerHooks } from './accounts.deposits.service';
 export const deposits = {
+  /**
+   * 13.4: creates the deposit and its module 11 invoice in the caller's transaction. The module 12 payment order is created after that
+   * transaction commits (it cannot see the uncommitted invoice), so `paymentOrderId` is `null` here; the resident pays from the Pay list
+   * or the order link that follows (`dedupeKey deposit:<id>`).
+   */
+  request: requestDeposit,
   /** 13.4 */
-  request: async (
-    _ctx: Ctx,
-    _input: {
-      unitId: number;
-      kind: DepositKind;
-      refType: string;
-      refId: number;
-      amountPaise: number;
-      payerResidentId?: number;
-      title?: string;
-      dueDate?: string;
-    },
-    _t: Transaction,
-  ): Promise<{ depositId: number; invoiceId: number; paymentOrderId: number }> => {
-    throw notImplemented('deposits.request');
-  },
-  /** 13.4 */
-  requestRefund: async (
-    _ctx: Ctx,
-    _depositId: number,
-    _input: { deductionPaise: number; reason: string },
-    _t: Transaction,
-  ): Promise<void> => {
-    throw notImplemented('deposits.requestRefund');
-  },
+  requestRefund: requestRefundForOwner,
   /** 13.4: one owner per refType; a duplicate registration throws at boot. */
-  registerOwner: (_refType: string, _hooks: DepositOwnerHooks): void => {
-    throw notImplemented('deposits.registerOwner');
-  },
+  registerOwner,
 };
 
 export const settlements = {
