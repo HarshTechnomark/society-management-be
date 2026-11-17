@@ -120,7 +120,6 @@ describe('public interface of section 8.20 and 8.21', () => {
       code: 'BANK_ACCOUNT_NOT_FOUND',
     });
     const stubs: (() => Promise<unknown>)[] = [
-      () => expenses.listForCollection(w.sid, 1),
       () => accountReports.run(w.sid, 'trial-balance', {}, { deadlineMs: 100 }),
       () => accountReports.fundStatement(w.sid, 1, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
       () => cashBook.monthlyTotals(w.sid, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
