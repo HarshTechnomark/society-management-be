@@ -425,6 +425,7 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /me/society-finances/funds/:id/statement',
       // :report is a report name, not an id; ledgerAccountId and fundId of another society are 404 (tests/modules/accounts/accounts.reports.test.ts)
       'GET /accounts/reports/:report',
+      'GET /accounts/exports/:id', // another society's or another user's export job is 404 EXPORT_NOT_FOUND (accounts.reports.http.test.ts)
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
