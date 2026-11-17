@@ -30,6 +30,8 @@ import * as noteApprovals from '../billing/billing.notes.approvals-hook';
 import { APPROVAL_TYPES } from '../billing/billing.constants';
 import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
+import * as accountsPeriodApprovals from '../accounts/accounts.periods.approvals-hook';
+import { APPROVAL_TYPES as ACCOUNTS_APPROVAL_TYPES } from '../accounts/accounts.constants';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
@@ -245,7 +247,10 @@ const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
  * 13.1 `MANUAL_JOURNAL`, 13.2 `EXPENSE` and `FUND_TRANSFER`, 13.4 `PERIOD_UNLOCK` and `DEPOSIT_REFUND` (`APPROVAL_TYPES` of `accounts.constants`).
  * A hook gets the placeholder request id (`placeholderAccountsApprovals.get(id)` has the entity) and the deciding context.
  */
-const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {};
+const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
+  [ACCOUNTS_APPROVAL_TYPES.depositRefund]: accountsPeriodApprovals, // 13.4
+  [ACCOUNTS_APPROVAL_TYPES.periodUnlock]: accountsPeriodApprovals, // 13.4
+};
 
 async function decideAccounts(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderAccountsApprovals.get(id);
