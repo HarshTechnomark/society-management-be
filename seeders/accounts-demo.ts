@@ -37,7 +37,7 @@ import type { AccountsSeedReport } from './accounts';
 
 /**
  * Module 13 demo data (not run in production; runs AFTER the payments seeders). Sky Heights CHS gets posted expenses (electricity,
- * security with TDS, lift AMC with GST, a repair paid from the repair fund), one expense left PENDING_APPROVAL, one DRAFT manual
+ * security with TDS, lift AMC with GST, a repair paid from the repair fund), one expense left as a DRAFT (to submit in the browser), one DRAFT manual
  * journal, a renovation deposit held for one flat, an access card deposit refunded, a posted fund transfer and a PARSED bank
  * statement whose lines match the demo payments. Green Park CHS gets two posted expenses. Everything goes through the module's services
  * (never written by hand) as the society's chairman. Each piece is idempotent by its own marker, so a second run adds nothing.
@@ -142,7 +142,9 @@ async function expense(w: World, s: ExpenseSpec, report: AccountsSeedReport): Pr
     vendorId: null,
     vendorBillId: null,
     fileIds: [file],
-    submit: true,
+    // the demo 'pending' expense stays a DRAFT: the approvals port is an in-memory placeholder, so a request created by the
+    // seed would vanish with the seed process; submitting it in the browser creates the request on the running server
+    submit: !s.pending,
   } as never);
   if (!s.pending) {
     const e = await Expense.findByPk(dto.id);
@@ -154,7 +156,9 @@ async function expense(w: World, s: ExpenseSpec, report: AccountsSeedReport): Pr
       req.status = 'APPROVED';
     }
   }
-  report.created.push(`${w.slug} expense ${s.tag}${s.pending ? ' (pending approval)' : ' (posted)'}`);
+  report.created.push(
+    `${w.slug} expense ${s.tag}${s.pending ? ' (draft, submit it in the browser)' : ' (posted)'}`,
+  );
 }
 
 async function draftJournal(w: World, report: AccountsSeedReport): Promise<void> {
