@@ -264,7 +264,9 @@ describe('POST /payments/:id/reallocate (8.15, BR-12-23, BR-12-34)', () => {
       'PAID',
     ]);
     expect(await advanceBalance(w.society.id!, w.units[0]!.id)).toBe(100_000);
-    const j = journals().find(x => x.refType === 'payment' && x.narration.startsWith('Reallocation'))!;
+    const j = journals().find(
+      x => x.refType === 'payment_realloc' && x.narration.startsWith('Reallocation'),
+    )!;
     expect(j.lines.reduce((s: number, l: any) => s + l.debitPaise, 0)).toBe(
       j.lines.reduce((s: number, l: any) => s + l.creditPaise, 0),
     );

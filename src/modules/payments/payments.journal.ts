@@ -99,7 +99,8 @@ export function mirrorJournal(
   return {
     date: today,
     voucherType: 'JOURNAL',
-    refType: 'payment',
+    // `payment_reversal`, not `payment`: module 13 keeps (refType, refId) unique among posted entries, and the receipt journal owns ('payment', id)
+    refType: 'payment_reversal',
     refId: n(p.id),
     narration: `Reversal of receipt ${p.receiptNo ?? ''} · ${unitLabel}`.trim(),
     lines: [

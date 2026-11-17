@@ -334,8 +334,9 @@ export async function reallocatePayment(ctx: Ctx, societyId: number, id: number,
         {
           date: today,
           voucherType: 'JOURNAL',
-          refType: 'payment',
-          refId: id,
+          // one journal per reallocation: the payment's version after this change makes the source unique (module 13 dedupes on it)
+          refType: 'payment_realloc',
+          refId: `${id}:${n(p.version)}`,
           narration:
             `Reallocation of receipt ${p.receiptNo ?? ''} · ${await unitLabelOf(societyId, unitId, t)}`.trim(),
           lines: jl,

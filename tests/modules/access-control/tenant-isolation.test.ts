@@ -306,6 +306,15 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /collections/:id/requests/export',
       'POST /collection-requests/:id/waive',
       'GET /collections/:id/statement',
+      // module 13 (13.2): another society's fund or bank account id is 404 FUND_NOT_FOUND / BANK_ACCOUNT_NOT_FOUND (tests/modules/accounts/accounts.funds.test.ts and accounts.bank.test.ts)
+      'GET /accounts/funds/:id/statement',
+      'PATCH /accounts/funds/:id',
+      'GET /accounts/bank-accounts/:id',
+      'PATCH /accounts/bank-accounts/:id',
+      'POST /accounts/bank-accounts/:id/verify',
+      'POST /accounts/bank-accounts/:id/set-collection',
+      'POST /accounts/bank-accounts/:id/close',
+      'GET /accounts/bank-accounts/:id/reveal',
       // module 11 (11.1): another society's charge head, billing rule or split rule id is 404 CHARGE_HEAD_NOT_FOUND / RULE_NOT_FOUND / SPLIT_RULE_NOT_FOUND on every route (tests/modules/billing/access.test.ts, T11-40)
       'PATCH /billing/charge-heads/:id',
       'DELETE /billing/charge-heads/:id',
@@ -353,6 +362,10 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /billing/notes/:id/pdf-url',
       'PATCH /billing/notes/:id',
       'POST /billing/notes/:id/withdraw',
+      // module 13 (13.3a): another society's settlement id is 404 SETTLEMENT_NOT_FOUND (tests/modules/accounts/accounts.settlements.test.ts, T13-35)
+      'GET /accounts/settlements/:id',
+      'POST /accounts/settlements/:id/reconcile',
+      'POST /accounts/settlements/:id/accept-difference',
       // module 12 (12.4): another society's refund or mandate id is 404 REFUND_NOT_FOUND / MANDATE_NOT_FOUND (tests/modules/payments/refunds.test.ts and autopay.test.ts, T12-34)
       'GET /refunds/:id',
       'POST /refunds/:id/complete',
@@ -364,6 +377,12 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /payments/:id/cheque/clear',
       'POST /payments/:id/cheque/bounce',
       'POST /payments/:id/cheque/return',
+      // module 13 (13.1b): another society's journal id is 404 JOURNAL_NOT_FOUND on every route (tests/modules/accounts/accounts.journal.test.ts, T13-35)
+      'GET /accounts/journals/:id',
+      'PATCH /accounts/journals/:id',
+      'POST /accounts/journals/:id/submit',
+      'DELETE /accounts/journals/:id',
+      'POST /accounts/journals/:id/reverse',
       // module 12 (12.3): another society's payment is 404 PAYMENT_NOT_FOUND, another flat's payment or advance 404 PAYMENT_NOT_FOUND / UNIT_NOT_FOUND (tests/modules/payments/payments.admin.list.test.ts, payments.receipts.test.ts and payments.reverse.test.ts, T12-34, T12-35)
       'GET /payments/:id',
       'GET /payments/:id/receipt-url',
@@ -374,6 +393,39 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /me/payments/:id',
       'GET /me/payments/:id/receipt-url',
       'GET /units/:unitId/advances',
+      // module 13 (13.1): another society's ledger account id is 404 LEDGER_ACCOUNT_NOT_FOUND (tests/modules/accounts/accounts.ledger.test.ts)
+      'PATCH /accounts/ledger-accounts/:id',
+      // module 13 (13.2a): another society's expense id is 404 EXPENSE_NOT_FOUND on every route (tests/modules/accounts/accounts.expenses.rules.test.ts, T13-35)
+      'GET /expenses/:id',
+      'PATCH /expenses/:id',
+      'DELETE /expenses/:id',
+      'POST /expenses/:id/submit',
+      'POST /expenses/:id/withdraw',
+      'POST /expenses/:id/reverse',
+      // module 13 (13.3b): another society's statement is 404 STATEMENT_NOT_FOUND, its line 404 STATEMENT_LINE_NOT_FOUND and its bank account's BRS 404 BANK_ACCOUNT_NOT_FOUND (tests/modules/accounts/accounts.statements.match.test.ts, T13-35)
+      'GET /accounts/bank-statements/:id',
+      'GET /accounts/bank-statements/:id/lines',
+      'POST /accounts/bank-statements/:id/auto-match',
+      'POST /accounts/bank-statements/:id/mark-reconciled',
+      'GET /accounts/bank-statement-lines/:id/candidates',
+      'POST /accounts/bank-statement-lines/:id/match',
+      'POST /accounts/bank-statement-lines/:id/unmatch',
+      'POST /accounts/bank-statement-lines/:id/ignore',
+      'POST /accounts/bank-statement-lines/:id/create-entry',
+      'GET /accounts/bank-accounts/:id/brs',
+      // module 13 (13.4a): another society's deposit is 404 DEPOSIT_NOT_FOUND on every deposit route; the year close path carries only the financial year of the caller's society (tests/modules/accounts/accounts.deposits.flow.test.ts and accounts.periods.test.ts, T13-35)
+      'GET /accounts/deposits/:id',
+      'POST /accounts/deposits/:id/deduct',
+      'POST /accounts/deposits/:id/forfeit',
+      'POST /accounts/deposits/:id/refund-request',
+      'POST /accounts/deposits/:id/refund-paid',
+      'POST /accounts/deposits/:id/cancel',
+      'POST /accounts/financial-years/:fy/close',
+      // module 13 (13.4b): another society's fund is 404 FUND_NOT_FOUND on the resident statement (tests/modules/accounts/accounts.reports.http.test.ts)
+      'GET /me/society-finances/funds/:id/statement',
+      // :report is a report name, not an id; ledgerAccountId and fundId of another society are 404 (tests/modules/accounts/accounts.reports.test.ts)
+      'GET /accounts/reports/:report',
+      'GET /accounts/exports/:id', // another society's or another user's export job is 404 EXPORT_NOT_FOUND (accounts.reports.http.test.ts)
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

@@ -28,13 +28,25 @@ import { billingSetupRoutes } from './modules/billing/billing.setup.routes';
 import { billingLedgerRoutes } from './modules/billing/billing.ledger.routes';
 import { billingDuesRoutes } from './modules/billing/billing.dues.routes';
 import { billingResidentRoutes } from './modules/billing/billing.resident.routes';
+import { accountsBalanceRoutes } from './modules/accounts/accounts.balance.routes';
+import { accountsLedgerRoutes } from './modules/accounts/accounts.ledger.routes';
+import { accountsOpeningRoutes } from './modules/accounts/accounts.opening.routes';
 import { paymentsAdminRoutes } from './modules/payments/payments.admin.routes';
 import { paymentsOnlineRoutes } from './modules/payments/payments.online.routes';
 import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes';
 import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes';
 import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
 import { paymentsOfflineRoutes } from './modules/payments/payments.offline.routes';
+import { accountsSettlementRoutes } from './modules/accounts/accounts.settlements.routes';
+import { accountsStatementRoutes } from './modules/accounts/accounts.statements.routes';
 import { paymentsCollectionsRoutes } from './modules/payments/payments.collections.routes';
+import { accountsJournalRoutes } from './modules/accounts/accounts.journal.routes';
+import { accountsExpensesRoutes } from './modules/accounts/accounts.expenses.routes';
+import { accountsDepositsRoutes } from './modules/accounts/accounts.deposits.routes';
+import { accountsPeriodsRoutes } from './modules/accounts/accounts.periods.routes';
+import { accountsReportsRoutes } from './modules/accounts/accounts.reports.routes';
+import { accountsFundsRoutes } from './modules/accounts/accounts.funds.routes';
+import { accountsBankRoutes } from './modules/accounts/accounts.bank.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -124,6 +136,25 @@ export function createApp(): Express {
   api.use(paymentsOfflineRoutes);
   // module 12 (12.5): collections
   api.use(paymentsCollectionsRoutes);
+  // module 13 (13.1): society balance and history, chart of accounts, opening balances
+  api.use(accountsBalanceRoutes);
+  api.use(accountsLedgerRoutes);
+  api.use(accountsOpeningRoutes);
+  // module 13 (13.1b): journals list and detail, manual journal drafts, submit, cancel, reverse
+  api.use(accountsJournalRoutes);
+  // module 13 (13.2a): cash book and expenses
+  api.use(accountsExpensesRoutes);
+  // module 13 (13.3a): gateway settlements
+  api.use(accountsSettlementRoutes);
+  // module 13 (13.3b): bank statements, matching and the bank reconciliation statement
+  api.use(accountsStatementRoutes);
+  // module 13 (13.4a): deposits, period lock and year close
+  api.use(accountsDepositsRoutes);
+  api.use(accountsPeriodsRoutes);
+  api.use(accountsReportsRoutes); // module 13.4b: reports, exports, resident finances
+  // module 13 (13.2): funds, fund transfers and bank accounts
+  api.use(accountsFundsRoutes);
+  api.use(accountsBankRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

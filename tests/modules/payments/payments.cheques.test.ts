@@ -144,7 +144,7 @@ describe('cheque lifecycle (8.12)', () => {
     expect(Number(charge.totalPaise)).toBe(50_000);
     expect(charge.dueDate).toBe('2026-11-11');
     const mirror = journalCalls()
-      .filter(j => j.voucherType === 'JOURNAL' && j.refType === 'payment')
+      .filter(j => j.voucherType === 'JOURNAL' && j.refType === 'payment_reversal')
       .pop();
     expect(mirror.lines.find((l: any) => l.accountCode === 'CHEQUES_IN_CLEARING')).toMatchObject({
       creditPaise: 200_000,

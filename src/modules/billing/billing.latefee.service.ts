@@ -89,7 +89,11 @@ export async function runLateFeesForSociety(
     bump(result, 'FEATURE_OFF');
     return result;
   }
-  const ctx = opts.ctx ?? systemCtx('billing-late-fees');
+  // module 13 posts through this context, so it must carry the society (the journal engine needs it)
+  const ctx: Ctx = opts.ctx ?? {
+    ...systemCtx('billing-late-fees'),
+    society: { id: societyId, name: '', status: 'ACTIVE', timezone: 'Asia/Kolkata', planKey: '' },
+  };
   const policyRow = await policyFor(societyId, windowEnd);
   const policy = policyOf(policyRow);
   const policyId = policyRow?.id ?? null;

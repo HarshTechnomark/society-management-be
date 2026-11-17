@@ -13,6 +13,7 @@ import {
   devProcessRefund,
   devSimulateOrder,
 } from './dev.payments';
+import { devGenerateSettlement } from './dev.accounts';
 import { systemCtx, type Ctx } from '../../types/context';
 import { approveRequest, rejectRequest } from '../residents/residents.public';
 import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
@@ -20,20 +21,42 @@ import { approvalStore } from '../residents/residents.part3.ports';
 import { approvalStub } from '../residents/residents.part2.ports';
 import { placeholderApprovalRequests } from '../billing/billing.ports';
 import { placeholderPaymentApprovals } from '../payments/payments.ports';
+import { placeholderAccountsApprovals } from '../accounts/accounts.ports';
+import { APPROVAL_TYPES as ACCOUNTS_APPROVAL_TYPES } from '../accounts/accounts.constants';
+import * as journalApprovals from '../accounts/accounts.journal.approvals-hook';
 import { APPROVAL_TYPES as PAYMENT_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as refundApprovals from '../payments/payments.refunds.approvals-hook';
 import * as offlineApprovals from '../payments/payments.offline.approvals-hook';
+import { expenseApprovals } from '../accounts/accounts.expenses.approvals-hook';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
 import { APPROVAL_TYPES } from '../billing/billing.constants';
 import { APPROVAL_TYPES as PAYMENTS_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as collectionApprovals from '../payments/payments.collections.approvals-hook';
+import { sampleStatementCsv } from '../accounts/accounts.statements.sample';
+import * as accountsPeriodApprovals from '../accounts/accounts.periods.approvals-hook';
+import * as fundTransferApprovals from '../accounts/accounts.funds.approvals-hook';
 import { readOptionalSession } from '../../middlewares/auth.middleware';
 import { computeAccess, getSocietyInfo } from '../access-control/access-control.access';
 
 /** Non-production only: the last messages the fake adapters recorded (module 01 section 8.9). */
 export const devRoutes = Router();
+
+/** Module 13 (13.3b): a sample bank statement CSV built from the recent postings on a bank account, to demo import and auto-match. */
+devRoutes.get(
+  '/accounts/sample-statement',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.query.bankAccountId);
+    if (!Number.isInteger(id) || id < 1)
+      throw new AppError(400, 'VALIDATION_FAILED', 'bankAccountId is required');
+    const { csv } = await sampleStatementCsv(id);
+    res
+      .type('text/csv')
+      .set('Content-Disposition', `attachment; filename="sample-statement-${id}.csv"`)
+      .send(csv);
+  }),
+);
 
 devRoutes.get(
   '/inbox',
@@ -136,6 +159,19 @@ devRoutes.post(
   }),
 );
 
+/** Module 13 (13.3a): a gateway settlement built from the captured online payments no settlement lists yet. */
+devRoutes.post(
+  '/accounts/settlements/generate',
+  asyncHandler(async (req, res) => {
+    ok(
+      res,
+      await devGenerateSettlement((req.body ?? {}) as Record<string, unknown>),
+      'Settlement generated (development only)',
+      201,
+    );
+  }),
+);
+
 // ---------------------------------------------------------------- module 14 stand-in (development only)
 // Module 14 (approvals) does not exist yet. Requests that module 09 raises through its placeholder (renovation permits,
 // ownership transfers, and join requests or moves when the placeholder is in manual mode) wait here until someone decides.
@@ -178,9 +214,9 @@ async function deciderCtx(req: Request, societyId: number): Promise<Ctx> {
   };
 }
 
-type ApprovalSource = 'residents' | 'billing' | 'payments';
+type ApprovalSource = 'residents' | 'billing' | 'payments' | 'accounts';
 const sourceOf = (v: unknown): ApprovalSource =>
-  v === 'billing' ? 'billing' : v === 'payments' ? 'payments' : 'residents';
+  v === 'billing' ? 'billing' : v === 'payments' ? 'payments' : v === 'accounts' ? 'accounts' : 'residents';
 
 /** The requests still waiting for a decision. `source` says which module's placeholder holds it (ids can repeat across modules). */
 devRoutes.get(
@@ -204,7 +240,14 @@ devRoutes.get(
         .filter(a => a.status === 'PENDING')
         .map(async a => ({ ...row(a, 'payments'), ...(await paymentsApprovalDetails(a)) })),
     );
-    ok(res, [...part2, ...part3, ...billing, ...paymentsPending]);
+    const accountsPending = [...placeholderAccountsApprovals.values()]
+      .filter(a => a.status === 'PENDING')
+      .map(a => ({
+        ...row(a, 'accounts'),
+        ...(a.title ? { title: a.title } : {}),
+        ...(a.amountPaise ? { amountPaise: a.amountPaise } : {}),
+      }));
+    ok(res, [...part2, ...part3, ...billing, ...paymentsPending, ...accountsPending]);
   }),
 );
 
@@ -235,6 +278,33 @@ const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
   [PAYMENT_APPROVAL_TYPES.offlinePayment]: offlineApprovals,
   [PAYMENTS_APPROVAL_TYPES.collectionPublish]: collectionApprovals, // 12.5
 };
+
+/**
+ * Module 13 approval types and the hook that decides each (`?source=accounts`). Parts add their line here:
+ * 13.1 `MANUAL_JOURNAL`, 13.2 `EXPENSE` and `FUND_TRANSFER`, 13.4 `PERIOD_UNLOCK` and `DEPOSIT_REFUND` (`APPROVAL_TYPES` of `accounts.constants`).
+ * A hook gets the placeholder request id (`placeholderAccountsApprovals.get(id)` has the entity) and the deciding context.
+ */
+const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
+  [ACCOUNTS_APPROVAL_TYPES.manualJournal]: journalApprovals, // 13.1b
+  EXPENSE: expenseApprovals, // 13.2a
+  [ACCOUNTS_APPROVAL_TYPES.depositRefund]: accountsPeriodApprovals, // 13.4
+  [ACCOUNTS_APPROVAL_TYPES.periodUnlock]: accountsPeriodApprovals, // 13.4
+  [ACCOUNTS_APPROVAL_TYPES.fundTransfer]: fundTransferApprovals, // 13.2
+};
+
+async function decideAccounts(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
+  const r = placeholderAccountsApprovals.get(id);
+  if (!r) throw new AppError(404, 'NOT_FOUND', 'Approval request not found');
+  if (r.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');
+  const hook = ACCOUNTS_APPROVAL_HOOKS[r.type];
+  if (!hook) throw new AppError(422, 'UNKNOWN_APPROVAL_TYPE', `No development approval hook for ${r.type}`);
+  const ctx = await deciderCtx(req, r.societyId ?? 0);
+  if (decision === 'approve' && ctx.user && ctx.user.id === r.requestedBy)
+    throw new AppError(409, 'MAKER_CHECKER_VIOLATION', 'The person who requested this cannot approve it');
+  const out = decision === 'approve' ? await hook.approve(id, ctx) : await hook.reject(id, reason, ctx);
+  r.status = decision === 'approve' ? 'APPROVED' : 'REJECTED';
+  return out;
+}
 
 async function decidePayments(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderPaymentApprovals.get(id);
@@ -274,6 +344,7 @@ async function decide(
 ) {
   if (source === 'billing') return decideBilling(req, id, decision, reason);
   if (source === 'payments') return decidePayments(req, id, decision, reason);
+  if (source === 'accounts') return decideAccounts(req, id, decision, reason);
   const p3 = approvalStore.get(id);
   if (p3) {
     if (p3.status !== 'PENDING') throw new AppError(409, 'NOT_PENDING', 'This request was already decided');

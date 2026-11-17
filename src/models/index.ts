@@ -81,6 +81,18 @@ import { AutopayMandate } from './autopay-mandate.model';
 import { UnitAdvance } from './unit-advance.model';
 import { Collection } from './collection.model';
 import { CollectionRequest } from './collection-request.model';
+import { LedgerAccount } from './ledger-account.model';
+import { Fund } from './fund.model';
+import { JournalEntry } from './journal-entry.model';
+import { JournalLine } from './journal-line.model';
+import { SocietyBalance } from './society-balance.model';
+import { BalanceHistory } from './balance-history.model';
+import { BankAccount } from './bank-account.model';
+import { Expense } from './expense.model';
+import { Settlement } from './settlement.model';
+import { BankStatementImport } from './bank-statement-import.model';
+import { BankStatementLine } from './bank-statement-line.model';
+import { Deposit } from './deposit.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -182,6 +194,18 @@ const models = {
   UnitAdvance,
   Collection,
   CollectionRequest,
+  LedgerAccount,
+  Fund,
+  JournalEntry,
+  JournalLine,
+  SocietyBalance,
+  BalanceHistory,
+  BankAccount,
+  Expense,
+  Settlement,
+  BankStatementImport,
+  BankStatementLine,
+  Deposit,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -416,6 +440,40 @@ CollectionRequest.belongsTo(Collection, { foreignKey: 'collectionId' });
 CollectionRequest.belongsTo(Unit, { foreignKey: 'unitId' });
 CollectionRequest.hasMany(PaymentAllocation, { foreignKey: 'collectionRequestId' });
 
+// Module 13 associations (section 7).
+LedgerAccount.belongsTo(LedgerAccount, { as: 'parent', foreignKey: 'parentId' });
+LedgerAccount.hasMany(LedgerAccount, { as: 'children', foreignKey: 'parentId' });
+LedgerAccount.hasMany(JournalLine, { foreignKey: 'ledgerAccountId' });
+LedgerAccount.hasOne(BankAccount, { foreignKey: 'ledgerAccountId' });
+LedgerAccount.hasOne(Fund, { foreignKey: 'ledgerAccountId' });
+JournalEntry.hasMany(JournalLine, { as: 'lines', foreignKey: 'journalEntryId' });
+JournalEntry.belongsTo(JournalEntry, { as: 'reversalOf', foreignKey: 'reversalOfId' });
+JournalLine.belongsTo(JournalEntry, { foreignKey: 'journalEntryId' });
+JournalLine.belongsTo(LedgerAccount, { foreignKey: 'ledgerAccountId' });
+JournalLine.belongsTo(Fund, { foreignKey: 'fundId' });
+SocietyBalance.belongsTo(Society, { foreignKey: 'societyId' });
+SocietyBalance.hasMany(BalanceHistory, { foreignKey: 'societyId', sourceKey: 'societyId' });
+BalanceHistory.belongsTo(JournalEntry, { foreignKey: 'journalEntryId' });
+Fund.belongsTo(LedgerAccount, { foreignKey: 'ledgerAccountId' });
+Fund.hasMany(JournalLine, { foreignKey: 'fundId' });
+Fund.hasMany(Expense, { foreignKey: 'fundId' });
+Expense.belongsTo(LedgerAccount, { as: 'head', foreignKey: 'ledgerAccountId' });
+Expense.belongsTo(LedgerAccount, { as: 'paidFrom', foreignKey: 'paidFromLedgerAccountId' });
+Expense.belongsTo(Fund, { foreignKey: 'fundId' });
+Expense.belongsTo(BankAccount, { foreignKey: 'bankAccountId' });
+Expense.belongsTo(JournalEntry, { foreignKey: 'journalEntryId' });
+BankAccount.belongsTo(LedgerAccount, { foreignKey: 'ledgerAccountId' });
+BankAccount.hasMany(BankStatementImport, { foreignKey: 'bankAccountId' });
+BankAccount.hasMany(Settlement, { foreignKey: 'bankAccountId' });
+Settlement.belongsTo(BankAccount, { foreignKey: 'bankAccountId' });
+Settlement.belongsTo(JournalEntry, { foreignKey: 'journalEntryId' });
+BankStatementImport.belongsTo(BankAccount, { foreignKey: 'bankAccountId' });
+BankStatementImport.hasMany(BankStatementLine, { as: 'lines', foreignKey: 'importId' });
+BankStatementLine.belongsTo(BankStatementImport, { foreignKey: 'importId' });
+BankStatementLine.belongsTo(JournalLine, { as: 'matchedLine', foreignKey: 'matchedJournalLineId' });
+Deposit.belongsTo(LedgerAccount, { foreignKey: 'ledgerAccountId' });
+Deposit.belongsTo(Unit, { foreignKey: 'unitId' });
+
 /** All models, filled in as modules add them. */
 export const db = { sequelize, ...models };
 export {
@@ -500,6 +558,18 @@ export {
   UnitAdvance,
   Collection,
   CollectionRequest,
+  LedgerAccount,
+  Fund,
+  JournalEntry,
+  JournalLine,
+  SocietyBalance,
+  BalanceHistory,
+  BankAccount,
+  Expense,
+  Settlement,
+  BankStatementImport,
+  BankStatementLine,
+  Deposit,
 };
 
 export async function closeDb(): Promise<void> {

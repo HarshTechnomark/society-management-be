@@ -181,7 +181,7 @@ export async function clearCheque(ctx: Ctx, id: number, input: { clearedOn: stri
       {
         date: input.clearedOn,
         voucherType: 'CONTRA',
-        refType: 'payment',
+        refType: 'cheque_clearance',
         refId: n(p.id),
         narration: `Cheque ${p.referenceNo} cleared · ${label}`,
         lines: [
