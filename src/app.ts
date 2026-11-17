@@ -34,6 +34,7 @@ import { billingInvoicesRoutes } from './modules/billing/billing.invoices.routes
 import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes';
 import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
 import { paymentsOfflineRoutes } from './modules/payments/payments.offline.routes';
+import { accountsStatementRoutes } from './modules/accounts/accounts.statements.routes';
 import { paymentsCollectionsRoutes } from './modules/payments/payments.collections.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
@@ -124,6 +125,8 @@ export function createApp(): Express {
   api.use(paymentsOfflineRoutes);
   // module 12 (12.5): collections
   api.use(paymentsCollectionsRoutes);
+  // module 13 (13.3b): bank statements, matching and the bank reconciliation statement
+  api.use(accountsStatementRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

@@ -1,5 +1,6 @@
 import { registerProcessor, registerRepeatable } from '../../lib/queue';
 import { ACCOUNTS_QUEUE, JOBS } from './accounts.constants';
+import { registerStatementJobs } from './accounts.statements.jobs';
 import { verifyJob } from './accounts.verify';
 
 /**
@@ -14,5 +15,6 @@ export function registerAccountsJobs(): void {
   // registerJournalJobs(); // 13.1: MANUAL_JOURNAL approval type
   // registerExpenseJobs(); // 13.2: EXPENSE and FUND_TRANSFER approval types
   // registerStatementJobs(); // 13.3: settlement-reconcile, statement-parse, auto-match, clearing-age
+  registerStatementJobs(); // 13.3b: statement-parse and auto-match (settlement-reconcile and clearing-age come with 13.3a)
   // registerPeriodJobs(); // 13.4: deposit-sync, relock, year-close, report-export, PERIOD_UNLOCK and DEPOSIT_REFUND approval types
 }
