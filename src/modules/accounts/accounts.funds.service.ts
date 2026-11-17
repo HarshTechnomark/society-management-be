@@ -24,8 +24,12 @@ export interface FundItemDto {
   fundType: FundType;
   ledgerCode: string;
   balancePaise: number;
+  /** Contributions and other credits of the financial year, fund transfers left out. */
   inflowFyPaise: number;
+  /** Spending of the financial year (expenses paid from the fund), fund transfers left out. */
   outflowFyPaise: number;
+  movedInFyPaise: number;
+  movedOutFyPaise: number;
   purpose: string | null;
   usageRequiresResolution: boolean;
   showToResidents: boolean;
@@ -51,9 +55,13 @@ export async function listFunds(societyId: number, q: FundListQuery): Promise<Fu
     `SELECT f.id, f.name, f.fundType, f.purpose, f.usageRequiresResolution, f.showToResidents, f.status, f.version,
             l.code AS ledgerCode, -l.balancePaise AS balancePaise,
             COALESCE((SELECT SUM(jl.creditPaise) FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journalEntryId
-                       WHERE jl.ledgerAccountId = l.id AND je.status = 'POSTED' AND je.entryDate BETWEEN :fyStart AND :today), 0) AS inflowFyPaise,
+                       WHERE jl.ledgerAccountId = l.id AND je.status = 'POSTED' AND je.entryDate BETWEEN :fyStart AND :today AND je.refType <> 'fund_transfer'), 0) AS inflowFyPaise,
             COALESCE((SELECT SUM(jl.debitPaise) FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journalEntryId
-                       WHERE jl.ledgerAccountId = l.id AND je.status = 'POSTED' AND je.entryDate BETWEEN :fyStart AND :today), 0) AS outflowFyPaise
+                       WHERE jl.ledgerAccountId = l.id AND je.status = 'POSTED' AND je.entryDate BETWEEN :fyStart AND :today AND je.refType <> 'fund_transfer'), 0) AS outflowFyPaise,
+            COALESCE((SELECT SUM(jl.creditPaise) FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journalEntryId
+                       WHERE jl.ledgerAccountId = l.id AND je.status = 'POSTED' AND je.entryDate BETWEEN :fyStart AND :today AND je.refType = 'fund_transfer'), 0) AS movedInFyPaise,
+            COALESCE((SELECT SUM(jl.debitPaise) FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journalEntryId
+                       WHERE jl.ledgerAccountId = l.id AND je.status = 'POSTED' AND je.entryDate BETWEEN :fyStart AND :today AND je.refType = 'fund_transfer'), 0) AS movedOutFyPaise
        FROM funds f JOIN ledger_accounts l ON l.id = f.ledgerAccountId
       WHERE f.societyId = :societyId AND (:status = 'ALL' OR f.status = :status) AND (:fundType IS NULL OR f.fundType = :fundType)
       ORDER BY f.id`,
@@ -76,6 +84,8 @@ export async function listFunds(societyId: number, q: FundListQuery): Promise<Fu
     balancePaise: n(r.balancePaise),
     inflowFyPaise: n(r.inflowFyPaise),
     outflowFyPaise: n(r.outflowFyPaise),
+    movedInFyPaise: n(r.movedInFyPaise),
+    movedOutFyPaise: n(r.movedOutFyPaise),
     purpose: (r.purpose as string | null) ?? null,
     usageRequiresResolution: Boolean(r.usageRequiresResolution),
     showToResidents: Boolean(r.showToResidents),
@@ -97,6 +107,8 @@ export interface FundStatementRow {
   inPaise: number;
   outPaise: number;
   runningPaise: number;
+  /** CONTRIBUTION, EXPENSE (spending), TRANSFER_IN or TRANSFER_OUT. */
+  kind: 'CONTRIBUTION' | 'EXPENSE' | 'TRANSFER_IN' | 'TRANSFER_OUT';
 }
 
 export async function fundStatement(societyId: number, id: number, q: FundStatementQuery) {
@@ -116,7 +128,7 @@ export async function fundStatement(societyId: number, id: number, q: FundStatem
   );
   const lines = await sequelize.query<Record<string, unknown>>(
     `SELECT je.entryDate AS date, je.voucherNo, COALESCE(jl.lineNarration, je.narration) AS narration,
-            jl.creditPaise AS inPaise, jl.debitPaise AS outPaise
+            jl.creditPaise AS inPaise, jl.debitPaise AS outPaise, je.refType AS refType
        FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journalEntryId
       WHERE jl.ledgerAccountId = :ledgerId AND je.status = 'POSTED' AND je.entryDate BETWEEN :from AND :to
       ORDER BY je.entryDate, je.id, jl.lineNo`,
@@ -133,6 +145,14 @@ export async function fundStatement(societyId: number, id: number, q: FundStatem
       inPaise: n(l.inPaise),
       outPaise: n(l.outPaise),
       runningPaise: running,
+      kind:
+        l.refType === 'fund_transfer'
+          ? n(l.inPaise) > 0
+            ? ('TRANSFER_IN' as const)
+            : ('TRANSFER_OUT' as const)
+          : n(l.outPaise) > 0
+            ? ('EXPENSE' as const)
+            : ('CONTRIBUTION' as const),
     };
   });
   return {
