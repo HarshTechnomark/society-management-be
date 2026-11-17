@@ -23,6 +23,7 @@ import {
   readSocietyBalance,
 } from './accounts.lookup';
 import { assertAccountsPortsReady } from './accounts.ports';
+import { listForCollection as listExpensesForCollection } from './accounts.expenses.read';
 import { installRealJournal } from './accounts.ports-wiring';
 import { PURGE_TABLES, deleteRetainedAccounts, purgeAccounts } from './accounts.purge';
 import { notImplemented } from './accounts.shared';
@@ -72,12 +73,7 @@ export const bankAccounts = { get: getBankAccount };
 
 export const expenses = {
   /** 13.2: POSTED expenses with that `collectionId`; title = payee, category = transparencyCategory or head name; no bills, no payee contact. */
-  listForCollection: async (
-    _societyId: number,
-    _collectionId: number,
-  ): Promise<{ id: number; title: string; category: string; date: string; amountPaise: number }[]> => {
-    throw notImplemented('expenses.listForCollection');
-  },
+  listForCollection: listExpensesForCollection,
 };
 
 export interface DepositOwnerHooks {

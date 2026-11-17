@@ -24,6 +24,7 @@ import { placeholderAccountsApprovals } from '../accounts/accounts.ports';
 import { APPROVAL_TYPES as PAYMENT_APPROVAL_TYPES } from '../payments/payments.constants';
 import * as refundApprovals from '../payments/payments.refunds.approvals-hook';
 import * as offlineApprovals from '../payments/payments.offline.approvals-hook';
+import { expenseApprovals } from '../accounts/accounts.expenses.approvals-hook';
 import * as runApprovals from '../billing/billing.runs.approvals-hook';
 import * as ruleApprovals from '../billing/billing.rules.approvals-hook';
 import * as noteApprovals from '../billing/billing.notes.approvals-hook';
@@ -245,7 +246,9 @@ const PAYMENTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
  * 13.1 `MANUAL_JOURNAL`, 13.2 `EXPENSE` and `FUND_TRANSFER`, 13.4 `PERIOD_UNLOCK` and `DEPOSIT_REFUND` (`APPROVAL_TYPES` of `accounts.constants`).
  * A hook gets the placeholder request id (`placeholderAccountsApprovals.get(id)` has the entity) and the deciding context.
  */
-const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {};
+const ACCOUNTS_APPROVAL_HOOKS: Record<string, BillingApprovalHook> = {
+  EXPENSE: expenseApprovals, // 13.2a
+};
 
 async function decideAccounts(req: Request, id: number, decision: 'approve' | 'reject', reason: string) {
   const r = placeholderAccountsApprovals.get(id);

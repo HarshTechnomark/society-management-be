@@ -374,6 +374,13 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'GET /me/payments/:id',
       'GET /me/payments/:id/receipt-url',
       'GET /units/:unitId/advances',
+      // module 13 (13.2a): another society's expense id is 404 EXPENSE_NOT_FOUND on every route (tests/modules/accounts/accounts.expenses.rules.test.ts, T13-35)
+      'GET /expenses/:id',
+      'PATCH /expenses/:id',
+      'DELETE /expenses/:id',
+      'POST /expenses/:id/submit',
+      'POST /expenses/:id/withdraw',
+      'POST /expenses/:id/reverse',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
