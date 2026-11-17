@@ -440,6 +440,43 @@ describe('plan gating and isolation (2.2, T13-35)', () => {
 });
 
 describe('dev sample statement', () => {
+  it('lists identical amounts once, so the sample auto-matches, one manual match, the charge entry and the BRS reconcile to 0', async () => {
+    await bookIn(w, '2026-11-10', 1_000_000, { instrumentRef: 'UTR5550001112' });
+    for (let i = 0; i < 4; i++) await bookIn(w, '2026-11-11', 250_000);
+    await bookIn(w, '2026-11-12', 77_700);
+    const res = await request(app)
+      .get('/api/v1/dev/accounts/sample-statement')
+      .query({ bankAccountId: w.bankId });
+    const { id } = await importFile(w, Buffer.from(res.text.replace(/^\uFEFF/, ''), 'utf8'));
+    // utr + one of the four identical + the unique amount + the bank charge
+    expect(await stmt(id)).toMatchObject({ status: 'PARSED', lineCount: 4, matchedCount: 2 });
+    const identical = (await BankStatementLine.findOne({
+      where: { importId: id, matchStatus: 'UNMATCHED', creditPaise: 250_000 },
+    }))!;
+    const cands = await w.c('get', `/accounts/bank-statement-lines/${identical.id}/candidates`);
+    expect(cands.body.data).toHaveLength(4);
+    const m = await post(`/accounts/bank-statement-lines/${identical.id}/match`, {
+      journalLineId: cands.body.data[0].journalLineId,
+      version: identical.version,
+    });
+    expect(m.status, JSON.stringify(m.body)).toBe(200);
+    const charge = (await BankStatementLine.findOne({ where: { importId: id, matchStatus: 'UNMATCHED' } }))!;
+    expect(
+      (
+        await post(`/accounts/bank-statement-lines/${charge.id}/create-entry`, {
+          ledgerAccountCode: '5600',
+          version: charge.version,
+        })
+      ).status,
+    ).toBe(201);
+    const fresh = await stmt(id);
+    const rec = await post(`/accounts/bank-statements/${id}/mark-reconciled`, { version: fresh.version });
+    expect(rec.status, JSON.stringify(rec.body)).toBe(200);
+    const brs = (await w.c('get', `/accounts/bank-accounts/${w.bankId}/brs`)).body.data;
+    expect(brs.differencePaise).toBe(0);
+    expect(brs.unclearedDebitsPaise).toBe(750_000);
+  });
+
   it('builds a CSV from the recent postings that imports and auto-matches, plus one unmatched bank charge', async () => {
     await bookIn(w, '2026-11-10', 1_000_000, { instrumentRef: 'UTR5550001112' });
     await bookIn(w, '2026-11-11', 250_000);

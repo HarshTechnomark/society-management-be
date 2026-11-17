@@ -29,6 +29,7 @@ import {
   settlementReconcileJob,
 } from '../../../src/modules/accounts/accounts.settlements.jobs';
 import { accountsPortCalls, setAccountsPorts } from '../../../src/modules/accounts/accounts.ports';
+import { isPublicRoute } from '../../../src/modules/auth/public.routes';
 import { devGenerateSettlement } from '../../../src/modules/dev/dev.accounts';
 import { ensureBooks } from '../../../src/modules/accounts/accounts.chart';
 import { memberOf } from '../../helpers/society-setup';
@@ -395,6 +396,13 @@ describe('dev helper', () => {
       code: 'NOTHING_TO_SETTLE',
     });
     expect((await reconcileSettlement(sysCtx(w), sid, r.settlementId)).status).toBe('POSTED');
+  });
+});
+
+describe('dev routes need no session', () => {
+  it('the generate and sample-statement helpers are public routes', () => {
+    expect(isPublicRoute('POST', '/dev/accounts/settlements/generate')).toBe(true);
+    expect(isPublicRoute('GET', '/dev/accounts/sample-statement')).toBe(true);
   });
 });
 

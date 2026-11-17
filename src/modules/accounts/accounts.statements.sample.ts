@@ -8,7 +8,7 @@ import { bankNotFound } from './accounts.statements.shared';
 /**
  * Dev only (`GET /api/v1/dev/accounts/sample-statement?bankAccountId=`): a statement CSV built from the last 60 days of posted lines on
  * the bank's ledger (payments, settlements, expenses...), so a browser test can import it and see auto-match work. Lines that carry
- * an instrument reference (UTR, cheque number) appear with it (pass 1), the rest by amount and date (pass 2). One bank charge line
+ * an instrument reference (UTR, cheque number) appear with it (pass 1), the rest by amount and date (pass 2; identical amounts are listed once, see below). One bank charge line
  * is added that matches nothing, so "Create entry" (5600) can be shown. Columns: Date, Description, Reference, Debit, Credit, Balance.
  */
 const HEADER = ['Date', 'Description', 'Reference', 'Debit', 'Credit', 'Balance'];
@@ -51,7 +51,18 @@ export async function sampleStatementCsv(bankAccountId: number): Promise<{ csv: 
   );
   let balance = n(before?.b);
   const out: string[][] = [];
-  for (const r of rows) {
+  // Pass 2 of the auto-match needs exactly one candidate each way, so identical amounts (every flat paying the same maintenance on one
+  // day) would never match. Of each group of identical rows without a reference only the first goes on the statement: it stays for a
+  // manual match, the rest show on the BRS as in the books and not yet on the statement.
+  const seen = new Set<string>();
+  const onStatement = rows.filter(r => {
+    if (r.instrumentRef) return true;
+    const key = `${n(r.debitPaise) > 0 ? 'D' : 'C'}${n(r.debitPaise) || n(r.creditPaise)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  for (const r of onStatement) {
     const debit = n(r.debitPaise); // money in on the books = statement credit
     const credit = n(r.creditPaise);
     balance += debit - credit;
@@ -67,7 +78,7 @@ export async function sampleStatementCsv(bankAccountId: number): Promise<{ csv: 
     ]);
   }
   // one bank charge on the last day that matches nothing in the books (₹23.60)
-  const chargeDate = rows.length ? rows[rows.length - 1]!.entryDate : today;
+  const chargeDate = onStatement.length ? onStatement[onStatement.length - 1]!.entryDate : today;
   balance -= 2360;
   out.push([
     ddmmyyyy(chargeDate),
