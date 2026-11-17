@@ -35,6 +35,7 @@ import { paymentsRefundRoutes } from './modules/payments/payments.refunds.routes
 import { paymentsAutopayRoutes } from './modules/payments/payments.autopay.routes';
 import { paymentsOfflineRoutes } from './modules/payments/payments.offline.routes';
 import { paymentsCollectionsRoutes } from './modules/payments/payments.collections.routes';
+import { accountsReportsRoutes } from './modules/accounts/accounts.reports.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -124,6 +125,7 @@ export function createApp(): Express {
   api.use(paymentsOfflineRoutes);
   // module 12 (12.5): collections
   api.use(paymentsCollectionsRoutes);
+  api.use(accountsReportsRoutes); // module 13.4b: reports, exports, resident finances
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

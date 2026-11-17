@@ -21,10 +21,7 @@ import {
   deposits,
   settlements,
   expenses,
-  accountReports,
   accounts,
-  cashBook,
-  expenseReports,
   ReadTimeoutError,
   journal,
 } from '../../../src/modules/accounts/accounts.public';
@@ -95,7 +92,7 @@ describe('start-up registration', () => {
 });
 
 describe('public interface of section 8.20 and 8.21', () => {
-  it('real readers work and the part stubs say they are not implemented', async () => {
+  it('real readers work (13.4b readers have their own tests) and the part stubs say they are not implemented', async () => {
     const w = await accountsSociety();
     const b = await balance.get(w.sid);
     expect(b).toMatchObject({ totalPaise: 0, inBankPaise: 0, generalPaise: 0, lastChangedAt: null });
@@ -125,11 +122,6 @@ describe('public interface of section 8.20 and 8.21', () => {
       () => deposits.request(w.user, {} as never, {} as never),
       () => deposits.requestRefund(w.user, 1, { deductionPaise: 0, reason: 'x' }, {} as never),
       () => settlements.ingest(),
-      () => accountReports.run(w.sid, 'trial-balance', {}, { deadlineMs: 100 }),
-      () => accountReports.fundStatement(w.sid, 1, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
-      () => cashBook.monthlyTotals(w.sid, '2026-04-01', '2027-03-31', { deadlineMs: 100 }),
-      () => expenseReports.byHead(w.sid, { from: '2026-04-01', to: '2027-03-31' }, { deadlineMs: 100 }),
-      () => expenseReports.tdsDeposited(w.sid, { from: '2026-04-01', to: '2027-03-31' }, { deadlineMs: 100 }),
     ];
     for (const s of stubs)
       await expect(s()).rejects.toMatchObject({ status: 501, code: 'NOT_IMPLEMENTED_IN_FOUNDATION' });
