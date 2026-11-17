@@ -348,6 +348,8 @@ export const AUDIT = {
   periodRelocked: 'accounts.period.relocked',
   financialYearClosed: 'accounts.financial_year.closed',
   reportExported: 'accounts.report.exported',
+  reportExportReady: 'accounts.report.export_ready',
+  reportExportFailed: 'accounts.report.export_failed',
   balanceDriftCorrected: 'accounts.balance.drift_corrected',
 } as const;
 

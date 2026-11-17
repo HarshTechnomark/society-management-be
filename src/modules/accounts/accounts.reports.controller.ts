@@ -5,7 +5,7 @@ import { entitlements } from '../subscriptions/subscriptions.public';
 import { ENT } from './accounts.constants';
 import { DEFAULT_DEADLINE_MS } from './accounts.reports.queries';
 import { runReport, type AnyReport, type RunQuery } from './accounts.reports.service';
-import { requestExport, type ExportFormat } from './accounts.reports.export';
+import { exportStatus, requestExport, type ExportFormat } from './accounts.reports.export';
 import { fundStatementForResident, societyFinances } from './accounts.resident.service';
 import { PaymentRequiredError } from '../../utils/errors';
 
@@ -36,6 +36,9 @@ export const reportsController = {
     const r = await requestExport(req.ctx, sid(req), b);
     return ok(res, r, 'Export queued', 202);
   }),
+  exportStatus: h(async (req, res) =>
+    ok(res, await exportStatus(sid(req), req.ctx.user!.id, (req.valid.params as { id: string }).id)),
+  ),
   myFinances: h(async (req, res) => ok(res, await societyFinances(sid(req)))),
   myFundStatement: h(async (req, res) =>
     ok(res, await fundStatementForResident(sid(req), (req.valid.params as { id: number }).id)),

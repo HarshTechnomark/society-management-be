@@ -119,6 +119,25 @@ describe('POST /accounts/exports (8.19)', () => {
     expect(send.mock.calls[0]![0]).toBe('accounts.export_ready');
   });
 
+  it('GET /accounts/exports/:id: preparing, then ready with a download link; other users get 404', async () => {
+    const w = await world();
+    const r = await w.c(
+      'post',
+      '/accounts/exports',
+      { report: 'trial-balance', params: { asOf: '2027-03-31' }, format: 'csv' },
+      { headers: idem() },
+    );
+    const id = r.body.data.exportJobId as string;
+    const before = await w.c('get', `/accounts/exports/${id}`);
+    expect(before.status).toBe(200);
+    await drainQueues();
+    const after = await w.c('get', `/accounts/exports/${id}`);
+    expect(after.body.data).toMatchObject({ status: 'READY', report: 'trial-balance', format: 'csv' });
+    expect(after.body.data.downloadUrl).toMatch(/^\/api\/v1\/dev\/files\/\d+$/);
+    expect((await w.c('get', '/accounts/exports/00000000-0000-4000-8000-000000000000')).status).toBe(404);
+    expect((await w.c('get', '/accounts/exports/nope')).status).toBe(400);
+  });
+
   it('general ledger needs an account of this society; unknown format is 422', async () => {
     const w = await world();
     const bad = await w.c(

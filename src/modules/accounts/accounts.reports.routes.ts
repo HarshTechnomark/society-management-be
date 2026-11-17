@@ -8,7 +8,7 @@ import { rateLimit } from '../../middlewares/rateLimit.middleware';
 import { routeMeta } from '../societies/societies.guard';
 import { ENT, PERM } from './accounts.constants';
 import { reportsController as c } from './accounts.reports.controller';
-import { reportSchemas as s, residentSchemas as rs } from './accounts.reports.validation';
+import { exportParam, reportSchemas as s, residentSchemas as rs } from './accounts.reports.validation';
 
 /**
  * Sub-module 13.4b routes: financial reports and their export (8.19, Premium) and the resident finance view (8.3).
@@ -44,6 +44,14 @@ r.post(
   exportLimit as RequestHandler,
   idempotency(),
   c.export,
+);
+r.get(
+  '/accounts/exports/:id',
+  routeMeta({ noSupportAccess: true }),
+  society(),
+  can(PERM.accountsExport),
+  validate({ params: exportParam }),
+  c.exportStatus,
 );
 r.get('/me/society-finances', society(), can(PERM.residentFinancesView), c.myFinances);
 r.get(

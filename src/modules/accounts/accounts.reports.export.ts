@@ -7,6 +7,8 @@ import { audit } from '../../utils/audit';
 import { NotFoundError, ValidationError } from '../../utils/errors';
 import type { Ctx } from '../../types/context';
 import { societyPorts } from '../societies/societies.ports';
+import { systemCtx } from '../../types/context';
+import { QueryTypes } from 'sequelize';
 import { toCsv } from '../society-setup/society-setup.csv';
 import { PAGE_H, PAGE_W, PdfDoc } from '../platform-billing/platform-billing.pdf-writer';
 import { AUDIT, ENTITY, ERR, JOBS, NOTIFY, ACCOUNTS_QUEUE } from './accounts.constants';
@@ -309,6 +311,31 @@ const CONTENT_TYPE: Record<ExportFormat, string> = {
 
 /** The job body: renders and stores the file, then tells the requester. Re-delivery stores a second copy at worst. */
 export async function runExportJob(d: ExportJobData): Promise<{ fileId: number }> {
+  try {
+    return await renderAndStore(d);
+  } catch (err) {
+    await recordOutcome(d, AUDIT.reportExportFailed, {}).catch(() => undefined);
+    throw err;
+  }
+}
+
+/** The status route reads these rows (spec 8.19 gives no job table): one audit row per outcome, keyed by the export job id. */
+async function recordOutcome(
+  d: ExportJobData,
+  action: string,
+  after: Record<string, unknown>,
+): Promise<void> {
+  await audit(systemCtx(d.requestId), {
+    action,
+    entityType: ENTITY.societyBalance,
+    entityId: d.exportJobId,
+    societyId: d.societyId,
+    after: { exportJobId: d.exportJobId, ...after },
+    actor: { userId: d.userId, name: 'Export job', role: 'system' },
+  });
+}
+
+async function renderAndStore(d: ExportJobData): Promise<{ fileId: number }> {
   const society = await Society.findByPk(d.societyId, { attributes: ['name'] });
   const table = await buildTable(d.societyId, d.report, d.params);
   const content =
@@ -325,6 +352,7 @@ export async function runExportJob(d: ExportJobData): Promise<{ fileId: number }
     contentType: CONTENT_TYPE[d.format],
     ownerUserId: d.userId,
   });
+  await recordOutcome(d, AUDIT.reportExportReady, { fileId: stored.fileId, format: d.format });
   await accountsPorts().notifications.send(NOTIFY.exportReady, [d.userId], {
     exportJobId: d.exportJobId,
     report: d.report,
@@ -334,4 +362,57 @@ export async function runExportJob(d: ExportJobData): Promise<{ fileId: number }
     link: '/accounts/reports',
   });
   return { fileId: stored.fileId };
+}
+
+export interface ExportStatus {
+  exportJobId: string;
+  status: 'PREPARING' | 'READY' | 'FAILED';
+  report: AnyReport | null;
+  format: ExportFormat | null;
+  downloadUrl: string | null;
+  expiresAt: string | null;
+}
+
+/** `GET /accounts/exports/:id`: only the user who asked sees the job; a link is issued fresh (5 minutes) on every READY answer. */
+export async function exportStatus(
+  societyId: number,
+  userId: number,
+  exportJobId: string,
+): Promise<ExportStatus> {
+  const rows = await sequelize.query<{ action: string; actorUserId: number | null; after: unknown }>(
+    `SELECT action, actorUserId, after FROM audit_logs
+      WHERE societyId = :societyId AND action IN (:actions)
+        AND JSON_UNQUOTE(JSON_EXTRACT(after, '$.exportJobId')) = :exportJobId
+      ORDER BY id DESC`,
+    {
+      replacements: {
+        societyId,
+        exportJobId,
+        actions: [AUDIT.reportExported, AUDIT.reportExportReady, AUDIT.reportExportFailed],
+      },
+      type: QueryTypes.SELECT,
+    },
+  );
+  const asObj = (v: unknown): Record<string, unknown> =>
+    typeof v === 'string'
+      ? (JSON.parse(v) as Record<string, unknown>)
+      : ((v ?? {}) as Record<string, unknown>);
+  const requested = rows.find(r => r.action === AUDIT.reportExported);
+  if (!requested || Number(requested.actorUserId) !== userId)
+    throw new NotFoundError('EXPORT_NOT_FOUND', 'Export not found');
+  const req = asObj(requested.after);
+  const base = {
+    exportJobId,
+    report: (req.report as AnyReport) ?? null,
+    format: (req.format as ExportFormat) ?? null,
+    downloadUrl: null,
+    expiresAt: null,
+  };
+  const ready = rows.find(r => r.action === AUDIT.reportExportReady);
+  if (ready) {
+    const link = await societyPorts().files.downloadUrl(Number(asObj(ready.after).fileId), 5);
+    return { ...base, status: 'READY', downloadUrl: link.url, expiresAt: link.expiresAt.toISOString() };
+  }
+  if (rows.some(r => r.action === AUDIT.reportExportFailed)) return { ...base, status: 'FAILED' };
+  return { ...base, status: 'PREPARING' };
 }
