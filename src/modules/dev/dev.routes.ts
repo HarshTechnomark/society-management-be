@@ -13,6 +13,7 @@ import {
   devProcessRefund,
   devSimulateOrder,
 } from './dev.payments';
+import { devGenerateSettlement } from './dev.accounts';
 import { systemCtx, type Ctx } from '../../types/context';
 import { approveRequest, rejectRequest } from '../residents/residents.public';
 import { approvePart3Request, rejectPart3Request } from '../residents/residents.public';
@@ -137,6 +138,19 @@ devRoutes.post(
   '/payments/orders/:orderId/simulate',
   asyncHandler(async (req, res) => {
     ok(res, await devSimulateOrder(Number(req.params.orderId), (req.body ?? {}) as { outcome?: unknown }));
+  }),
+);
+
+/** Module 13 (13.3a): a gateway settlement built from the captured online payments no settlement lists yet. */
+devRoutes.post(
+  '/accounts/settlements/generate',
+  asyncHandler(async (req, res) => {
+    ok(
+      res,
+      await devGenerateSettlement((req.body ?? {}) as Record<string, unknown>),
+      'Settlement generated (development only)',
+      201,
+    );
   }),
 );
 
