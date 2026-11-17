@@ -405,6 +405,10 @@ describe('reverse (BR-13-5, T13-07)', { timeout: 180_000 }, () => {
     advance(10 * 60_000);
     const stale = await reverse(w.c, id2, 2);
     expect([stale.status, stale.body.code]).toEqual([401, 'REAUTH_REQUIRED']);
+    // requests that can never succeed fail before the step-up asks for a code
+    expect((await reverse(w.treasurer.c, id2, 2)).body.code).toBe('MAKER_CHECKER_VIOLATION');
+    expect((await reverse(w.c, id, 2)).body.code).toBe('JOURNAL_ALREADY_REVERSED');
+    expect((await reverse(w.c, sys.id, 1)).body.code).toBe('REVERSAL_NOT_ALLOWED');
     const acct = await memberOf(w.society, 'accountant'); // creates, cannot approve
     expect((await reverse(acct.c, id2, 2)).body.code).toBe('PERMISSION_DENIED');
   });

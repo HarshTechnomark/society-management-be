@@ -13,6 +13,7 @@ import { getJournal, listJournals } from './accounts.journal.read';
 import {
   cancelDraft,
   createDraft,
+  precheckReverse,
   reverseManual,
   submitDraft,
   updateDraft,
@@ -95,6 +96,10 @@ r.post(
   can(PERM.accountsApprove),
   feature(ENT.manualJournals),
   validate({ params: s.idParam, body: s.reverse }),
+  asyncHandler(async (req, _res, next) => {
+    await precheckReverse(req.ctx, v(req).params.id);
+    next();
+  }),
   stepUp(),
   idempotency(),
   h(async (req, res) =>

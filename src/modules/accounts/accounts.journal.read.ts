@@ -19,6 +19,8 @@ export interface JournalListItem {
   source: string;
   status: string;
   totalPaise: number;
+  /** Amount of the source document (expense, payment, invoice, deposit, settlement), else null. */
+  sourceAmountPaise: number | null;
   reversalOfId: number | null;
   reversedByEntryId: number | null;
   createdBy: number | null;
@@ -26,7 +28,7 @@ export interface JournalListItem {
   version: number;
 }
 
-const toItem = (e: JournalEntry): JournalListItem => ({
+const toItem = (e: JournalEntry, sourceAmountPaise: number | null = null): JournalListItem => ({
   id: n(e.id),
   voucherNo: e.voucherNo,
   voucherType: e.voucherType,
@@ -38,6 +40,7 @@ const toItem = (e: JournalEntry): JournalListItem => ({
   source: e.source,
   status: e.status,
   totalPaise: n(e.totalPaise),
+  sourceAmountPaise,
   reversalOfId: e.reversalOfId ? n(e.reversalOfId) : null,
   reversedByEntryId: e.reversedByEntryId ? n(e.reversedByEntryId) : null,
   createdBy: e.createdBy ? n(e.createdBy) : null,
@@ -51,6 +54,31 @@ const SORT: Record<ListJournalsQuery['sortBy'], string> = {
   totalPaise: 'totalPaise',
   createdAt: 'createdAt',
 };
+
+const SOURCE_TABLE: Record<string, { table: string; col: string }> = {
+  expense: { table: 'expenses', col: 'grossAmountPaise' },
+  payment: { table: 'payments', col: 'amountPaise' },
+  invoice: { table: 'invoices', col: 'totalPaise' },
+  deposit: { table: 'deposits', col: 'amountPaise' },
+  settlement: { table: 'settlements', col: 'grossPaise' },
+};
+
+/** Looks up the amount of each row's source document in one query per source table. */
+async function withSourceAmounts(societyId: number, rows: JournalEntry[]): Promise<JournalListItem[]> {
+  const amounts = new Map<string, number>();
+  for (const [refType, { table, col }] of Object.entries(SOURCE_TABLE)) {
+    const ids = [
+      ...new Set(rows.filter(r => r.refType === refType && /^\d+$/.test(r.refId)).map(r => r.refId)),
+    ];
+    if (!ids.length) continue;
+    const found = await sequelize.query<{ id: string; amount: string }>(
+      `SELECT id, ${col} AS amount FROM ${table} WHERE societyId = :societyId AND id IN (:ids)`,
+      { replacements: { societyId, ids }, type: QueryTypes.SELECT },
+    );
+    for (const f of found) amounts.set(`${refType}:${f.id}`, n(f.amount));
+  }
+  return rows.map(r => toItem(r, amounts.get(`${r.refType}:${r.refId}`) ?? null));
+}
 
 /** `GET /accounts/journals`: every voucher of the society, system and manual, with filters and pagination. */
 export async function listJournals(societyId: number, q: ListJournalsQuery) {
@@ -96,7 +124,7 @@ export async function listJournals(societyId: number, q: ListJournalsQuery) {
     offset: (q.page - 1) * q.limit,
   });
   return {
-    data: rows.map(toItem),
+    data: await withSourceAmounts(societyId, rows),
     pagination: { page: q.page, limit: q.limit, total: count, totalPages: Math.ceil(count / q.limit) },
   };
 }

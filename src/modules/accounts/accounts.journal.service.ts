@@ -312,6 +312,25 @@ export async function cancelDraft(ctx: Ctx, id: number) {
 }
 
 /** `POST /accounts/journals/:id/reverse`: BR-13-5 through the engine; the reverser is never the maker of the original. */
+/**
+ * Cheap checks of a reversal that can never succeed (missing, not posted, a reversal, already reversed, system or opening or closing
+ * entry, own manual entry), run before the step-up so nobody is asked for a code for a request that is bound to fail.
+ */
+export async function precheckReverse(ctx: Ctx, id: number): Promise<void> {
+  const societyId = societyIdOf(ctx);
+  const original = await JournalEntry.findOne({ where: { id, societyId } });
+  if (!original) throw new NotFoundError(ERR.journalNotFound, 'Journal entry not found');
+  if (original.status !== 'POSTED') throw invalidState('Only a posted journal can be reversed');
+  if (original.reversalOfId)
+    throw new UnprocessableError(ERR.reversalNotAllowed, 'A reversal cannot be reversed');
+  if (original.reversedByEntryId)
+    throw new ConflictError(ERR.journalAlreadyReversed, 'The entry is already reversed');
+  if (original.source === 'SYSTEM' || ['OPENING_BALANCE', 'CLOSING'].includes(original.voucherType))
+    throw new UnprocessableError(ERR.reversalNotAllowed, 'This entry cannot be reversed by hand');
+  if (original.source === 'MANUAL' && original.createdBy && n(original.createdBy) === userId(ctx))
+    throw new ConflictError(ERR.makerChecker, 'The person who created this journal cannot reverse it');
+}
+
 export async function reverseManual(
   ctx: Ctx,
   id: number,
