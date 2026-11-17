@@ -192,6 +192,33 @@ describe('GET /society-balance/history (8.2)', () => {
     });
   });
 
+  it('is computed by entry date: a backdated posting changes the days from its date on and the last point equals the live total', async () => {
+    const w = await runSociety({ flats: 1 });
+    const d2 = addDaysYmd(today(), -2);
+    const d4 = addDaysYmd(today(), -4);
+    await openStandard(w, d2);
+    await opening(w, {
+      asOfDate: today(),
+      lines: [{ ledgerAccountCode: '1120', debitPaise: 1_000, creditPaise: 0 }],
+    });
+    // posted last, dated earlier: a snapshot series would put it at the end
+    await opening(w, {
+      asOfDate: d4,
+      lines: [{ ledgerAccountCode: '1120', debitPaise: 300, creditPaise: 0 }],
+    });
+    const r = await w.c('get', '/society-balance/history', undefined, {
+      query: { from: addDaysYmd(today(), -5), to: today() },
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const pts = r.body.data.points as any[];
+    expect(pts.map(p => p.totalPaise)).toEqual([0, 300, 300, 100_500_300, 100_500_300, 100_501_300]);
+    expect(pts[1].cashPaise).toBe(300);
+    expect(pts[2].inBankPaise).toBe(0);
+    expect(pts[3].inBankPaise).toBe(100_000_000);
+    const live = await balance.get(w.society.id!);
+    expect(pts[pts.length - 1].totalPaise).toBe(live.totalPaise);
+  });
+
   it('a range that starts after the last posting carries the last value in', async () => {
     const w = await runSociety({ flats: 1 });
     await openStandard(w, addDaysYmd(today(), -10));

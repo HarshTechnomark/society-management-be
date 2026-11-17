@@ -102,15 +102,13 @@ export interface BalancePoint {
   chequesPaise: number;
 }
 
-const ZERO = { totalPaise: 0, inBankPaise: 0, clearingPaise: 0, cashPaise: 0, chequesPaise: 0 };
-const FIELDS = 'entryDate, totalPaise, inBankPaise, clearingPaise, cashPaise, chequesPaise';
-
 const daysBetween = (from: string, to: string): number =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 
 /**
- * 8.2 and public `balance.history`: one point per day of `from..to`, the last `balance_history` row (by entry date, then id) on or
- * before that day; days without a change repeat the previous value, and days before the first row are zero.
+ * 8.2 and public `balance.history`: one point per day of `from..to`, computed BY ENTRY DATE from the posted journal lines of the money
+ * ledgers up to that day (not from the `balance_history` snapshots, which are taken at posting time and jump around backdated entries),
+ * so the last point equals the live `society_balances` total. Days before the first posting are zero.
  */
 export async function balanceHistory(
   societyId: number,
@@ -125,29 +123,41 @@ export async function balanceHistory(
     errors.push({ field: 'to', message: 'To must not be in the future' });
   if (errors.length) throw new ValidationError(errors);
 
-  const baseline = await sequelize.query<Record<string, unknown>>(
-    `SELECT ${FIELDS} FROM balance_history WHERE societyId = :societyId AND entryDate < :from ORDER BY entryDate DESC, id DESC LIMIT 1`,
-    { replacements: { societyId, from }, type: QueryTypes.SELECT },
-  );
-  const rows = await sequelize.query<Record<string, unknown>>(
-    `SELECT ${FIELDS} FROM balance_history WHERE societyId = :societyId AND entryDate >= :from AND entryDate <= :to ORDER BY entryDate, id`,
-    { replacements: { societyId, from, to }, type: QueryTypes.SELECT },
-  );
-  const pick = (r: Record<string, unknown>) => ({
-    totalPaise: n(r.totalPaise),
-    inBankPaise: n(r.inBankPaise),
-    clearingPaise: n(r.clearingPaise),
-    cashPaise: n(r.cashPaise),
-    chequesPaise: n(r.chequesPaise),
-  });
-  let current = baseline[0] ? pick(baseline[0]) : { ...ZERO };
+  const sql = (where: string) =>
+    `SELECT jl.entryDate AS d, la.subtype AS subtype, SUM(jl.debitPaise - jl.creditPaise) AS amount
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.journalEntryId
+       JOIN ledger_accounts la ON la.id = jl.ledgerAccountId
+      WHERE jl.societyId = :societyId AND je.status = 'POSTED'
+        AND la.subtype IN ('BANK','CLEARING','CASH','PETTY_CASH','CHEQUES') AND ${where}
+      GROUP BY jl.entryDate, la.subtype ORDER BY jl.entryDate`;
+  // the four figures as the engine maps them (BANK; CLEARING; CASH and PETTY_CASH; CHEQUES), summed by ENTRY date
+  const cur = { inBankPaise: 0, clearingPaise: 0, cashPaise: 0, chequesPaise: 0 };
+  const add = (subtype: string, v: number) => {
+    if (subtype === 'BANK') cur.inBankPaise += v;
+    else if (subtype === 'CLEARING') cur.clearingPaise += v;
+    else if (subtype === 'CASH' || subtype === 'PETTY_CASH') cur.cashPaise += v;
+    else if (subtype === 'CHEQUES') cur.chequesPaise += v;
+  };
+  const q = (where: string) =>
+    sequelize.query<{ d: string; subtype: string; amount: string }>(sql(where), {
+      replacements: { societyId, from, to },
+      type: QueryTypes.SELECT,
+    });
+  for (const r of await q('jl.entryDate < :from')) add(r.subtype, n(r.amount));
+  const rows = await q('jl.entryDate >= :from AND jl.entryDate <= :to');
   const points: BalancePoint[] = [];
   let i = 0;
   const total = daysBetween(from, to);
   for (let d = 0; d <= total; d++) {
     const date = addDaysYmd(from, d);
-    while (i < rows.length && String(rows[i]!.entryDate).slice(0, 10) <= date) current = pick(rows[i++]!);
-    points.push({ date, ...current });
+    while (i < rows.length && String(rows[i]!.d).slice(0, 10) <= date)
+      add(rows[i]!.subtype, n(rows[i++]!.amount));
+    points.push({
+      date,
+      totalPaise: cur.inBankPaise + cur.clearingPaise + cur.cashPaise + cur.chequesPaise,
+      ...cur,
+    });
   }
   return { points };
 }
