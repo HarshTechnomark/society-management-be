@@ -46,8 +46,8 @@ describe('modules 11 and 12 post through the real engine', () => {
     registerAccounts();
     expect(billingFakes()).not.toContain('journal');
     expect(paymentsFakes()).not.toContain('journal');
-    expect(billingFakes()).toEqual(['approvals', 'notifications']); // the guard stays for approvals and notifications
-    expect(paymentsFakes()).toEqual(['approvals', 'gateways', 'notifications']); // and gateways
+    expect(billingFakes()).toEqual(['notifications']); // approvals is the real module 14; the guard stays for notifications
+    expect(paymentsFakes()).toEqual(['gateways', 'notifications']); // and gateways
   });
 
   it('an invoice debits 1300 and credits its heads; the voucher is an INVOICE entry', async () => {
