@@ -1,4 +1,5 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { now } from '../lib/clock';
 import { recordInbox } from '../lib/inbox';
 
 /**
@@ -17,6 +18,85 @@ export interface ProviderAdapter {
   testSend(to: string, text: string): Promise<{ providerMessageId: string }>;
   /** Gateway, storage, IVR: an authenticated read. Throws on failure. */
   connectionTest(): Promise<{ detail: string }>;
+  /**
+   * Module 01 section 10 (NEW, module 16 8.37): true when the signature over the raw body is valid and the timestamp is at most 5 minutes old.
+   * `credentials` are the decrypted credentials of the provider row (null for the fake or an environment vendor).
+   */
+  verifyWebhook(
+    rawBody: Buffer,
+    headers: Record<string, string | undefined>,
+    credentials: Record<string, string> | null,
+  ): boolean;
+  /** Parses a verified webhook body into events (hashes only: no mobile number or e-mail address leaves the adapter). */
+  parseWebhook(rawBody: Buffer): MessagingWebhookEvent[];
+}
+
+/** Events of a messaging provider webhook (module 16 8.37). Hashes are lower-case sha256 hex of the 10-digit mobile / the lower-cased e-mail. */
+export type MessagingWebhookEvent =
+  | {
+      providerMessageId: string;
+      status: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
+      at: string;
+      errorCode?: string;
+    }
+  | { inbound: 'STOP'; mobileHash: string }
+  | { inbound: 'BUTTON'; payload: string; mobileHash: string }
+  | { bounce: 'HARD' | 'COMPLAINT'; emailHash: string };
+
+export const WEBHOOK_REPLAY_SECONDS = 300;
+export const FAKE_WEBHOOK_SECRET = 'fake-webhook-secret';
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+
+/**
+ * Signature of the fake vendor: header `x-webhook-timestamp` (epoch milliseconds) and `x-webhook-signature` = hex HMAC-SHA256 of
+ * `<timestamp>.<raw body>` with the credential `webhookSecret` (default `FAKE_WEBHOOK_SECRET`). Tests and the dev tools sign with `signFakeWebhook`.
+ */
+export function signFakeWebhook(
+  rawBody: Buffer | string,
+  timestampMs: number,
+  secret = FAKE_WEBHOOK_SECRET,
+): string {
+  return createHmac('sha256', secret).update(`${timestampMs}.`).update(rawBody).digest('hex');
+}
+export function verifyFakeWebhook(
+  rawBody: Buffer,
+  headers: Record<string, string | undefined>,
+  credentials: Record<string, string> | null,
+): boolean {
+  const ts = Number(headers['x-webhook-timestamp']);
+  const sig = headers['x-webhook-signature'];
+  if (!sig || !Number.isFinite(ts)) return false;
+  if (Math.abs(now().getTime() - ts) > WEBHOOK_REPLAY_SECONDS * 1000) return false;
+  const want = Buffer.from(
+    signFakeWebhook(rawBody, ts, credentials?.webhookSecret ?? FAKE_WEBHOOK_SECRET),
+    'hex',
+  );
+  const got = Buffer.from(sig, 'hex');
+  return got.length === want.length && timingSafeEqual(got, want);
+}
+/** Fake body: `{ events: [ { providerMessageId, status, at?, errorCode? } | { inbound: 'STOP', mobile } | { inbound: 'BUTTON', payload, mobile } | { bounce, email } ] }`. */
+export function parseFakeWebhook(rawBody: Buffer): MessagingWebhookEvent[] {
+  const body = JSON.parse(rawBody.toString('utf8')) as { events?: Record<string, unknown>[] };
+  const out: MessagingWebhookEvent[] = [];
+  for (const e of body.events ?? []) {
+    if (e.inbound === 'STOP' && typeof e.mobile === 'string')
+      out.push({ inbound: 'STOP', mobileHash: sha(e.mobile) });
+    else if (e.inbound === 'BUTTON' && typeof e.mobile === 'string' && typeof e.payload === 'string')
+      out.push({ inbound: 'BUTTON', payload: e.payload, mobileHash: sha(e.mobile) });
+    else if ((e.bounce === 'HARD' || e.bounce === 'COMPLAINT') && typeof e.email === 'string')
+      out.push({ bounce: e.bounce, emailHash: sha(e.email.toLowerCase()) });
+    else if (
+      typeof e.providerMessageId === 'string' &&
+      ['SENT', 'DELIVERED', 'READ', 'FAILED'].includes(String(e.status))
+    )
+      out.push({
+        providerMessageId: e.providerMessageId,
+        status: e.status as 'SENT' | 'DELIVERED' | 'READ' | 'FAILED',
+        at: typeof e.at === 'string' ? e.at : now().toISOString(),
+        ...(typeof e.errorCode === 'string' ? { errorCode: e.errorCode } : {}),
+      });
+  }
+  return out;
 }
 
 export type FailMode = 'none' | 'error' | 'slow';
@@ -57,6 +137,9 @@ export class FakeProviderAdapter implements ProviderAdapter {
     if (this.failMode === 'error') throw new Error('fake provider is set to fail');
     return { detail: 'fake connection ok' };
   }
+
+  verifyWebhook = verifyFakeWebhook;
+  parseWebhook = parseFakeWebhook;
 }
 
 /** Adapter for a provider row (credentials already decrypted by the caller). */
@@ -75,5 +158,7 @@ export function buildProviderAdapter(input: ProviderAdapterInput): ProviderAdapt
     connectionTest: async () => {
       throw notBuilt();
     },
+    verifyWebhook: () => false,
+    parseWebhook: () => [],
   };
 }

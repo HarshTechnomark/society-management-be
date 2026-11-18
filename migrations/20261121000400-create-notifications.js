@@ -1,0 +1,61 @@
+'use strict';
+/** Module 16 section 7.4: `notifications`. */
+module.exports = {
+  async up(qi) {
+    await qi.sequelize.query(`
+      CREATE TABLE notifications (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        societyId BIGINT UNSIGNED NULL,
+        batchId CHAR(36) NOT NULL,
+        templateKey VARCHAR(80) NOT NULL,
+        locale VARCHAR(10) NOT NULL,
+        deliveryClass VARCHAR(15) NOT NULL,
+        channel VARCHAR(10) NOT NULL,
+        userId BIGINT UNSIGNED NULL,
+        recipientKey VARCHAR(80) NOT NULL,
+        destinationMasked VARCHAR(80) NULL,
+        destinationEnc VARBINARY(512) NULL,
+        status VARCHAR(10) NOT NULL DEFAULT 'QUEUED',
+        skipReason VARCHAR(20) NULL,
+        dedupeKey VARCHAR(120) NULL,
+        attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        maxAttempts TINYINT UNSIGNED NOT NULL DEFAULT 5,
+        nextAttemptAt DATETIME(3) NULL,
+        providerKey VARCHAR(40) NULL,
+        providerMessageId VARCHAR(120) NULL,
+        lastErrorCode VARCHAR(60) NULL,
+        lastErrorMessage VARCHAR(300) NULL,
+        limitKey VARCHAR(30) NULL,
+        limitConsumedAt DATETIME(3) NULL,
+        limitBypassed TINYINT(1) NOT NULL DEFAULT 0,
+        fallbackFromId BIGINT UNSIGNED NULL,
+        dataEnc VARBINARY(8192) NULL,
+        sourceType VARCHAR(40) NULL,
+        sourceId BIGINT UNSIGNED NULL,
+        sentAt DATETIME(3) NULL,
+        deliveredAt DATETIME(3) NULL,
+        readAt DATETIME(3) NULL,
+        failedAt DATETIME(3) NULL,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_notifications_dedupe (recipientKey, channel, dedupeKey),
+        UNIQUE KEY uq_notifications_provider (providerKey, providerMessageId),
+        KEY ix_notifications_due (status, nextAttemptAt),
+        KEY ix_notifications_society (societyId, createdAt),
+        KEY ix_notifications_source (sourceType, sourceId),
+        KEY ix_notifications_batch (batchId),
+        KEY ix_notifications_user (userId, createdAt),
+        CONSTRAINT fk_notifications_society FOREIGN KEY (societyId) REFERENCES societies (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_notifications_user FOREIGN KEY (userId) REFERENCES users (id) ON DELETE SET NULL,
+        CONSTRAINT fk_notifications_fallback FOREIGN KEY (fallbackFromId) REFERENCES notifications (id) ON DELETE SET NULL,
+        CONSTRAINT ck_notifications_channel CHECK (channel IN ('PUSH','SMS','WHATSAPP','EMAIL')),
+        CONSTRAINT ck_notifications_status CHECK (status IN ('QUEUED','DEFERRED','SENDING','SENT','DELIVERED','READ','FAILED','SKIPPED','CANCELLED')),
+        CONSTRAINT ck_notifications_skip CHECK ((status = 'SKIPPED') = (skipReason IS NOT NULL)),
+        CONSTRAINT ck_notifications_skip_reason CHECK (skipReason IS NULL OR skipReason IN ('PREFERENCE_OFF','NO_CONTACT','NO_SUBSCRIPTION','NO_TEMPLATE','NOT_OPTED_IN','FEATURE_OFF','LIMIT_REACHED','MEMBER_ENDED'))
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
+  },
+  async down(qi) {
+    await qi.sequelize.query('DROP TABLE IF EXISTS notifications');
+  },
+};

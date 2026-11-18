@@ -472,6 +472,24 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /me/tickets/:id/estimate-decision',
       'GET /me/approval-requests/:id',
       'POST /me/approval-requests/:id/cancel',
+      // module 16 (16.1): another society's notice id is 404 NOTICE_NOT_FOUND on every notice route (tests/modules/communication/communication.notices.crud.test.ts and receipts.test.ts, T16-31)
+      'GET /notices/:id',
+      'PATCH /notices/:id',
+      'DELETE /notices/:id',
+      'POST /notices/:id/publish',
+      'POST /notices/:id/withdraw',
+      'POST /notices/:id/cancel-schedule',
+      'POST /notices/:id/recall',
+      'POST /notices/:id/pin',
+      'POST /notices/:id/unpin',
+      'POST /notices/:id/archive',
+      'POST /notices/:id/duplicate',
+      'POST /notices/:id/remind',
+      'POST /notices/:id/restored',
+      'GET /notices/:id/receipts',
+      'GET /notices/:id/receipts/export',
+      'GET /notices/:id/attachments/:fileId/download-url',
+      'POST /notices/:id/acknowledge',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

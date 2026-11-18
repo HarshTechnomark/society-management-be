@@ -5,7 +5,7 @@ import { kv } from './kv';
 /** Messages recorded by the fake adapters, read by `GET /api/v1/dev/inbox` (module 01 section 8.9). */
 export interface InboxMessage {
   id: string;
-  channel: 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
+  channel: 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH' | 'IN_APP';
   to: string;
   subject: string | null;
   body: string;

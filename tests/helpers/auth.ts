@@ -57,6 +57,18 @@ export async function resetAll(): Promise<void> {
   await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
   // module 13: TRUNCATE (posted journals cannot be DELETEd: model hooks and triggers keep them immutable)
   for (const t of [
+    // module 16 (TRUNCATE: the tables reference each other; notification_templates is a platform seed table and is kept)
+    'notice_receipts',
+    'notices',
+    'notifications',
+    'inbox_items',
+    'notification_preferences',
+    'push_subscriptions',
+    'emergency_responses',
+    'emergency_broadcasts',
+    'survey_responses',
+    'survey_questions',
+    'surveys',
     // module 15 (TRUNCATE: the tables reference each other)
     'ticket_comments',
     'ticket_upvotes',
