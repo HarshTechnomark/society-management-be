@@ -23,6 +23,7 @@ import {
   approvalRequests,
   approve,
   autoApproveType,
+  ensureSystemUser,
   everyRequestNeeds,
   reject,
   requestChanges,
@@ -54,6 +55,7 @@ beforeEach(async () => {
   resetLogins();
   resetRateLimits();
   await resetInvoices();
+  await ensureSystemUser(); // module 14 raises system-context requests as the system user
 });
 afterEach(() => vi.restoreAllMocks());
 
