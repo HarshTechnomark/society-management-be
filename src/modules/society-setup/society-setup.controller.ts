@@ -118,6 +118,8 @@ export const setupController = {
           buildingId: q.buildingId,
           areaType: q.areaType,
           rootOnly: q.rootOnly,
+          // QR tokens are for the people who print the stickers (module 15: residents, guards and staff read the tree without them)
+          withQr: req.ctx.permissions.has('residents.units.view') ? undefined : false,
         }),
       },
       'OK',

@@ -1,0 +1,61 @@
+'use strict';
+/** Module 15 section 7.1: the two-level category tree with defaults. */
+module.exports = {
+  async up(qi) {
+    await qi.sequelize.query(`
+      CREATE TABLE ticket_categories (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        societyId BIGINT UNSIGNED NOT NULL,
+        parentId BIGINT UNSIGNED NULL,
+        name VARCHAR(60) NOT NULL,
+        scope VARCHAR(10) NOT NULL,
+        icon VARCHAR(30) NULL,
+        defaultPriority VARCHAR(2) NULL,
+        slaPolicyId BIGINT UNSIGNED NULL,
+        defaultAssigneeType VARCHAR(10) NOT NULL DEFAULT 'NONE',
+        defaultRoleKey VARCHAR(40) NULL,
+        defaultAssigneeUserId BIGINT UNSIGNED NULL,
+        defaultStaffId BIGINT UNSIGNED NULL,
+        defaultVendorId BIGINT UNSIGNED NULL,
+        isChargeable TINYINT(1) NOT NULL DEFAULT 0,
+        requiresAfterPhoto TINYINT(1) NOT NULL DEFAULT 0,
+        isSafety TINYINT(1) NOT NULL DEFAULT 0,
+        linksInvoice TINYINT(1) NOT NULL DEFAULT 0,
+        sortOrder SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        status VARCHAR(10) NOT NULL DEFAULT 'ACTIVE',
+        archivedAt DATETIME(3) NULL,
+        parentKey BIGINT UNSIGNED GENERATED ALWAYS AS (IFNULL(parentId, 0)) STORED,
+        activeNameKey VARCHAR(60) GENERATED ALWAYS AS (IF(status = 'ACTIVE', name, NULL)) STORED,
+        version INT UNSIGNED NOT NULL DEFAULT 1,
+        createdBy BIGINT UNSIGNED NULL,
+        updatedBy BIGINT UNSIGNED NULL,
+        createdAt DATETIME(3) NOT NULL,
+        updatedAt DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_ticket_categories_sibling_name (societyId, parentKey, activeNameKey),
+        KEY ix_ticket_categories_parent (societyId, parentId, status, sortOrder),
+        KEY ix_ticket_categories_sla (slaPolicyId),
+        KEY ix_ticket_categories_user (defaultAssigneeUserId),
+        CONSTRAINT fk_ticket_categories_society FOREIGN KEY (societyId) REFERENCES societies (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_ticket_categories_parent FOREIGN KEY (parentId) REFERENCES ticket_categories (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_ticket_categories_sla FOREIGN KEY (slaPolicyId) REFERENCES sla_policies (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_ticket_categories_user FOREIGN KEY (defaultAssigneeUserId) REFERENCES users (id) ON DELETE RESTRICT,
+        CONSTRAINT ck_ticket_categories_name CHECK (CHAR_LENGTH(name) BETWEEN 2 AND 60),
+        CONSTRAINT ck_ticket_categories_scope CHECK (scope IN ('PERSONAL','BUILDING','BOTH')),
+        CONSTRAINT ck_ticket_categories_priority CHECK (defaultPriority IS NULL OR defaultPriority IN ('P1','P2','P3','P4')),
+        CONSTRAINT ck_ticket_categories_top_priority CHECK (parentId IS NOT NULL OR defaultPriority IS NOT NULL),
+        CONSTRAINT ck_ticket_categories_assignee_type CHECK (defaultAssigneeType IN ('INHERIT','NONE','ROLE','MEMBER','STAFF','VENDOR')),
+        CONSTRAINT ck_ticket_categories_inherit CHECK (defaultAssigneeType <> 'INHERIT' OR parentId IS NOT NULL),
+        CONSTRAINT ck_ticket_categories_role CHECK ((defaultAssigneeType = 'ROLE') = (defaultRoleKey IS NOT NULL)),
+        CONSTRAINT ck_ticket_categories_member CHECK (defaultAssigneeUserId IS NULL OR defaultAssigneeType = 'MEMBER'),
+        CONSTRAINT ck_ticket_categories_staff CHECK (defaultStaffId IS NULL OR defaultAssigneeType = 'STAFF'),
+        CONSTRAINT ck_ticket_categories_vendor CHECK (defaultVendorId IS NULL OR defaultAssigneeType = 'VENDOR'),
+        CONSTRAINT ck_ticket_categories_charge CHECK ((NOT isChargeable AND NOT linksInvoice) OR scope IN ('PERSONAL','BOTH')),
+        CONSTRAINT ck_ticket_categories_sort CHECK (sortOrder <= 9999),
+        CONSTRAINT ck_ticket_categories_status CHECK (status IN ('ACTIVE','ARCHIVED'))
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`);
+  },
+  async down(qi) {
+    await qi.sequelize.query('DROP TABLE IF EXISTS ticket_categories');
+  },
+};

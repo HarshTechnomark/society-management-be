@@ -25,6 +25,7 @@ import { registerPlatformOps } from '../src/modules/platform-ops/platform-ops.pu
 import { seedSocietySetup } from '../seeders/society-setup';
 import { registerSocietySetup } from '../src/modules/society-setup/society-setup.public';
 import { wireApprovalsPorts } from '../src/modules/approvals/approvals.wire';
+import { registerHelpdesk } from '../src/modules/helpdesk/helpdesk.public';
 import { registerApprovals } from '../src/modules/approvals/approvals.public';
 import { registerResidents } from '../src/modules/residents/residents.public';
 import { seedResidents } from '../seeders/residents';
@@ -38,6 +39,7 @@ import { seedBillingOpening } from '../seeders/billing-opening';
 import { seedBillingDues } from '../seeders/billing-dues';
 import { seedPayments } from '../seeders/payments';
 import { seedAccounts } from '../seeders/accounts';
+import { seedHelpdesk } from '../seeders/helpdesk';
 import { seedApprovalRules } from '../seeders/approvals';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
@@ -60,6 +62,7 @@ async function main(): Promise<void> {
   registerBilling();
   registerPayments();
   registerApprovals(); // module 14: notification templates and the notify job the requests enqueue
+  registerHelpdesk(); // module 15: export provider, purge handler, queue, unit guard
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
@@ -137,6 +140,9 @@ async function main(): Promise<void> {
     out(
       `accounts-demo: created ${acc.created.join('; ') || 'none'}, skipped ${acc.skipped.join('; ') || 'none'}`,
     );
+    // module 15: catalogue (categories, SLA policy, escalation rules) and demo tickets of the parts
+    const hd = await seedHelpdesk();
+    out(`helpdesk: created ${hd.created.join('; ') || 'none'}, skipped ${hd.skipped.join('; ') || 'none'}`);
     const pb = await seedPlatformBilling();
     out(
       `platform-billing: invoices for ${pb.created.join(', ') || 'none'}, skipped ${pb.skipped.join(', ') || 'none'}`,

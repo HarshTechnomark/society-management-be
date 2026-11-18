@@ -16,6 +16,7 @@ import { registerCommittee } from './modules/committee/committee.public';
 import { registerAccounts } from './modules/accounts/accounts.public';
 import { registerBilling } from './modules/billing/billing.public';
 import { registerPayments } from './modules/payments/payments.public';
+import { registerHelpdesk } from './modules/helpdesk/helpdesk.public';
 import { registerApprovals } from './modules/approvals/approvals.public';
 import { assertCatalogueComplete } from './modules/subscriptions/subscriptions.seed';
 import { startWorkers, stopWorkers, usesRedis } from './lib/queue';
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
   registerBilling();
   registerPayments();
   registerApprovals();
+  registerHelpdesk(); // module 15: export provider, purge handler, queue, unit guard
   await assertCatalogueComplete(); // every catalogue key has a row in every plan version (module 04)
   if (!usesRedis()) await startWorkers();
 

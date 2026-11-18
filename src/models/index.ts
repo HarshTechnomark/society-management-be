@@ -97,6 +97,13 @@ import { Settlement } from './settlement.model';
 import { BankStatementImport } from './bank-statement-import.model';
 import { BankStatementLine } from './bank-statement-line.model';
 import { Deposit } from './deposit.model';
+import { SlaPolicy } from './sla-policy.model';
+import { TicketCategory } from './ticket-category.model';
+import { EscalationRule } from './escalation-rule.model';
+import { Ticket } from './ticket.model';
+import { TicketComment } from './ticket-comment.model';
+import { TicketUpvote } from './ticket-upvote.model';
+import { TicketAssignment } from './ticket-assignment.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -210,6 +217,13 @@ const models = {
   BankStatementImport,
   BankStatementLine,
   Deposit,
+  SlaPolicy,
+  TicketCategory,
+  EscalationRule,
+  Ticket,
+  TicketComment,
+  TicketUpvote,
+  TicketAssignment,
   ApprovalRule,
   ApprovalRequest,
   ApprovalAction,
@@ -457,6 +471,41 @@ ApprovalAction.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' });
 ApprovalAction.belongsTo(ApprovalDelegation, { as: 'delegation', foreignKey: 'delegationId' });
 ApprovalDelegation.belongsTo(User, { as: 'delegator', foreignKey: 'delegatorUserId' });
 ApprovalDelegation.belongsTo(User, { as: 'delegate', foreignKey: 'delegateUserId' });
+// Module 15 associations (section 7)
+TicketCategory.belongsTo(TicketCategory, { as: 'parent', foreignKey: 'parentId' });
+TicketCategory.hasMany(TicketCategory, { as: 'children', foreignKey: 'parentId' });
+TicketCategory.belongsTo(SlaPolicy, { foreignKey: 'slaPolicyId' });
+TicketCategory.hasMany(Ticket, { foreignKey: 'categoryId' });
+SlaPolicy.hasMany(TicketCategory, { foreignKey: 'slaPolicyId' });
+SlaPolicy.hasMany(Ticket, { foreignKey: 'slaPolicyId' });
+EscalationRule.belongsTo(TicketCategory, { foreignKey: 'categoryId' });
+EscalationRule.hasMany(TicketComment, { foreignKey: 'escalationRuleId' });
+Ticket.belongsTo(Unit, { foreignKey: 'unitId' });
+Ticket.belongsTo(LocationNode, { foreignKey: 'locationNodeId' });
+Ticket.belongsTo(Building, { as: 'affectedBuilding', foreignKey: 'affectedBuildingId' });
+Ticket.belongsTo(TicketCategory, { as: 'category', foreignKey: 'categoryId' });
+Ticket.belongsTo(TicketCategory, { as: 'subCategory', foreignKey: 'subCategoryId' });
+Ticket.belongsTo(SlaPolicy, { foreignKey: 'slaPolicyId' });
+Ticket.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+Ticket.belongsTo(Invoice, { as: 'chargeInvoice', foreignKey: 'chargeInvoiceId' });
+Ticket.belongsTo(User, { as: 'requester', foreignKey: 'requesterUserId' });
+Ticket.belongsTo(TicketAssignment, {
+  as: 'currentAssignment',
+  foreignKey: 'currentAssignmentId',
+  constraints: false,
+});
+Ticket.belongsTo(Ticket, { as: 'mergedInto', foreignKey: 'mergedIntoTicketId' });
+Ticket.hasMany(TicketComment, { foreignKey: 'ticketId' });
+Ticket.hasMany(TicketUpvote, { foreignKey: 'ticketId' });
+Ticket.hasMany(TicketAssignment, { foreignKey: 'ticketId', constraints: false });
+TicketComment.belongsTo(Ticket, { foreignKey: 'ticketId' });
+TicketComment.belongsTo(User, { as: 'author', foreignKey: 'authorUserId' });
+TicketComment.belongsTo(EscalationRule, { foreignKey: 'escalationRuleId' });
+TicketUpvote.belongsTo(Ticket, { foreignKey: 'ticketId' });
+TicketUpvote.belongsTo(User, { foreignKey: 'userId' });
+TicketUpvote.belongsTo(Unit, { foreignKey: 'unitId' });
+TicketAssignment.belongsTo(Ticket, { foreignKey: 'ticketId', constraints: false });
+TicketAssignment.belongsTo(User, { as: 'assignee', foreignKey: 'assigneeUserId' });
 
 // Module 13 associations (section 7).
 LedgerAccount.belongsTo(LedgerAccount, { as: 'parent', foreignKey: 'parentId' });
@@ -592,6 +641,13 @@ export {
   BankStatementImport,
   BankStatementLine,
   Deposit,
+  SlaPolicy,
+  TicketCategory,
+  EscalationRule,
+  Ticket,
+  TicketComment,
+  TicketUpvote,
+  TicketAssignment,
 };
 
 export async function closeDb(): Promise<void> {
