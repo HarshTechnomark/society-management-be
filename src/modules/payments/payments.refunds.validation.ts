@@ -30,7 +30,8 @@ export const refundSchemas = {
     .strict(),
   create: z
     .object({
-      paymentId: z.number().int().positive(),
+      /** The internal payment number (38) or the receipt number (RCT/2026-27/000038). */
+      paymentId: z.union([z.number().int().positive(), z.string().trim().min(1).max(40)]),
       amountPaise: z.number().int().min(100).max(Number.MAX_SAFE_INTEGER),
       mode: z.enum(REFUND_MODES),
       reason: z.string().trim().min(10).max(500),
