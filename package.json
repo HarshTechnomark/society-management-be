@@ -31,7 +31,10 @@
     "seed": "tsx scripts/seed.ts",
     "prepare": "husky",
     "providers:rekey": "tsx scripts/providers-rekey.ts",
-    "dev:totp": "tsx scripts/totp.ts"
+    "dev:totp": "tsx scripts/totp.ts",
+    "test:db:ensure": "node scripts/test-db-pool.cjs ensure",
+    "test:db:migrate": "node scripts/test-db-pool.cjs migrate",
+    "test:db:status": "node scripts/test-db-pool.cjs status"
   },
   "lint-staged": {
     "*.{ts,js,cjs,mjs}": [

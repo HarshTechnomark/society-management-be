@@ -25,7 +25,9 @@ dbs() { # $1 = drop|create
 }
 
 T0=$(date +%s)
-dbs create || exit 1
+# The shard databases are STANDING (scripts/test-db-pool.cjs): created once, migrated incrementally, kept after the run.
+# TEST_DB_FRESH=1 recreates them (and drops them at the end).
+if [ "${TEST_DB_FRESH:-0}" = "1" ]; then dbs create || exit 1; else dbs ensure || exit 1; fi
 for i in $(seq 1 "$N"); do
   (
     export DATABASE_URL="mysql://societyapp:societyapp_dev@127.0.0.1:$PORT/societyapp_shard_$i"
@@ -51,6 +53,6 @@ if [ "$RC" -ne 0 ]; then
   echo "--- failures ---"
   sed 's/\x1b\[[0-9;]*m//g' "$LOGS"/shard-*.log | grep -E '^ *(FAIL|×)|Error:' | sort -u | head -50
 fi
-dbs drop
+if [ "${TEST_DB_FRESH:-0}" = "1" ]; then dbs drop; fi
 echo "wall time: $(($(date +%s) - T0))s, shards: $N, exit: $RC, logs: $LOGS"
 exit "$RC"
