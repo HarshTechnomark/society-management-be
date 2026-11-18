@@ -40,11 +40,7 @@ Helper: `tests/helpers/approvals.ts`. `tests/helpers/auth.ts` `resetAll` also cl
 1. Placeholder hooks take the entity id: `onApproved(ctx, entityId, t)`, `onRejected(ctx, entityId, reason, t)`, and
    `describe(entityId)` returns a flat list of facts. The adapter wraps them into native `TypeHandlers`. `onExpired` is passed
    through when a module registers it (payments does).
-2. **Auto-approval contract.** The callers in billing and payments apply the action themselves when `request` returns
-   `status: 'APPROVED'` (`if (req.status === 'APPROVED') await cancelInvoiceNow(...)`), while the spec (BR-14-4) has the engine
-   call `onApproved` inside `request`. The port therefore passes `callOnApproved: false`. Native callers (module 09 through
-   `realPart2Approvals`, modules 13 and later) get the spec behaviour. 14.3 should end the difference: let every caller rely on
-   the engine and drop the `if (status === 'APPROVED')` branches, then remove the option.
+2. **Auto-approval contract.** The engine calls `onApproved` inside `request` (BR-14-4); no caller applies the action itself when `request` returns `status: 'APPROVED'`, and the `callOnApproved` option is gone.
 3. `lockOpenForEntity(societyId, entityType, entityId, t)` finds the open request by **entity type**, like the placeholders.
 
 `realPart2Approvals` and `realPart3Approvals` do the same for the two other shapes module 09 uses
