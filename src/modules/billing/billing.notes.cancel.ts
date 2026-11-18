@@ -25,7 +25,7 @@ import {
   type CreditDraftLine,
 } from './billing.notes.credit';
 import { loadNoteDto, type CallCtx, type NoteDto } from './billing.notes.shared';
-import { billingPorts } from './billing.ports';
+import { approvalOf, billingPorts } from './billing.ports';
 import { societyToday } from './billing.runs.shared';
 import type { Transaction } from './billing.types';
 
@@ -196,7 +196,7 @@ export async function requestCancelIn(
     },
     t,
   );
-  if (req.status === 'APPROVED') await cancelInvoiceNow(ctx, societyId, invoice, reason, 'INVOICE_CANCEL', t);
+  // an auto-approval (BR-14-4) cancelled the invoice inside `request`
   return { approvalRequestId: req.id, status: req.status };
 }
 
@@ -222,7 +222,9 @@ export async function onCancelApproved(ctx: CallCtx, invoiceId: number, t: Trans
   if (invoice.status === 'CANCELLED') return;
   if (await pendingNoteCount(societyId, invoiceId, t))
     throw new ConflictError('CREDIT_NOTE_PENDING', 'A credit note is waiting for approval on this invoice');
-  await cancelInvoiceNow(ctx, societyId, invoice, 'Cancelled after approval', 'INVOICE_CANCEL', t);
+  const asked = approvalOf(ctx as never)?.payload?.reason;
+  const reason = typeof asked === 'string' && asked ? asked : 'Cancelled after approval';
+  await cancelInvoiceNow(ctx, societyId, invoice, reason, 'INVOICE_CANCEL', t);
 }
 
 // ------------------------------------------------------------------ write-off (8.17)
@@ -285,8 +287,9 @@ export async function requestWriteOff(
       },
       t,
     );
-    note.approvalRequestId = req.id;
-    await note.save({ transaction: t });
+    await note.reload({ transaction: t }); // an auto-approval (BR-14-4) issued the note inside `request`
+    if (Number(note.approvalRequestId) !== req.id)
+      await note.update({ approvalRequestId: req.id }, { transaction: t });
     await audit(
       ctx,
       {
@@ -299,7 +302,6 @@ export async function requestWriteOff(
       },
       t,
     );
-    if (req.status === 'APPROVED') await issueCreditNote(ctx, societyId, invoice, note, t);
     return Number(note.id);
   });
   return loadNoteDto(societyId, noteId);

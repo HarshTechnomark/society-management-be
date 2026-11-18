@@ -47,6 +47,10 @@ import { accountsPeriodsRoutes } from './modules/accounts/accounts.periods.route
 import { accountsReportsRoutes } from './modules/accounts/accounts.reports.routes';
 import { accountsFundsRoutes } from './modules/accounts/accounts.funds.routes';
 import { accountsBankRoutes } from './modules/accounts/accounts.bank.routes';
+import { approvalsHistoryRoutes } from './modules/approvals/approvals.history.routes';
+import { approvalsInboxRoutes } from './modules/approvals/approvals.inbox.routes';
+import { approvalsResidentRoutes } from './modules/approvals/approvals.resident.routes';
+import { approvalsRulesRoutes } from './modules/approvals/approvals.rules.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -155,6 +159,12 @@ export function createApp(): Express {
   // module 13 (13.2): funds, fund transfers and bank accounts
   api.use(accountsFundsRoutes);
   api.use(accountsBankRoutes);
+  // module 14 (14.2b): rules, settings and delegations; mounted before the 14.2a inbox router so `/approvals/:id` does not catch them
+  api.use(approvalsRulesRoutes);
+  // module 14 (14.2a): approvals inbox, decisions, history and resident requests (14.2b mounts rules, settings and delegations before them)
+  api.use(approvalsHistoryRoutes);
+  api.use(approvalsInboxRoutes);
+  api.use(approvalsResidentRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

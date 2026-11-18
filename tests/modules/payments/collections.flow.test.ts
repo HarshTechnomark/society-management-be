@@ -1020,19 +1020,16 @@ describe('review fixes (module 12 browser tests)', () => {
     expect(p.rows.find(x => x.id === c.id)!.requestCount).toBe(3);
   });
 
-  it('GET /dev/approvals rows of a collection publish carry title, amount, mode and requester', async () => {
+  it('the module 14 inbox row of a collection publish carries title, amount and requester (the dev stand-in is gone)', async () => {
     const { w } = await collWorld(4, 3);
-    const c = await create(w, { title: 'Dev approvals row' });
+    const c = await create(w, { title: 'Inbox approvals row' });
     await w.c('post', `/collections/${c.id}/submit`, { version: c.version });
-    const res = await request(app).get('/api/v1/dev/approvals');
-    const row = res.body.data.find((r: any) => r.source === 'payments' && r.entityId === c.id);
-    expect(row).toMatchObject({
-      type: 'COLLECTION_PUBLISH',
-      title: 'Dev approvals row',
-      amountPaise: 150_000,
-      mode: 'FIXED_PER_UNIT',
-    });
-    expect(row.requestedByName).toBeTruthy();
-    expect(row.payload).toMatchObject({ title: 'Dev approvals row' });
+    const res = await w.treasurer.c('get', '/approvals');
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const row = res.body.data.find((r: any) => r.type === 'COLLECTION_PUBLISH');
+    expect(row).toMatchObject({ amountPaise: 150_000, status: 'PENDING' });
+    expect(row.title).toContain('Inbox approvals row');
+    expect(row.requester.name).toBeTruthy();
+    expect((await request(app).get('/api/v1/dev/approvals')).status).toBe(404);
   });
 });

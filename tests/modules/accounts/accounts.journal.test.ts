@@ -1,14 +1,22 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { AuditLog, JournalEntry, JournalLine, LedgerAccount, closeDb, sequelize } from '../../../src/models';
+import {
+  ApprovalRequest,
+  AuditLog,
+  JournalEntry,
+  JournalLine,
+  LedgerAccount,
+  closeDb,
+  sequelize,
+} from '../../../src/models';
 import { advance } from '../../../src/lib/clock';
 import { drainQueues } from '../../../src/lib/queue';
-import {
-  accountsPortCalls,
-  placeholderAccountsApprovals,
-} from '../../../src/modules/accounts/accounts.ports';
+import { accountsPortCalls } from '../../../src/modules/accounts/accounts.ports';
 import { registerJournalJobs } from '../../../src/modules/accounts/accounts.journal.jobs';
-import { onJournalCancelled } from '../../../src/modules/accounts/accounts.journal.service';
-import * as hook from '../../../src/modules/accounts/accounts.journal.approvals-hook';
+import {
+  onJournalCancelled,
+  onJournalChangesRequested,
+} from '../../../src/modules/accounts/accounts.journal.service';
+import { autoApproveType, decideOver } from '../../helpers/approvals-decide';
 import { setAccountsPorts } from '../../../src/modules/accounts/accounts.ports';
 import { idemH } from '../../helpers/billing-runs';
 import { balanceOf, ctxOf, post } from '../../helpers/accounts';
@@ -51,17 +59,24 @@ const reverse = (c: World['c'], id: number, version: number, o: Record<string, u
     { reason: 'Posted by mistake', version, ...o },
     { headers: idemH() },
   );
-const approverCtx = (w: World, user: { id: number }) =>
-  ctxOf(w.society, user.id, ['finance.accounts.approve']);
+/** The module 14 request of a journal entry. */
+const reqOf = async (entryId: number) => Number((await JournalEntry.findByPk(entryId))!.approvalRequestId);
+/** A decision in the module 14 inbox over HTTP (default: the chairman, `w.c`). */
+const decideJ = (
+  c: World['c'],
+  entryId: number,
+  d: 'approve' | 'reject' | 'request-changes' = 'approve',
+  reason?: string,
+) => reqOf(entryId).then(id => decideOver(c as never, id, d, reason));
 
-/** Treasurer drafts and submits, chairman approves through the development hook. */
+/** Treasurer drafts and submits, the chairman approves in the module 14 inbox. */
 async function posted(w: World) {
   const d = await draft(w.treasurer.c);
   const s = await submit(w.treasurer.c, d.id, d.version);
   expect(s.status, JSON.stringify(s.body)).toBe(200);
-  const req = [...placeholderAccountsApprovals.values()].at(-1)!;
-  await hook.approve(req.id, approverCtx(w, w.user));
-  return { id: d.id as number, req };
+  const ok = await decideJ(w.c, d.id);
+  expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+  return { id: d.id as number, req: { id: await reqOf(d.id) } };
 }
 
 describe('manual journal drafts (6.1, 8.11)', { timeout: 180_000 }, () => {
@@ -210,7 +225,7 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
     expect(r.status).toBe(422);
     expect(r.body.code).toBe('JOURNAL_NOT_BALANCED');
     expect(r.body.errors[0]).toMatchObject({ field: 'lines', debitPaise: 1_180_000, creditPaise: 1_080_000 });
-    expect(accountsPortCalls.filter(c => c.fn === 'approvals.request')).toHaveLength(0);
+    expect(await ApprovalRequest.count({ where: { type: 'MANUAL_JOURNAL' } })).toBe(0);
     expect((await JournalEntry.findByPk(d.id))!.status).toBe('DRAFT');
   });
 
@@ -219,18 +234,23 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
     const d = await draft(w.treasurer.c);
     const s = await submit(w.treasurer.c, d.id, d.version);
     expect(s.body.data).toMatchObject({ status: 'PENDING_APPROVAL', version: 2 });
-    const call = accountsPortCalls.find(c => c.fn === 'approvals.request')!.input as any;
-    expect(call).toMatchObject({
+    const call = (await ApprovalRequest.findByPk(await reqOf(d.id)))!;
+    expect({
+      type: call.type,
+      entityType: call.entityType,
+      entityId: Number(call.entityId),
+      amountPaise: Number(call.amountPaise),
+      payload: call.payload,
+      title: call.title,
+      status: call.status,
+    }).toEqual({
       type: 'MANUAL_JOURNAL',
       entityType: 'journal_entry',
       entityId: d.id,
       amountPaise: 50_000,
       payload: { date: '2026-11-03' },
-    });
-    // the development approvals page shows what is asked
-    expect([...placeholderAccountsApprovals.values()].find(r => r.entityId === d.id)).toMatchObject({
       title: 'Bank charges adjustment',
-      amountPaise: 50_000,
+      status: 'PENDING',
     });
     // pending: no edit, no second submit, no cancel via DELETE, lines frozen by the trigger or model hook
     expect(
@@ -244,8 +264,7 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
     ).rejects.toThrow();
     expect(await balanceOf(w.society.id!, '1120')).toBe(0);
 
-    const req = [...placeholderAccountsApprovals.values()].at(-1)!;
-    await hook.approve(req.id, approverCtx(w, w.user));
+    expect((await decideJ(w.c, d.id)).status).toBe(200);
     const got = await w.c('get', `/accounts/journals/${d.id}`);
     expect(got.body.data).toMatchObject({ status: 'POSTED', source: 'MANUAL', difference: 0 });
     expect(got.body.data.voucherNo).toMatch(/^JV\/2026-27\/\d{6}$/);
@@ -262,10 +281,8 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
     const w = await paymentsWorld();
     const d = await draft(w.treasurer.c);
     await submit(w.treasurer.c, d.id, d.version);
-    const req = [...placeholderAccountsApprovals.values()].at(-1)!;
-    await expect(hook.approve(req.id, approverCtx(w, w.treasurer.user))).rejects.toMatchObject({
-      code: 'MAKER_CHECKER_VIOLATION',
-    });
+    const self = await decideJ(w.treasurer.c, d.id);
+    expect([self.status, self.body.code]).toEqual([409, 'MAKER_CHECKER_VIOLATION']);
     expect((await JournalEntry.findByPk(d.id))!.status).toBe('PENDING_APPROVAL');
   });
 
@@ -277,10 +294,7 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
       'UPDATE society_balances SET booksLockedThrough = "2026-11-05" WHERE societyId = ?',
       { replacements: [w.society.id] },
     );
-    const req2 = [...placeholderAccountsApprovals.values()].at(-1)!;
-    await expect(hook.approve(req2.id, approverCtx(w, w.user))).rejects.toMatchObject({
-      code: 'PERIOD_LOCKED',
-    });
+    expect((await decideJ(w.c, e.id)).body.code).toBe('PERIOD_LOCKED');
     expect((await JournalEntry.findByPk(e.id))!.status).toBe('PENDING_APPROVAL');
   });
 
@@ -289,8 +303,7 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
     const d = await draft(w.treasurer.c);
     await submit(w.treasurer.c, d.id, d.version);
     accountsPortCalls.length = 0;
-    const req = [...placeholderAccountsApprovals.values()].at(-1)!;
-    await hook.reject(req.id, 'Wrong head of account', approverCtx(w, w.user));
+    expect((await decideJ(w.c, d.id, 'reject', 'Wrong head of account')).status).toBe(200);
     const e = (await JournalEntry.findByPk(d.id))!;
     expect([e.status, e.rejectionReason]).toEqual(['REJECTED', 'Wrong head of account']);
     const sent = accountsPortCalls.find(c => c.fn === 'notifications.send')!.input as any;
@@ -306,12 +319,19 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
     ).toBe('INVALID_STATE');
   });
 
-  it('request changes returns the draft to DRAFT and resubmit reuses the same approval request; withdraw cancels', async () => {
+  it('request changes is not offered for MANUAL_JOURNAL (module 14 catalogue); onChangesRequested returns the draft to DRAFT and resubmit reuses the same approval request; withdraw cancels', async () => {
     const w = await paymentsWorld();
     const d = await draft(w.treasurer.c);
     await submit(w.treasurer.c, d.id, d.version);
-    const req = [...placeholderAccountsApprovals.values()].at(-1)!;
-    await hook.requestChanges(req.id, approverCtx(w, w.user));
+    const no = await decideJ(w.c, d.id, 'request-changes', 'Split the lines');
+    expect([no.status, no.body.code]).toEqual([422, 'CHANGES_NOT_SUPPORTED']);
+    // the type still registers the callback (spec 9.3): run it as module 14 would, request state included
+    await ApprovalRequest.update({ status: 'CHANGES_REQUESTED' } as never, {
+      where: { id: await reqOf(d.id) },
+    });
+    const tx = await sequelize.transaction();
+    await onJournalChangesRequested(ctxOf(w.society, w.user.id), d.id, tx);
+    await tx.commit();
     const back = (await JournalEntry.findByPk(d.id))!;
     expect(back.status).toBe('DRAFT');
     const fix = await w.treasurer.c('patch', `/accounts/journals/${d.id}`, {
@@ -321,8 +341,9 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
     expect(fix.status, JSON.stringify(fix.body)).toBe(200);
     accountsPortCalls.length = 0;
     const again = await submit(w.treasurer.c, d.id, fix.body.data.version);
+    expect(again.status, JSON.stringify(again.body)).toBe(200);
     expect(again.body.data.status).toBe('PENDING_APPROVAL');
-    expect(accountsPortCalls.find(c => c.fn === 'approvals.resubmit')).toBeTruthy();
+    expect((await ApprovalRequest.findByPk(await reqOf(d.id)))!.round).toBe(2); // same request, next round
     // maker withdraws the request: module 14 calls onCancelled
     const t = await sequelize.transaction();
     await onJournalCancelled(ctxOf(w.society, w.treasurer.user.id), d.id, t);
@@ -332,7 +353,7 @@ describe('submit and the approval flow (6.1, T13 journal cases)', { timeout: 180
 
   it('auto-approve by module 14 posts the draft at once', async () => {
     const w = await paymentsWorld();
-    setAccountsPorts({ approvals: { request: async () => ({ id: 77, status: 'APPROVED' as const }) } });
+    await autoApproveType('MANUAL_JOURNAL', w.society.id!);
     const d = await draft(w.treasurer.c);
     const r = await submit(w.treasurer.c, d.id, d.version);
     expect(r.body.data.status).toBe('POSTED');

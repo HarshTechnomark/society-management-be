@@ -1,14 +1,16 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { closeDb, sequelize } from '../../../src/models';
+import { ApprovalRequest, closeDb, sequelize } from '../../../src/models';
 import {
   PRODUCTION_REQUIRED_PORTS,
   accountsPortCalls,
   accountsPorts,
   assertAccountsPortsReady,
   fakePortsInUse,
-  placeholderAccountsApprovals,
   setAccountsPorts,
 } from '../../../src/modules/accounts/accounts.ports';
+import { engineApprovals } from '../../../src/modules/billing/billing.ports';
+import { registerExpenseJobs } from '../../../src/modules/accounts/accounts.expenses.jobs';
+import { isRegistered } from '../../../src/modules/approvals/approvals.registry';
 import { AccountsWorld, accountsSociety, resetAccounts } from '../../helpers/accounts';
 
 afterAll(async () => {
@@ -20,10 +22,12 @@ beforeEach(async () => {
   w = await accountsSociety();
 });
 
-describe('placeholder ports of modules 14, 16, 21 and 24', () => {
-  it('approvals: request records, lockOpenForEntity finds it, cancel and resubmit change it', async () => {
+describe('ports of modules 14 (real), 16, 21 and 24', () => {
+  it('approvals is the real module 14 (`engineApprovals`): request writes approval_requests, lockOpenForEntity finds it, cancel closes it', async () => {
+    registerExpenseJobs();
     const t = await sequelize.transaction();
     try {
+      expect(accountsPorts().approvals).toBe(engineApprovals);
       const r = await accountsPorts().approvals.request(
         w.user,
         {
@@ -36,36 +40,28 @@ describe('placeholder ports of modules 14, 16, 21 and 24', () => {
         },
         t,
       );
-      expect(r.status).toBe('PENDING');
-      expect(placeholderAccountsApprovals.get(r.id)).toMatchObject({
-        type: 'EXPENSE',
-        entityId: 7,
-        societyId: w.sid,
-        requestedBy: w.userId,
-        status: 'PENDING',
-      });
+      expect(r.status).toBe('PENDING'); // default rule 7.5: above Rs 5,000 one approver decides
+      const row = (await ApprovalRequest.findByPk(r.id, { transaction: t }))!;
+      expect([row.type, Number(row.entityId), Number(row.societyId), Number(row.requesterUserId)]).toEqual([
+        'EXPENSE',
+        7,
+        w.sid,
+        w.userId,
+      ]);
       expect(await accountsPorts().approvals.lockOpenForEntity(w.sid, 'expense', 7, t)).toEqual({
         id: r.id,
         type: 'EXPENSE',
       });
       expect(await accountsPorts().approvals.lockOpenForEntity(w.sid + 1, 'expense', 7, t)).toBeNull();
-      await accountsPorts().approvals.cancel(w.user, r.id, 'withdrawn', t);
-      expect(placeholderAccountsApprovals.get(r.id)!.status).toBe('CANCELLED');
+      await accountsPorts().approvals.cancel(w.user, r.id, 'Entered twice', t);
+      expect((await ApprovalRequest.findByPk(r.id, { transaction: t }))!.status).toBe('CANCELLED');
       expect(await accountsPorts().approvals.lockOpenForEntity(w.sid, 'expense', 7, t)).toBeNull();
-      await accountsPorts().approvals.resubmit(w.user, r.id, { title: 'again', amountPaise: 5 }, t);
-      expect(placeholderAccountsApprovals.get(r.id)!.status).toBe('PENDING');
-      expect(accountsPortCalls.map(c => c.fn)).toEqual([
-        'approvals.request',
-        'approvals.cancel',
-        'approvals.resubmit',
-      ]);
-      expect(accountsPortCalls[0]!.t).toBe(t);
     } finally {
       await t.rollback();
     }
   });
 
-  it('registerType keeps the hooks of each approval type', () => {
+  it('registerType registers the approval type with module 14', () => {
     const def = {
       type: 'FUND_TRANSFER',
       onApproved: async () => undefined,
@@ -73,7 +69,7 @@ describe('placeholder ports of modules 14, 16, 21 and 24', () => {
       describe: async () => [],
     };
     accountsPorts().approvals.registerType(def);
-    expect(placeholderAccountsApprovalTypesHas('FUND_TRANSFER')).toBe(true);
+    expect(isRegistered('FUND_TRANSFER')).toBe(true);
   });
 
   it('vendors, notifications and the reports cache are recorded; the vendor placeholder knows no vendor', async () => {
@@ -98,28 +94,21 @@ describe('placeholder ports of modules 14, 16, 21 and 24', () => {
   });
 
   it('a real port replaces the placeholder and is no longer reported as fake; setAccountsPorts() restores', () => {
+    expect(PRODUCTION_REQUIRED_PORTS).toEqual(['notifications']); // approvals is the real module 14
     expect(fakePortsInUse()).toEqual([...PRODUCTION_REQUIRED_PORTS]);
     setAccountsPorts({ vendors: { exists: async () => true } });
     expect(fakePortsInUse()).toEqual([...PRODUCTION_REQUIRED_PORTS]); // vendors is not required in production
-    setAccountsPorts({ approvals: { request: async () => ({ id: 1, status: 'APPROVED' as const }) } });
-    expect(fakePortsInUse()).toEqual(['notifications']);
     setAccountsPorts({ notifications: { send: async () => undefined } });
     expect(fakePortsInUse()).toEqual([]);
     setAccountsPorts();
-    expect(fakePortsInUse()).toEqual(['approvals', 'notifications']);
+    expect(fakePortsInUse()).toEqual(['notifications']);
   });
 
-  it('production refuses to start with placeholder approvals or notifications, development does not', () => {
+  it('production refuses to start with placeholder notifications, development does not', () => {
     expect(() => assertAccountsPortsReady('development')).not.toThrow();
     expect(() => assertAccountsPortsReady('test')).not.toThrow();
-    expect(() => assertAccountsPortsReady('production')).toThrow(/approvals, notifications/);
-    setAccountsPorts({
-      approvals: { request: async () => ({ id: 1, status: 'PENDING' as const }) },
-      notifications: { send: async () => undefined },
-    });
+    expect(() => assertAccountsPortsReady('production')).toThrow(/notifications/);
+    setAccountsPorts({ notifications: { send: async () => undefined } });
     expect(() => assertAccountsPortsReady('production')).not.toThrow();
   });
 });
-
-import { placeholderAccountsApprovalTypes } from '../../../src/modules/accounts/accounts.ports';
-const placeholderAccountsApprovalTypesHas = (k: string) => placeholderAccountsApprovalTypes.has(k);

@@ -3,7 +3,7 @@ import { AuditLog, BillingNote, Invoice, closeDb } from '../../../src/models';
 import { advance, now } from '../../../src/lib/clock';
 import { drainQueues } from '../../../src/lib/queue';
 import { setSocietyPorts, placeholderFiles } from '../../../src/modules/societies/societies.ports';
-import { approve } from '../../../src/modules/billing/billing.notes.approvals-hook';
+import { approve, everyRequestNeeds } from '../../helpers/approvals-decide';
 import {
   renderBillingPdf,
   qrMatrix,
@@ -247,6 +247,7 @@ describe('the billing:render-pdf job and the URLs (9.1, 8.13)', () => {
 
   it('a credit note and a debit note get their own PDF when issued; the note URL needs an issued note', async () => {
     const w = await invoiceWorld();
+    await everyRequestNeeds(w.society.id!, 'CREDIT_NOTE'); // the 7.5 default auto-approves a Rs 10 waiver; this test wants it pending
     const inv = await makeInvoice(w);
     const line = inv.lines.find((l: any) => l.headKey === 'PARKING').id;
     const cn = await w.c(

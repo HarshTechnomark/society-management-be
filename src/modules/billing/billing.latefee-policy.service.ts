@@ -240,12 +240,8 @@ export async function insertPolicy(
     },
     t,
   );
-  row.approvalRequestId = req.id;
-  await row.save({ transaction: t });
-  if (req.status === 'APPROVED') {
-    await approvePolicy(ctx, societyId, Number(row.id), t);
-    await row.reload({ transaction: t });
-  }
+  await row.reload({ transaction: t }); // an auto-approval (BR-14-4) activated the policy inside `request`
+  await row.update({ approvalRequestId: req.id }, { transaction: t });
   return row;
 }
 

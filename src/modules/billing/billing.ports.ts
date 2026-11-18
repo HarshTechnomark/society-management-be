@@ -3,6 +3,7 @@ import { logger } from '../../lib/logger';
 import { notify } from '../../lib/notify';
 import type { Ctx } from '../../types/context';
 import { UnprocessableError } from '../../utils/errors';
+import { realApprovals } from '../approvals/approvals.port';
 import type { MeterSource, MeterSourceType, YmdString } from './billing.types';
 import type { MeterType } from './billing.constants';
 
@@ -10,7 +11,7 @@ import type { MeterType } from './billing.constants';
  * What module 11 needs from modules 12, 13, 14, 16 and 21 (section 1.1, build step 4). Each port has a placeholder (the
  * "fake") that behaves as the spec describes and records its calls; the owning module replaces it at start-up with
  * `setBillingPorts({...})` (tests do the same). In production `assertBillingPortsReady()` (called by `registerBilling()`)
- * refuses to start while the approvals, journal or notification port is still a placeholder (section 1.1). The advances
+ * refuses to start while the journal or notification port is still a placeholder (approvals is the real module 14) (section 1.1). The advances
  * and meter ports have safe production defaults: no advance to apply, and `METERED` rules rejected with
  * `422 METER_SOURCE_NOT_AVAILABLE`.
  */
@@ -39,6 +40,15 @@ export interface ApprovalTypeHooks {
   onCancelled?(ctx: Ctx, entityId: number, t: Transaction): Promise<void>;
   describe(entityId: number): Promise<{ label: string; value: string; kind?: 'money' | 'date' | 'text' }[]>;
 }
+/** What module 14 puts on the context of a type hook (`ctx.approval`): the request, the decider (null on auto-approval), the payload. */
+export interface ApprovalInfo {
+  requestId: number;
+  actorUserId: number | null;
+  payload?: Record<string, unknown>;
+}
+/** `ctx.approval` inside a hook run by module 14, else null. */
+export const approvalOf = (ctx: Ctx): ApprovalInfo | null =>
+  (ctx as Ctx & { approval?: ApprovalInfo }).approval ?? null;
 export interface ApprovalsPort {
   registerType(def: ApprovalTypeHooks): void;
   request(ctx: Ctx, input: ApprovalRequestInput, t: Transaction): Promise<ApprovalResult>;
@@ -154,61 +164,22 @@ const record = (fn: string, input: unknown, t?: Transaction) => {
 };
 
 let fakeSeq = 0;
-/** Registered type hooks (placeholder); the real module 14 keeps its own registry. */
-export const placeholderApprovalTypes = new Map<string, ApprovalTypeHooks>();
-/** Requests the placeholder `approvals.request` created (11.3): lets the development approve and reject hooks find the entity. */
-export interface PlaceholderApprovalRequest {
-  id: number;
-  type: string;
-  entityType: string;
-  entityId: number;
-  societyId: number | null;
-  requestedBy: number | null;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
-}
-export const placeholderApprovalRequests = new Map<number, PlaceholderApprovalRequest>();
+
+/**
+ * Module 14 is real: the approvals port of modules 11, 12 and 13 defaults to the engine (`realApprovals` of
+ * `approvals.port.ts`). The calls are resolved at call time, so the import cycle (module 14 imports these types) is harmless.
+ */
+export const engineApprovals: ApprovalsPort = {
+  registerType: def => realApprovals.registerType(def),
+  request: (ctx, input, t) => realApprovals.request(ctx, input, t),
+  resubmit: (ctx, id, input, t) => realApprovals.resubmit(ctx, id, input, t),
+  cancel: (ctx, id, reason, t) => realApprovals.cancel(ctx, id, reason, t),
+  lockOpenForEntity: (societyId, entityType, entityId, t) =>
+    realApprovals.lockOpenForEntity(societyId, entityType, entityId, t),
+};
 
 export const defaultBillingPorts: BillingPorts = {
-  approvals: {
-    registerType: def => {
-      placeholderApprovalTypes.set(def.type, def);
-    },
-    request: async (ctx, input, t) => {
-      record('approvals.request', input, t);
-      const id = ++fakeSeq;
-      placeholderApprovalRequests.set(id, {
-        id,
-        type: input.type,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        societyId: ctx.society?.id ?? null,
-        requestedBy: ctx.user?.id ?? null,
-        status: 'PENDING',
-      });
-      return { id, status: 'PENDING' };
-    },
-    resubmit: async (_ctx, id, input, t) => {
-      record('approvals.resubmit', { id, ...input }, t);
-      const r = placeholderApprovalRequests.get(id);
-      if (r) r.status = 'PENDING';
-    },
-    cancel: async (_ctx, id, reason, t) => {
-      record('approvals.cancel', { id, reason }, t);
-      const r = placeholderApprovalRequests.get(id);
-      if (r) r.status = 'CANCELLED';
-    },
-    // 11.4: the placeholder finds a still-pending request it created (module 14 does the same with its own table)
-    lockOpenForEntity: async (societyId, entityType, entityId) => {
-      const open = [...placeholderApprovalRequests.values()].find(
-        r =>
-          r.status === 'PENDING' &&
-          r.societyId === societyId &&
-          r.entityType === entityType &&
-          r.entityId === entityId,
-      );
-      return open ? { id: open.id, type: open.type } : null;
-    },
-  },
+  approvals: engineApprovals,
   journal: {
     post: async (_ctx, input, t) => {
       const dr = input.lines.reduce((a, l) => a + l.debitPaise, 0);
@@ -270,7 +241,6 @@ export function setBillingPorts(p?: { [K in keyof BillingPorts]?: Partial<Billin
     current = defaultBillingPorts;
     replaced.clear();
     billingPortCalls.length = 0;
-    placeholderApprovalRequests.clear();
     return;
   }
   const next = { ...current } as Record<string, unknown>;
@@ -282,17 +252,13 @@ export function setBillingPorts(p?: { [K in keyof BillingPorts]?: Partial<Billin
 }
 
 /** Ports whose placeholder is not allowed in production (section 1.1). */
-export const PRODUCTION_REQUIRED_PORTS: readonly BillingPortName[] = [
-  'approvals',
-  'journal',
-  'notifications',
-];
+export const PRODUCTION_REQUIRED_PORTS: readonly BillingPortName[] = ['journal', 'notifications'];
 
 /** Names of the production-required ports that are still placeholders. */
 export const fakePortsInUse = (): BillingPortName[] =>
   PRODUCTION_REQUIRED_PORTS.filter(n => !replaced.has(n));
 
-/** Section 1.1: in production the server refuses to start while approvals, journal or notifications are placeholders. */
+/** Section 1.1: in production the server refuses to start while journal or notifications are placeholders. */
 export function assertBillingPortsReady(nodeEnv: string | undefined = process.env.NODE_ENV): void {
   if (nodeEnv !== 'production') return;
   const fakes = fakePortsInUse();

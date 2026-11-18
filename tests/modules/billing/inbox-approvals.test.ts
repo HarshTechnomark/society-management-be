@@ -1,8 +1,8 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { BillingRun, LateFeePolicy, closeDb } from '../../../src/models';
+import { ApprovalRequest, BillingRun, LateFeePolicy, closeDb } from '../../../src/models';
 import { drainQueues } from '../../../src/lib/queue';
-import { placeholderApprovalRequests } from '../../../src/modules/billing/billing.ports';
+import { decideOver } from '../../helpers/approvals-decide';
 import { registerBilling } from '../../../src/modules/billing/billing.public';
 import { app } from '../../helpers/auth';
 import { issuedRun } from '../../helpers/billing-setup';
@@ -25,7 +25,7 @@ beforeEach(async () => {
   registerBilling();
 });
 
-/** The development approvals page (module 14 stand-in) decides billing requests as the signed-in person when there is one. */
+/** The module 14 inbox (`POST /approvals/:id/approve`) decides billing requests as the signed-in member. */
 async function pendingRun(): Promise<{ w: RunSociety; runId: number; requestId: number }> {
   const w = await runSociety();
   for (const u of w.units) await addOwner(w.society.id!, u.id, `Owner of ${u.label}`);
@@ -42,33 +42,30 @@ async function pendingRun(): Promise<{ w: RunSociety; runId: number; requestId: 
   return { w, runId: run.id, requestId: p.body.data.approvalRequestId };
 }
 
-const approvePath = (id: number) => `/dev/approvals/${id}/approve`;
-
-describe('development approvals for billing (maker-checker and approver)', () => {
-  it('the publisher signed in on the page gets 409 MAKER_CHECKER_VIOLATION and the run keeps waiting', async () => {
+describe('billing approvals in the module 14 inbox (maker-checker and approver)', () => {
+  it('the publisher gets 409 MAKER_CHECKER_VIOLATION and the run keeps waiting', async () => {
     const { w, runId, requestId } = await pendingRun();
-    const r = await w.c('post', approvePath(requestId), {}, { query: { source: 'billing' } });
+    const r = await decideOver(w.c as never, requestId);
     expect([r.status, r.body.code]).toEqual([409, 'MAKER_CHECKER_VIOLATION']);
     expect((await BillingRun.findByPk(runId))!.status).toBe('PENDING_APPROVAL');
-    expect(placeholderApprovalRequests.get(requestId)!.status).toBe('PENDING');
+    expect((await ApprovalRequest.findByPk(requestId))!.status).toBe('PENDING');
   });
 
-  it('a second signed-in member approves and is stored as approvedBy', async () => {
+  it('a second member approves and is stored as approvedBy', async () => {
     const { w, runId, requestId } = await pendingRun();
-    const r = await w.treasurer.c('post', approvePath(requestId), {}, { query: { source: 'billing' } });
+    const r = await decideOver(w.treasurer.c as never, requestId);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const row = (await BillingRun.findByPk(runId))!;
     expect(row.approvedBy).toBe(w.treasurer.user.id);
     expect(['APPROVED', 'ISSUING', 'ISSUED']).toContain(row.status);
   });
 
-  it('without a session the system still decides (scripts and tests), with no approver', async () => {
-    const { runId, requestId } = await pendingRun();
-    const r = await request(app).post(`/api/v1${approvePath(requestId)}?source=billing`);
-    expect(r.status, JSON.stringify(r.body)).toBe(200);
-    const row = (await BillingRun.findByPk(runId))!;
-    expect(row.approvedBy).toBeNull();
-    expect(['APPROVED', 'ISSUING', 'ISSUED']).toContain(row.status);
+  it('the development stand-in is gone: /dev/approvals answers 404', async () => {
+    const { requestId } = await pendingRun();
+    expect((await request(app).get('/api/v1/dev/approvals')).status).toBe(404);
+    expect(
+      (await request(app).post(`/api/v1/dev/approvals/${requestId}/approve?source=billing`)).status,
+    ).toBe(404);
   });
 
   it('a late fee policy change: the requester gets 409, another member approves and is stored as approvedBy', async () => {
@@ -88,26 +85,16 @@ describe('development approvals for billing (maker-checker and approver)', () =>
     const r = await w.c('post', '/billing/late-fee-policies', body('2027-01-01'), { headers: idemH() });
     expect(r.body.data.status, JSON.stringify(r.body)).toBe('PENDING_APPROVAL');
     const id = r.body.data.approvalRequestId as number;
-    const self = await w.c('post', approvePath(id), {}, { query: { source: 'billing' } });
+    const self = await decideOver(w.c as never, id);
     expect([self.status, self.body.code]).toEqual([409, 'MAKER_CHECKER_VIOLATION']);
-    const ok = await w.treasurer.c('post', approvePath(id), {}, { query: { source: 'billing' } });
+    // default rule (14 BR table): 2 of [chairman, treasurer, secretary]; the requester cannot count, so treasurer + secretary
+    const first = await decideOver(w.treasurer.c as never, id);
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect((await LateFeePolicy.findByPk(r.body.data.id))!.status).toBe('PENDING_APPROVAL');
+    const ok = await decideOver(w.secretary.c as never, id);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     const row = (await LateFeePolicy.findByPk(r.body.data.id))!;
     expect(row.status).toBe('ACTIVE');
-    expect(row.approvedBy).toBe(w.treasurer.user.id);
-  });
-
-  it('refuses an approval type that has no development hook with 422', async () => {
-    placeholderApprovalRequests.set(4242, {
-      id: 4242,
-      type: 'SOMETHING_ELSE',
-      entityType: 'x',
-      entityId: 1,
-      societyId: 1,
-      requestedBy: null,
-      status: 'PENDING',
-    });
-    const r = await request(app).post(`/api/v1${approvePath(4242)}?source=billing`);
-    expect([r.status, r.body.code]).toEqual([422, 'UNKNOWN_APPROVAL_TYPE']);
+    expect([w.treasurer.user.id, w.secretary.user.id]).toContain(row.approvedBy);
   });
 });

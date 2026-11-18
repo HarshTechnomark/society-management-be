@@ -1,6 +1,6 @@
 import { paymentGateway } from '../../adapters';
 import { FakePaymentGateway, signWebhookBody } from '../../adapters/payments/payment-gateway';
-import { AutopayMandate, Collection, Payment, PaymentOrder, Refund, Unit, User } from '../../models';
+import { AutopayMandate, Payment, PaymentOrder, Refund } from '../../models';
 import { AppError } from '../../utils/errors';
 import { paymentsPorts } from '../payments/payments.ports';
 import { ingestWebhook, processWebhookEvent } from '../payments/payments.webhooks.service';
@@ -129,42 +129,4 @@ export async function devProcessRefund(gatewayRefundId: string, body: { outcome?
   const eventStatus = ing.eventId ? await processWebhookEvent(ing.eventId) : 'DUPLICATE';
   const fresh = await Refund.findByPk(r.id);
   return { refundId: Number(r.id), gatewayRefundId, status: fresh?.status, eventStatus };
-}
-
-/**
- * Extra fields of a module 12 row on `GET /dev/approvals` (flat, amount, mode, title, requester) so the page can say what is
- * being approved. Looked up from the entity the request points at; a missing entity gives no extra fields.
- */
-export async function paymentsApprovalDetails(a: {
-  type: string;
-  entityId: number;
-  requestedBy: number | null;
-}): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = {};
-  if (a.requestedBy) out.requestedByName = (await User.findByPk(a.requestedBy))?.name ?? null;
-  const unitLabel = async (unitId: number) => (await Unit.findByPk(unitId))?.label ?? null;
-  if (a.type === 'OFFLINE_PAYMENT') {
-    const p = await Payment.findByPk(a.entityId);
-    if (p) {
-      out.unitLabel = await unitLabel(Number(p.unitId));
-      out.amountPaise = Number(p.amountPaise);
-      out.mode = p.method;
-    }
-  } else if (a.type === 'PAYMENT_REFUND') {
-    const r = await Refund.findByPk(a.entityId);
-    if (r) {
-      out.unitLabel = await unitLabel(Number(r.unitId));
-      out.amountPaise = Number(r.amountPaise);
-      out.mode = r.mode;
-    }
-  } else if (a.type === 'COLLECTION_PUBLISH') {
-    const c = await Collection.findByPk(a.entityId);
-    if (c) {
-      out.title = c.title;
-      out.amountPaise = Number(c.targetPaise);
-      out.mode = c.amountMode;
-    }
-  }
-  out.payload = { ...out };
-  return out;
 }

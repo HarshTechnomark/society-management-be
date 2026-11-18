@@ -31,7 +31,7 @@ import {
 } from './accounts.constants';
 import { lockBooks } from './accounts.chart';
 import { postJournal } from './accounts.engine';
-import { accountsPorts } from './accounts.ports';
+import { accountsPorts, approvalOf } from './accounts.ports';
 import { addDaysYmd, n, societyIdOf, societyToday, startOfYearAfter } from './accounts.shared';
 import type { PostJournalInput, Transaction } from './accounts.types';
 
@@ -359,6 +359,7 @@ export async function requestUnlock(
       },
       t,
     );
+    await books.reload({ transaction: t }); // an auto-approval (BR-14-4) opened the window inside `request`
     await books.update(
       { unlockApprovalRequestId: approval.id, version: n(books.version) + 1 },
       { transaction: t },
@@ -375,10 +376,27 @@ export async function requestUnlock(
       },
       t,
     );
-    if (approval.status === 'APPROVED') await onUnlockApproved(ctx, n(books.id), t);
     return approval;
   });
   return { approvalRequestId: r.id, status: r.status, periods: await getPeriods(societyId) };
+}
+
+async function unlockAsked(societyId: number, books: SocietyBalance, t: Transaction) {
+  const requestId = books.unlockApprovalRequestId;
+  const rows = await AuditLog.findAll({
+    where: {
+      societyId,
+      action: AUDIT.periodUnlockRequested,
+      entityType: 'society_balance',
+      entityId: String(books.id),
+    },
+    order: [['id', 'DESC']],
+    limit: 20,
+    transaction: t,
+  });
+  return rows
+    .map(r => r.after as { approvalRequestId?: number; fromDate?: string; hours?: number } | null)
+    .find(a => a && Number(a.approvalRequestId) === Number(requestId));
 }
 
 /** Module 14 `onApproved` of `PERIOD_UNLOCK` (entity `society_balance`): opens the window the request asked for. */
@@ -388,21 +406,9 @@ export async function onUnlockApproved(ctx: Ctx, booksId: number, t: Transaction
   const societyId = n(books.societyId);
   if (unlockActive(books))
     throw new ConflictError(ERR.unlockAlreadyActive, 'A temporary unlock is already open');
-  const requestId = books.unlockApprovalRequestId;
-  const rows = await AuditLog.findAll({
-    where: {
-      societyId,
-      action: AUDIT.periodUnlockRequested,
-      entityType: 'society_balance',
-      entityId: String(booksId),
-    },
-    order: [['id', 'DESC']],
-    limit: 20,
-    transaction: t,
-  });
-  const found = rows
-    .map(r => r.after as { approvalRequestId?: number; fromDate?: string; hours?: number } | null)
-    .find(a => a && Number(a.approvalRequestId) === Number(requestId));
+  // module 14 passes the request payload; the audit row of the request is the fallback
+  const asked = approvalOf(ctx)?.payload as { fromDate?: string; hours?: number } | undefined;
+  const found = asked?.fromDate && asked.hours ? asked : await unlockAsked(societyId, books, t);
   if (!found?.fromDate || !found.hours)
     throw new ConflictError(ERR.invalidState, 'The unlock request details were not found');
   const until = addHours(now(), found.hours);
@@ -421,7 +427,11 @@ export async function onUnlockApproved(ctx: Ctx, booksId: number, t: Transaction
       entityType: 'society_balance',
       entityId: n(books.id),
       societyId,
-      after: { fromDate: found.fromDate, until: until.toISOString(), approvalRequestId: requestId },
+      after: {
+        fromDate: found.fromDate,
+        until: until.toISOString(),
+        approvalRequestId: approvalOf(ctx)?.requestId ?? books.unlockApprovalRequestId,
+      },
     },
     t,
   );

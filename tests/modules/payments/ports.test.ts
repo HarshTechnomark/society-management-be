@@ -1,44 +1,19 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { closeDb, sequelize } from '../../../src/models';
+import { closeDb } from '../../../src/models';
 import {
   assertPaymentsPortsReady,
   fakePortsInUse,
-  paymentsPortCalls,
   paymentsPorts,
-  placeholderPaymentApprovals,
   setPaymentsPorts,
 } from '../../../src/modules/payments/payments.ports';
-import { APPROVAL_TYPES } from '../../../src/modules/payments/payments.constants';
-import { systemCtx } from '../../../src/types/context';
+import { engineApprovals } from '../../../src/modules/billing/billing.ports';
 
 afterAll(closeDb);
 beforeEach(() => setPaymentsPorts());
 
-describe('payments placeholder ports', () => {
-  it('approvals placeholder records requests the dev page can decide, and finds the open one', async () => {
-    const ctx = {
-      ...systemCtx('t'),
-      society: { id: 5, name: '', status: 'ACTIVE', timezone: 'Asia/Kolkata', planKey: '' },
-    };
-    const r = await sequelize.transaction(t =>
-      paymentsPorts().approvals.request(
-        ctx,
-        { type: APPROVAL_TYPES.offlinePayment, entityType: 'payment', entityId: 9, title: 'Cash' },
-        t,
-      ),
-    );
-    expect(r.status).toBe('PENDING');
-    expect(placeholderPaymentApprovals.get(r.id)).toMatchObject({
-      type: 'OFFLINE_PAYMENT',
-      entityId: 9,
-      societyId: 5,
-      status: 'PENDING',
-    });
-    expect(await paymentsPorts().approvals.lockOpenForEntity(5, 'payment', 9, undefined as never)).toEqual({
-      id: r.id,
-      type: 'OFFLINE_PAYMENT',
-    });
-    expect(paymentsPortCalls.some(c => c.fn === 'approvals.request')).toBe(true);
+describe('payments ports', () => {
+  it('approvals is the real module 14 (no placeholder)', () => {
+    expect(paymentsPorts().approvals).toBe(engineApprovals);
   });
 
   it('funds, bank accounts and society balance have working placeholders', async () => {
@@ -47,13 +22,11 @@ describe('payments placeholder ports', () => {
     expect(await paymentsPorts().societyBalance.get(1)).toEqual({ balancePaise: 0 });
   });
 
-  it('production refuses to start while approvals, journal, gateways or notifications are placeholders', () => {
-    expect(fakePortsInUse().sort()).toEqual(['approvals', 'gateways', 'journal', 'notifications']);
-    expect(() => assertPaymentsPortsReady('production')).toThrow(
-      /approvals, journal, gateways, notifications/,
-    );
+  it('production refuses to start while journal, gateways or notifications are placeholders', () => {
+    expect(fakePortsInUse().sort()).toEqual(['gateways', 'journal', 'notifications']);
+    expect(() => assertPaymentsPortsReady('production')).toThrow(/journal, gateways, notifications/);
     expect(() => assertPaymentsPortsReady('development')).not.toThrow();
-    setPaymentsPorts({ approvals: {}, journal: {}, gateways: {}, notifications: {} });
+    setPaymentsPorts({ journal: {}, gateways: {}, notifications: {} });
     expect(() => assertPaymentsPortsReady('production')).not.toThrow();
   });
 });

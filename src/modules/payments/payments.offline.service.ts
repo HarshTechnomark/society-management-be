@@ -318,6 +318,7 @@ async function createPending(a: CreateArgs) {
     } as ApprovalRequestInput;
     const result = await paymentsPorts().approvals.request(ctx, input, t);
     await Payment.update({ approvalRequestId: result.id }, { where: { id: p.id }, transaction: t });
+    // an auto-approval (BR-14-4) ran `onOfflineApproved` inside `request`
     await audit(
       ctx,
       {

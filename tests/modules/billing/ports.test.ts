@@ -4,6 +4,7 @@ import {
   billingPortCalls,
   billingPorts,
   clearMeterSources,
+  engineApprovals,
   fakePortsInUse,
   registerMeterSource,
   requireMeterSource,
@@ -95,27 +96,21 @@ describe('placeholder ports (section 1.1)', () => {
     expect(billingPorts().meters.getSource('GAS')).toBe(src);
   });
 
-  it('the approvals fake returns a pending request and records the call', async () => {
-    const r = await billingPorts().approvals.request(
-      systemCtx(),
-      { type: 'BILLING_RUN_PUBLISH', entityType: 'billing_run', entityId: 1, title: 'Run' },
-      {} as never,
-    );
-    expect(r.status).toBe('PENDING');
-    expect(billingPortCalls[0]!.fn).toBe('approvals.request');
+  it('the approvals port is the real module 14 (no placeholder)', () => {
+    expect(billingPorts().approvals).toBe(engineApprovals);
   });
 });
 
 describe('production start-up check (section 1.1)', () => {
-  it('refuses to start in production while approvals, journal or notifications are placeholders', () => {
-    expect(fakePortsInUse().sort()).toEqual(['approvals', 'journal', 'notifications']);
-    expect(() => assertBillingPortsReady('production')).toThrow(/approvals, journal, notifications/);
+  it('refuses to start in production while journal or notifications are placeholders', () => {
+    expect(fakePortsInUse().sort()).toEqual(['journal', 'notifications']);
+    expect(() => assertBillingPortsReady('production')).toThrow(/journal, notifications/);
     expect(() => assertBillingPortsReady('development')).not.toThrow();
     expect(() => assertBillingPortsReady('test')).not.toThrow();
   });
 
-  it('passes once the real modules replaced the three ports; payments and meters may stay placeholders', () => {
-    setBillingPorts({ approvals: {}, journal: {} });
+  it('passes once the real modules replaced the two ports; payments and meters may stay placeholders', () => {
+    setBillingPorts({ journal: {} });
     expect(() => assertBillingPortsReady('production')).toThrow(/notifications/);
     setBillingPorts({ notifications: { send: async () => undefined } });
     expect(fakePortsInUse()).toEqual([]);
@@ -123,9 +118,9 @@ describe('production start-up check (section 1.1)', () => {
   });
 
   it('setBillingPorts() with no argument restores the placeholders', () => {
-    setBillingPorts({ approvals: {}, journal: {}, notifications: {} });
+    setBillingPorts({ journal: {}, notifications: {} });
     setBillingPorts();
-    expect(fakePortsInUse()).toHaveLength(3);
+    expect(fakePortsInUse()).toHaveLength(2);
   });
 });
 

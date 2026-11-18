@@ -1,11 +1,7 @@
+import { isRegistered } from '../../../src/modules/approvals/approvals.registry';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditLog, BillingRuleVersion, closeDb } from '../../../src/models';
-import {
-  billingPortCalls,
-  setBillingPorts,
-  placeholderApprovalTypes,
-} from '../../../src/modules/billing/billing.ports';
-import { approve, reject } from '../../../src/modules/billing/billing.rules.approvals-hook';
+import { approvalRequests, approve, autoApproveType, reject } from '../../helpers/approvals-decide';
 import { meterSources } from '../../../src/modules/billing/billing.public';
 import { systemCtx } from '../../../src/types/context';
 import { adminOf } from '../../helpers/residents';
@@ -75,7 +71,7 @@ describe('billing rules: create and setup mode (BR-11-21, US-11-01)', () => {
     });
     expect(rule.currentVersion.approvedBy).toBe(w.user.id);
     expect(rule.versions).toHaveLength(1);
-    expect(billingPortCalls.filter(c => c.fn === 'approvals.request')).toHaveLength(0);
+    expect(await approvalRequests()).toHaveLength(0);
     const a = await AuditLog.findAll({
       where: { societyId: w.society.id!, action: 'billing.rule_version.approved' },
     });
@@ -547,7 +543,7 @@ describe('billing rules: scope (BR-11-14, BR-11-15)', () => {
       status: 'REJECTED',
       rejectedReason: 'The rule was archived',
     });
-    expect(billingPortCalls.some(c => c.fn === 'approvals.cancel')).toBe(true);
+    expect((await approvalRequests()).some(r => r.status === 'CANCELLED')).toBe(true);
     expect((await w.c('delete', u, { reason: 'Created by mistake', version: 3 })).body.code).toBe(
       'INVALID_STATE',
     );
@@ -598,15 +594,15 @@ describe('billing rules: versions and effective dates (BR-11-20, BR-11-21, US-11
       reason: 'AGM resolution 4 of 2026',
     });
     expect(typeof v.body.data.approvalRequestId).toBe('number');
-    const call = billingPortCalls.find(c => c.fn === 'approvals.request')!;
-    expect(call.input).toMatchObject({
+    const call = (await approvalRequests()).at(-1)!;
+    expect(call).toMatchObject({
       type: 'BILLING_RULE_CHANGE',
       entityType: 'billing_rule_version',
       entityId: v.body.data.id,
       title: 'Maintenance (service charges): ₹3.20 per sq ft → ₹3.50 per sq ft from 2027-04-01',
       payload: { ruleId: rule.id, rateType: 'PER_SQFT', effectiveFrom: '2027-04-01' },
     });
-    expect(placeholderApprovalTypes.has('BILLING_RULE_CHANGE')).toBe(true);
+    expect(isRegistered('BILLING_RULE_CHANGE')).toBe(true);
     const mid = await w.c('get', `/billing/rules/${rule.id}`);
     expect(mid.body.data.currentVersion.versionNo).toBe(1);
     expect(mid.body.data.pendingVersion.versionNo).toBe(2);
@@ -732,13 +728,15 @@ describe('billing rules: versions and effective dates (BR-11-20, BR-11-21, US-11
 
   it('a module 14 that approves inside the request transaction activates the version at once', async () => {
     const { w, rule } = await liveWorld();
-    setBillingPorts({ approvals: { request: async () => ({ id: 77, status: 'APPROVED' }) } });
+    await autoApproveType('BILLING_RULE_CHANGE', w.society.id!);
     const v = await postVersion(
       w.c,
       rule.id,
       perSqft({ ratePerSqftPaise: 345, effectiveFrom: '2026-12-01' }),
     );
-    expect(v).toMatchObject({ status: 'APPROVED', approvalRequestId: 77 });
+    const req = (await approvalRequests()).at(-1)!;
+    expect(v).toMatchObject({ status: 'APPROVED', approvalRequestId: req.id });
+    expect([req.status, req.routing]).toEqual(['APPROVED', 'AUTO_RULE']);
     expect((await w.c('get', `/billing/rules/${rule.id}`)).body.data.nextVersion.versionNo).toBe(2);
   });
 
@@ -824,7 +822,7 @@ describe('billing rules: reads, access and approval hook', () => {
     }
   });
 
-  it('the approval hook knows only requests of billing; an unknown id is 404', async () => {
+  it('an unknown approval request id is 404 APPROVAL_NOT_FOUND', async () => {
     await expect(approve(987_654, systemCtx('x'))).rejects.toMatchObject({ code: 'APPROVAL_NOT_FOUND' });
     await expect(reject(987_654, 'no', systemCtx('x'))).rejects.toMatchObject({ code: 'APPROVAL_NOT_FOUND' });
   });

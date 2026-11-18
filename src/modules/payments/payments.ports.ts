@@ -4,6 +4,7 @@ import type { PaymentGateway } from '../../adapters/payments/payment-gateway';
 import { logger } from '../../lib/logger';
 import { notify } from '../../lib/notify';
 import type { Ctx } from '../../types/context';
+import { engineApprovals } from '../billing/billing.ports';
 import type {
   ApprovalRequestInput,
   ApprovalResult,
@@ -19,7 +20,7 @@ export type { ApprovalRequestInput, ApprovalResult, ApprovalTypeHooks, Approvals
  * What module 12 needs from modules 13 (journal, funds, bank accounts, society balance), 14 (approvals), 16 (notifications,
  * notices) and 29 (gateway accounts). Each port has a placeholder that behaves as the spec describes and records its calls;
  * the owning module replaces it at start-up with `setPaymentsPorts({...})` (tests do the same). Same pattern as
- * `billing.ports.ts`. In production `assertPaymentsPortsReady()` refuses to start while approvals, journal, gateway accounts
+ * `billing.ports.ts`. In production `assertPaymentsPortsReady()` refuses to start while journal, gateway accounts (approvals is the real module 14)
  * or notifications are still placeholders.
  */
 
@@ -91,20 +92,6 @@ const record = (fn: string, input: unknown, t?: Transaction) => {
 };
 
 let fakeSeq = 0;
-/** Registered type hooks (placeholder); the real module 14 keeps its own registry. */
-export const placeholderPaymentApprovalTypes = new Map<string, ApprovalTypeHooks>();
-export interface PlaceholderPaymentApproval {
-  id: number;
-  type: string;
-  entityType: string;
-  entityId: number;
-  societyId: number | null;
-  requestedBy: number | null;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
-}
-/** Requests the placeholder `approvals.request` created: the development approvals page (`?source=payments`) decides them. */
-export const placeholderPaymentApprovals = new Map<number, PlaceholderPaymentApproval>();
-
 /** Journal lines the placeholder accepted, so the placeholder society balance and the tests can read them. */
 export const placeholderJournal: { id: number; societyId: number | null; input: unknown }[] = [];
 
@@ -121,45 +108,7 @@ export const fakeGatewayAccount = (societyId: number): GatewayAccountDto => ({
 });
 
 export const defaultPaymentsPorts: PaymentsPorts = {
-  approvals: {
-    registerType: def => {
-      placeholderPaymentApprovalTypes.set(def.type, def);
-    },
-    request: async (ctx, input, t) => {
-      record('approvals.request', input, t);
-      const id = ++fakeSeq;
-      placeholderPaymentApprovals.set(id, {
-        id,
-        type: input.type,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        societyId: ctx.society?.id ?? null,
-        requestedBy: ctx.user?.id ?? null,
-        status: 'PENDING',
-      });
-      return { id, status: 'PENDING' };
-    },
-    resubmit: async (_ctx, id, input, t) => {
-      record('approvals.resubmit', { id, ...input }, t);
-      const r = placeholderPaymentApprovals.get(id);
-      if (r) r.status = 'PENDING';
-    },
-    cancel: async (_ctx, id, reason, t) => {
-      record('approvals.cancel', { id, reason }, t);
-      const r = placeholderPaymentApprovals.get(id);
-      if (r) r.status = 'CANCELLED';
-    },
-    lockOpenForEntity: async (societyId, entityType, entityId) => {
-      const open = [...placeholderPaymentApprovals.values()].find(
-        r =>
-          r.status === 'PENDING' &&
-          r.societyId === societyId &&
-          r.entityType === entityType &&
-          r.entityId === entityId,
-      );
-      return open ? { id: open.id, type: open.type } : null;
-    },
-  },
+  approvals: engineApprovals, // module 14 is real (billing.ports.ts)
   journal: {
     post: async (ctx, input, t) => {
       const dr = input.lines.reduce((a, l) => a + l.debitPaise, 0);
@@ -235,7 +184,6 @@ export function setPaymentsPorts(p?: { [K in keyof PaymentsPorts]?: Partial<Paym
     current = defaultPaymentsPorts;
     replaced.clear();
     paymentsPortCalls.length = 0;
-    placeholderPaymentApprovals.clear();
     placeholderJournal.length = 0;
     return;
   }
@@ -249,7 +197,6 @@ export function setPaymentsPorts(p?: { [K in keyof PaymentsPorts]?: Partial<Paym
 
 /** Ports whose placeholder is not allowed in production. */
 export const PRODUCTION_REQUIRED_PORTS: readonly PaymentsPortName[] = [
-  'approvals',
   'journal',
   'gateways',
   'notifications',

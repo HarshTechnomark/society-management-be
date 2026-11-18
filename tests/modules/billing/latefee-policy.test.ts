@@ -1,12 +1,8 @@
+import { isRegistered } from '../../../src/modules/approvals/approvals.registry';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditLog, LateFeePolicy, closeDb } from '../../../src/models';
-import {
-  billingPortCalls,
-  setBillingPorts,
-  placeholderApprovalTypes,
-} from '../../../src/modules/billing/billing.ports';
 import { billingSetup } from '../../../src/modules/billing/billing.public';
-import { approve, reject } from '../../../src/modules/billing/billing.rules.approvals-hook';
+import { approve, approvalRequests, autoApproveType, reject } from '../../helpers/approvals-decide';
 import { systemCtx } from '../../../src/types/context';
 import { adminOf } from '../../helpers/residents';
 import { featureOff } from '../../helpers/society-setup';
@@ -49,7 +45,7 @@ describe('late fee policies: configuration (8.4, BR-11-51)', () => {
       rejectedReason: null,
       version: 1,
     });
-    expect(billingPortCalls.filter(c => c.fn === 'approvals.request')).toHaveLength(0);
+    expect(await approvalRequests()).toHaveLength(0);
     const a = await AuditLog.findOne({
       where: { societyId: w.society.id!, action: 'billing.late_fee_policy.approved' },
     });
@@ -166,13 +162,13 @@ describe('late fee policies: approval after setup mode (BR-11-21, 6.5)', () => {
     expect(r.body.message).toBe('Late fee policy sent for approval');
     expect(r.body.data).toMatchObject({ status: 'PENDING_APPROVAL', approvedBy: null, approvedAt: null });
     expect(typeof r.body.data.approvalRequestId).toBe('number');
-    const call = billingPortCalls.find(c => c.fn === 'approvals.request')!;
-    expect(call.input).toMatchObject({
+    const call = (await approvalRequests()).at(-1)!;
+    expect(call).toMatchObject({
       type: 'LATE_FEE_POLICY_CHANGE',
       entityType: 'late_fee_policy',
       entityId: r.body.data.id,
     });
-    expect(placeholderApprovalTypes.has('LATE_FEE_POLICY_CHANGE')).toBe(true);
+    expect(isRegistered('LATE_FEE_POLICY_CHANGE')).toBe(true);
 
     const second = await post(w.c, interest({ effectiveFrom: '2027-02-01' }));
     expect(second.status).toBe(409);
@@ -184,7 +180,7 @@ describe('late fee policies: approval after setup mode (BR-11-21, 6.5)', () => {
     expect(done).toMatchObject({
       type: 'LATE_FEE_POLICY_CHANGE',
       entityId: r.body.data.id,
-      status: 'ACTIVE',
+      status: 'APPROVED',
     });
     const row = (await LateFeePolicy.findByPk(r.body.data.id))!;
     expect(row.status).toBe('ACTIVE');
@@ -250,9 +246,15 @@ describe('late fee policies: approval after setup mode (BR-11-21, 6.5)', () => {
   it('a module 14 that approves inside the request transaction activates the policy at once', async () => {
     const w = await billingWorld();
     await issuedRun(w.society.id!);
-    setBillingPorts({ approvals: { request: async () => ({ id: 91, status: 'APPROVED' }) } });
+    await autoApproveType('LATE_FEE_POLICY_CHANGE', w.society.id!);
     const r = await post(w.c, interest());
-    expect(r.body.data).toMatchObject({ status: 'ACTIVE', approvalRequestId: 91 });
+    expect(r.body.data).toMatchObject({ status: 'ACTIVE' });
+    const req = (await approvalRequests()).at(-1)!;
+    expect([r.body.data.approvalRequestId, req.status, req.routing]).toEqual([
+      req.id,
+      'APPROVED',
+      'AUTO_RULE',
+    ]);
   });
 });
 

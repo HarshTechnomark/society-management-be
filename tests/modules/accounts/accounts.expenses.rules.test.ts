@@ -142,7 +142,7 @@ describe('BR-13-23 amounts, TDS, statutory dues', () => {
 
   it('STATUTORY_DUE: only 2310 to 2330 and 2140, no GST, TDS or fund; a TDS deposit needs the section and may carry a challan', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     const base = { expenseType: 'STATUTORY_DUE', payee: 'Income Tax Dept' };
     expect(codeOf(await post(w, bankBody(w, { ...base, ledgerAccountId: w.id['5330'] })))).toEqual([
       422,
@@ -298,7 +298,7 @@ describe('access: permissions, tenancy, suspension, reading', () => {
 
   it('lists with filters, search (payee, EXP-id, voucher), sorting and pagination; detail carries hints', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     const a = (await post(w, expBody(w))).body.data;
     const b = (
       await post(
@@ -353,7 +353,7 @@ describe('access: permissions, tenancy, suspension, reading', () => {
 
   it('exports the filtered list as CSV and audits it', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     await post(w, expBody(w, { payee: 'Comma, Payee' }));
     const r = await w.c('get', '/expenses/export', undefined, { query: { status: 'POSTED' } });
     expect(r.status).toBe(200);

@@ -204,7 +204,10 @@ const docsRequired = (missing: string[]) =>
 // ------------------------------------------------------------------ approval payload
 const approvalSummary = (p: RenovationPermit, label: string) => [
   { label: 'Flat', value: label },
-  { label: 'Work', value: `${p.workCategory}: ${p.workDescription.slice(0, 80)}` },
+  {
+    label: 'Work',
+    value: `${p.workCategory.charAt(0)}${p.workCategory.slice(1).toLowerCase().replace(/_/g, ' ')}: ${p.workDescription.slice(0, 80)}`,
+  },
   { label: 'Dates', value: `${p.startDate} to ${p.endDate}` },
   { label: 'Hours', value: `${hhmm(p.dailyStartTime)} to ${hhmm(p.dailyEndTime)}` },
   { label: 'Contractor', value: `${p.contractorName} (${p.workerCount} workers)` },

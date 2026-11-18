@@ -1,11 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { Expense, JournalEntry, closeDb } from '../../../src/models';
+import { ApprovalRequest, Expense, JournalEntry, closeDb } from '../../../src/models';
 import { advance } from '../../../src/lib/clock';
-import {
-  accountsPortCalls,
-  placeholderAccountsApprovalTypes,
-  setAccountsPorts,
-} from '../../../src/modules/accounts/accounts.ports';
+import { accountsPortCalls, setAccountsPorts } from '../../../src/modules/accounts/accounts.ports';
+import { decideOver } from '../../helpers/approvals-decide';
 import { listForCollection } from '../../../src/modules/accounts/accounts.expenses.read';
 import { UnprocessableError } from '../../../src/utils/errors';
 import { events } from '../../helpers/auth';
@@ -20,7 +17,6 @@ import {
   expBody,
   expWorld,
   idemH,
-  moneyTx,
   resetExpenses,
   type ExpWorld,
 } from '../../helpers/accounts-expenses';
@@ -39,7 +35,7 @@ const reqOf = async (id: number) => Number((await fresh(id)).approvalRequestId);
 describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
   it('T13-10: auto-approved cash expense is POSTED in the same response with a voucher, cash falls', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     const r = await post(w, expBody(w));
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     expect(r.body.data).toMatchObject({
@@ -66,13 +62,14 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
     const r = await post(w, expBody(w));
     expect(r.body.data.status).toBe('PENDING_APPROVAL');
     expect(await balanceOf(w.sid, '1120')).toBe(1_000_000);
-    const call = accountsPortCalls.find(c => c.fn === 'approvals.request')!;
-    expect(call.input).toMatchObject({
-      type: 'EXPENSE',
-      entityType: 'expense',
-      amountPaise: 180_000,
-      title: 'Shree Ganesh Gardeners · Garden and landscaping',
-    });
+    const call = (await ApprovalRequest.findByPk(await reqOf(r.body.data.id)))!;
+    expect([call.type, call.entityType, Number(call.amountPaise), call.title, call.status]).toEqual([
+      'EXPENSE',
+      'expense',
+      180_000,
+      'Shree Ganesh Gardeners · Garden and landscaping',
+      'PENDING',
+    ]);
     const d = await decide(w, await reqOf(r.body.data.id));
     expect(d.status, JSON.stringify(d.body)).toBe(200);
     const e = await fresh(r.body.data.id);
@@ -113,7 +110,7 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
 
   it('T13-14: lift AMC with GST 180,000 and TDS 20,000 posts Dr 5330, Cr bank, Cr 2140', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     const r = await post(
       w,
       bankBody(w, {
@@ -145,7 +142,7 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
 
   it('with finance.gstInputClaimable the GST goes to 1410', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     await setSetting(w.sid, 'finance.gstInputClaimable', true);
     const r = await post(
       w,
@@ -158,7 +155,7 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
 
   it('T13-16: a Repair fund expense takes the fund negative and credits 4900 with the fund id', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     const fundId = await fundIdByType(w.sid, 'REPAIR');
     const r = await post(
       w,
@@ -175,7 +172,8 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
     expect(await balanceOf(w.sid, '5330')).toBe(4_500_000);
     expect(await balanceOf(w.sid, '1110-001')).toBe(5_500_000);
     // the list and the detail name the fund, the detail carries the journal link and a timeline
-    expect(r.body.data).toMatchObject({ fundName: 'Repair and maintenance fund', approvalRequired: true });
+    // the society's rule auto-approves every amount, so no approval is required (module 14 rule, not a constant)
+    expect(r.body.data).toMatchObject({ fundName: 'Repair and maintenance fund', approvalRequired: false });
     const detail = (await w.c('get', `/expenses/${r.body.data.id}`)).body.data;
     expect(detail.journalEntryId).toEqual(expect.any(Number));
     expect(detail.timeline.map((t: { action: string }) => t.action)).toContain('accounts.expense.created');
@@ -208,11 +206,31 @@ describe('POST /expenses: create, auto-approve and post (8.6, 6.8)', () => {
     const one = await w.c('get', `/expenses/${r.body.data.id}`);
     expect(one.body.data.createdByName).toBe(row.createdByName);
   });
+  it('default rules (module 14 7.5): up to 5,000 INR auto-approves and posts, above it waits for one approver', async () => {
+    const w = await expWorld({ defaultRules: true });
+    const small = await post(w, expBody(w));
+    expect(small.status, JSON.stringify(small.body)).toBe(201);
+    expect(small.body.data).toMatchObject({
+      status: 'POSTED',
+      approvalRequired: false,
+      approvalThresholdPaise: 500_000,
+    });
+    expect((await ApprovalRequest.findByPk(await reqOf(small.body.data.id)))!.routing).toBe('AUTO_RULE');
+    const big = await post(w, bankBody(w, { grossAmountPaise: 1_200_000, fileIds: [bill(w, w.user.id)] }));
+    expect(big.body.data).toMatchObject({
+      status: 'PENDING_APPROVAL',
+      approvalRequired: true,
+      approvalThresholdPaise: 500_000,
+    });
+    expect((await decide(w, await reqOf(big.body.data.id))).status).toBe(200);
+    expect((await fresh(big.body.data.id)).status).toBe('POSTED');
+  });
+
   it('submit=false saves a DRAFT without an approval request', async () => {
     const w = await expWorld();
     const r = await post(w, expBody(w, { submit: false }));
     expect(r.body.data.status).toBe('DRAFT');
-    expect(accountsPortCalls.filter(c => c.fn === 'approvals.request')).toHaveLength(0);
+    expect(await ApprovalRequest.count({ where: { type: 'EXPENSE' } })).toBe(0);
     expect(await JournalEntry.count({ where: { societyId: w.sid, refType: 'expense' } })).toBe(0);
   });
 });
@@ -231,7 +249,7 @@ describe('PATCH, submit, withdraw, delete (8.7, 6.2)', () => {
     const p = (await post(w, expBody(w))).body.data;
     const ed = await w.c('patch', `/expenses/${p.id}`, { description: 'x', version: p.version });
     expect([ed.status, ed.body.code]).toEqual([409, 'INVALID_STATE']);
-    autoApprove();
+    await autoApprove();
     const posted = (await post(w, expBody(w, { payee: 'Other Payee' }))).body.data;
     expect(posted.status).toBe('POSTED');
     const wd = await w.c('post', `/expenses/${posted.id}/withdraw`, {
@@ -323,7 +341,7 @@ describe('PATCH, submit, withdraw, delete (8.7, 6.2)', () => {
     });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.data).toMatchObject({ status: 'CANCELLED', cancelReason: 'Entered twice' });
-    expect(accountsPortCalls.some(c => c.fn === 'approvals.cancel')).toBe(true);
+    expect((await ApprovalRequest.findByPk(await reqOf(p.id)))!.status).toBe('CANCELLED');
     const again = await decide(w, Number(p.approvalRequestId ?? (await reqOf(p.id))));
     expect(again.status).toBe(409); // request no longer pending
     expect(await balanceOf(w.sid, '1120')).toBe(1_000_000);
@@ -364,13 +382,8 @@ describe('PATCH, submit, withdraw, delete (8.7, 6.2)', () => {
     const w = await expWorld();
     const p = (await post(w, expBody(w))).body.data;
     const requestId = await reqOf(p.id);
-    await moneyTx(t =>
-      placeholderAccountsApprovalTypes.get('EXPENSE')!.onChangesRequested!(
-        { society: { id: w.sid } } as never,
-        p.id,
-        t,
-      ),
-    );
+    const back = await decideOver(w.treasurer.c as never, requestId, 'request-changes', 'Attach the quote');
+    expect(back.status, JSON.stringify(back.body)).toBe(200);
     const e = await fresh(p.id);
     expect(e.status).toBe('CHANGES_REQUESTED');
     const ed = await w.c('patch', `/expenses/${p.id}`, {
@@ -385,10 +398,8 @@ describe('PATCH, submit, withdraw, delete (8.7, 6.2)', () => {
       { headers: idemH() },
     );
     expect(sub.body.data.status).toBe('PENDING_APPROVAL');
-    expect(accountsPortCalls.find(c => c.fn === 'approvals.resubmit')?.input).toMatchObject({
-      id: requestId,
-      amountPaise: 175_000,
-    });
+    const again = (await ApprovalRequest.findByPk(requestId))!;
+    expect([again.status, Number(again.amountPaise), Number(again.round)]).toEqual(['PENDING', 175_000, 2]);
     expect((await decide(w, requestId)).status).toBe(200);
     expect(await balanceOf(w.sid, '1120')).toBe(1_000_000 - 175_000);
   });
@@ -396,7 +407,7 @@ describe('PATCH, submit, withdraw, delete (8.7, 6.2)', () => {
 
 describe('POST /expenses/:id/reverse (8.8, BR-13-29)', () => {
   async function posted(w: ExpWorld) {
-    autoApprove();
+    await autoApprove();
     const r = await post(w, expBody(w));
     return r.body.data as { id: number; version: number };
   }
@@ -458,7 +469,7 @@ describe('POST /expenses/:id/reverse (8.8, BR-13-29)', () => {
 describe('module 21 vendor bill port (BR-13-28)', () => {
   it('records the payment on posting and reverses it on reversal; a 422 from module 21 is VENDOR_BILL_NOT_PAYABLE', async () => {
     const w = await expWorld();
-    autoApprove();
+    await autoApprove();
     setAccountsPorts({
       vendors: {
         exists: async () => true,

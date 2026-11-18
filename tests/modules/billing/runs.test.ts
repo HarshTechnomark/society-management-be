@@ -12,12 +12,15 @@ import {
 } from '../../../src/models';
 import { drainQueues } from '../../../src/lib/queue';
 import { systemCtx } from '../../../src/types/context';
+import { billingPortCalls } from '../../../src/modules/billing/billing.ports';
 import {
-  billingPortCalls,
-  placeholderApprovalTypes,
-  setBillingPorts,
-} from '../../../src/modules/billing/billing.ports';
-import { approve, reject, requestChanges } from '../../../src/modules/billing/billing.runs.approvals-hook';
+  approvalRequests,
+  approve,
+  autoApproveType,
+  reject,
+  requestChanges,
+} from '../../helpers/approvals-decide';
+import { getHandlers } from '../../../src/modules/approvals/approvals.registry';
 import { app } from '../../helpers/auth';
 import { listRoutes } from '../../../src/modules/access-control/access-control.registry';
 import { events } from '../../helpers/auth';
@@ -488,7 +491,7 @@ describe('exceptions, exclusion and publish (8.8, 8.9, BR-11-34, BR-11-35)', () 
   });
 });
 
-describe('approval and the placeholder module 14 (BR-11-35, BR-11-36)', () => {
+describe('approval through module 14 (BR-11-35, BR-11-36)', () => {
   async function preview() {
     const w = await world();
     const run = await createAndCompute(w.c);
@@ -503,8 +506,8 @@ describe('approval and the placeholder module 14 (BR-11-35, BR-11-36)', () => {
     const r = await publish(w, run.id, d.version);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.data).toMatchObject({ status: 'PENDING_APPROVAL', approvalRequestId: expect.any(Number) });
-    const call = billingPortCalls.find(c => c.fn === 'approvals.request')!;
-    expect(call.input).toMatchObject({
+    const call = (await approvalRequests()).at(-1)!;
+    expect(call).toMatchObject({
       type: 'BILLING_RUN_PUBLISH',
       entityType: 'billing_run',
       entityId: run.id,
@@ -562,27 +565,27 @@ describe('approval and the placeholder module 14 (BR-11-35, BR-11-36)', () => {
     const re = await publish(w, run.id, back.version);
     expect(re.status, JSON.stringify(re.body)).toBe(200);
     expect(re.body.data.approvalRequestId).toBe(id);
-    expect(billingPortCalls.some(c => c.fn === 'approvals.resubmit')).toBe(true);
+    expect((await approvalRequests()).find(r => r.id === id)).toMatchObject({ status: 'PENDING', round: 2 });
     await requestChanges(id, ctx);
     const b2 = await detail(w, run.id);
     const other = await publish(w, run.id, b2.version, w.treasurer.c);
     expect(other.status, JSON.stringify(other.body)).toBe(200);
     expect(other.body.data.approvalRequestId).not.toBe(id);
-    expect(billingPortCalls.find(c => c.fn === 'approvals.cancel')!.input).toMatchObject({
-      id,
-      reason: 'Republished by another user',
-    });
+    expect((await approvalRequests()).find(r => r.id === id)!.status).toBe('CANCELLED');
   });
 
   it('module 14 auto-approval inside the publish transaction moves the run to APPROVED (bill date in the future)', async () => {
     const w = await world();
     await setSetting(w.society.id!, 'billing.billingDay', 10);
-    setBillingPorts({ approvals: { request: async () => ({ id: 77, status: 'APPROVED' }) } });
+    await autoApproveType('BILLING_RUN_PUBLISH', w.society.id!);
     const run = await createAndCompute(w.c);
     const d = await detail(w, run.id);
     expect(d.billDate).toBe('2026-11-10');
     const r = await publish(w, run.id, d.version);
-    expect(r.body.data).toMatchObject({ status: 'APPROVED', approvalRequestId: 77 });
+    expect(r.body.data).toMatchObject({
+      status: 'APPROVED',
+      approvalRequestId: (await approvalRequests()).at(-1)!.id,
+    });
     expect((await BillingRun.findByPk(run.id))!.approvedBy).toBe(w.user.id);
     expect(await AuditLog.count({ where: { action: 'billing.run.approved' } })).toBe(1);
   });
@@ -590,9 +593,10 @@ describe('approval and the placeholder module 14 (BR-11-35, BR-11-36)', () => {
   it('describe returns the facts of the run for the approvals inbox', async () => {
     const { w, run, d } = await preview();
     await publish(w, run.id, d.version);
-    const facts = await placeholderApprovalTypes.get('BILLING_RUN_PUBLISH')!.describe(run.id);
+    const { facts } = await getHandlers('BILLING_RUN_PUBLISH')!.describe({ entityId: run.id } as never);
     expect(facts.map(f => f.label)).toEqual([
       'Period',
+      'Run',
       'Flats',
       'Total billed',
       'Exceptions',

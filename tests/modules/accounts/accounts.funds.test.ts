@@ -1,16 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { AuditLog, Fund, JournalEntry, LedgerAccount, closeDb, sequelize } from '../../../src/models';
+import {
+  ApprovalRequest,
+  AuditLog,
+  Fund,
+  JournalEntry,
+  LedgerAccount,
+  closeDb,
+  sequelize,
+} from '../../../src/models';
 import { setNow } from '../../../src/lib/clock';
 import { resetRateLimits } from '../../../src/middlewares/rateLimit.middleware';
 import { ensureBooks } from '../../../src/modules/accounts/accounts.chart';
 import { registerFundJobs } from '../../../src/modules/accounts/accounts.funds.jobs';
-import { approve, reject } from '../../../src/modules/accounts/accounts.funds.approvals-hook';
-import {
-  accountsPortCalls,
-  placeholderAccountsApprovalTypes,
-  placeholderAccountsApprovals,
-} from '../../../src/modules/accounts/accounts.ports';
+import { fundTransferHooks } from '../../../src/modules/accounts/accounts.funds.transfer';
+import { isRegistered } from '../../../src/modules/approvals/approvals.registry';
+import { decideOver } from '../../helpers/approvals-decide';
 import { addBankLedger, balanceOf, ctxOf, fundIdByType, post, resetAccounts } from '../../helpers/accounts';
 import { memberOf, setupSociety } from '../../helpers/society-setup';
 import { resetLogins } from '../../helpers/access';
@@ -31,7 +36,10 @@ async function world(plan: 'STANDARD' | 'PREMIUM' = 'PREMIUM') {
   const sid = w.society.id!;
   await sequelize.transaction(t => ensureBooks(t, sid));
   const treasurer = await memberOf(w.society, 'treasurer');
-  return { ...w, sid, treasurer, approver: ctxOf(w.society, treasurer.user.id) };
+  /** The treasurer decides in the module 14 inbox (the chairman, `w.c`, requests). */
+  const approve = (id: number) => decideOver(treasurer.c as never, id);
+  const reject = (id: number, reason: string) => decideOver(treasurer.c as never, id, 'reject', reason);
+  return { ...w, sid, treasurer, approve, reject };
 }
 
 /** Puts money into a fund the way a system posting does (Dr bank, Cr fund). */
@@ -265,17 +273,18 @@ describe('fund transfer (BR-13-33, 8.13)', () => {
     });
     expect(r.status, JSON.stringify(r.body)).toBe(202);
     expect(r.body.data).toMatchObject({ status: 'PENDING' });
-    const req = accountsPortCalls.find(c => c.fn === 'approvals.request')!.input as any;
-    expect(req).toMatchObject({
-      type: 'FUND_TRANSFER',
-      entityType: 'fund',
-      entityId: sinking,
-      amountPaise: 100_000,
-    });
+    const req = (await ApprovalRequest.findByPk(r.body.data.approvalRequestId))!;
+    expect([req.type, req.entityType, Number(req.entityId), Number(req.amountPaise), req.status]).toEqual([
+      'FUND_TRANSFER',
+      'fund',
+      sinking,
+      100_000,
+      'PENDING',
+    ]);
     expect(req.payload).toMatchObject({ fromFundId: repair, toFundId: sinking, date: '2026-10-20' });
     expect(await balanceOf(w.sid, '2420')).toBe(-500_000); // nothing moved yet
     const id = r.body.data.approvalRequestId;
-    await approve(id, w.approver);
+    expect((await w.approve(id)).status).toBe(200);
     expect(await balanceOf(w.sid, '2420')).toBe(-400_000);
     expect(await balanceOf(w.sid, '2410')).toBe(-100_000);
     const e = (await JournalEntry.findOne({
@@ -297,7 +306,7 @@ describe('fund transfer (BR-13-33, 8.13)', () => {
     const w = await world();
     const repair = await fundIdByType(w.sid, 'REPAIR');
     const a = await w.c('post', '/accounts/fund-transfers', body({ toFundId: repair }), { headers: idem() });
-    await approve(a.body.data.approvalRequestId, w.approver);
+    expect((await w.approve(a.body.data.approvalRequestId)).status).toBe(200);
     expect(await balanceOf(w.sid, '2420')).toBe(-100_000);
     expect(await balanceOf(w.sid, '3100')).toBe(100_000);
     const b = await w.c(
@@ -306,7 +315,7 @@ describe('fund transfer (BR-13-33, 8.13)', () => {
       body({ fromFundId: repair, amountPaise: 40_000 }),
       { headers: idem() },
     );
-    await approve(b.body.data.approvalRequestId, w.approver);
+    expect((await w.approve(b.body.data.approvalRequestId)).status).toBe(200);
     expect(await balanceOf(w.sid, '2420')).toBe(-60_000);
     expect(await balanceOf(w.sid, '3100')).toBe(60_000);
   });
@@ -316,13 +325,10 @@ describe('fund transfer (BR-13-33, 8.13)', () => {
     const repair = await fundIdByType(w.sid, 'REPAIR');
     const a = await w.c('post', '/accounts/fund-transfers', body({ toFundId: repair }), { headers: idem() });
     const id = a.body.data.approvalRequestId;
-    const mine = placeholderAccountsApprovals.get(id)!;
-    await expect(approve(id, ctxOf(w.society, mine.requestedBy))).rejects.toMatchObject({
-      code: 'MAKER_CHECKER_VIOLATION',
-    });
-    await reject(id, 'No', w.approver);
+    expect((await decideOver(w.c as never, id)).body.code).toBe('MAKER_CHECKER_VIOLATION');
+    expect((await w.reject(id, 'Not this month')).status).toBe(200);
     expect(await JournalEntry.count({ where: { societyId: w.sid, refType: 'fund_transfer' } })).toBe(0);
-    expect(placeholderAccountsApprovals.get(id)!.status).toBe('REJECTED');
+    expect((await ApprovalRequest.findByPk(id))!.status).toBe('REJECTED');
   });
 
   it('errors: same fund, not found, insufficient balance, closed fund, locked period, future date, plan', async () => {
@@ -376,25 +382,27 @@ describe('fund transfer (BR-13-33, 8.13)', () => {
       body({ fromFundId: repair, toFundId: sinking, amountPaise: 120_000 }),
       { headers: idem() },
     );
+    // a second transfer out of the repair fund (another entity: the fund it names) is approved first
     const b = await w.c(
       'post',
       '/accounts/fund-transfers',
-      body({ fromFundId: repair, toFundId: sinking, amountPaise: 120_000 }),
+      body({ fromFundId: repair, amountPaise: 100_000 }),
       { headers: idem() },
     );
-    await approve(a.body.data.approvalRequestId, w.approver);
-    await expect(approve(b.body.data.approvalRequestId, w.approver)).rejects.toMatchObject({
-      code: 'FUND_BALANCE_INSUFFICIENT',
-    });
-    expect(await balanceOf(w.sid, '2420')).toBe(-30_000);
+    expect((await w.approve(b.body.data.approvalRequestId)).status).toBe(200);
+    const late = await w.approve(a.body.data.approvalRequestId);
+    expect([late.status, late.body.code]).toEqual([422, 'FUND_BALANCE_INSUFFICIENT']);
+    expect((await ApprovalRequest.findByPk(a.body.data.approvalRequestId))!.status).toBe('PENDING');
+    expect(await balanceOf(w.sid, '2420')).toBe(-50_000);
     expect(await JournalEntry.count({ where: { societyId: w.sid, refType: 'fund_transfer' } })).toBe(1);
   });
 
-  it('registers FUND_TRANSFER with the approvals port and describes the fund', async () => {
+  it('registers FUND_TRANSFER with module 14 and describes the fund', async () => {
     const w = await world();
-    const def = placeholderAccountsApprovalTypes.get('FUND_TRANSFER')!;
-    expect(def).toBeTruthy();
+    expect(isRegistered('FUND_TRANSFER')).toBe(true);
     const repair = await fundIdByType(w.sid, 'REPAIR');
-    expect(await def.describe(repair)).toEqual([{ label: 'Fund', value: 'Repair and maintenance fund' }]);
+    expect(await fundTransferHooks.describe(repair)).toEqual([
+      { label: 'Fund', value: 'Repair and maintenance fund' },
+    ]);
   });
 });

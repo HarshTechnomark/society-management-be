@@ -12,6 +12,7 @@ import { societyToday } from '../billing/billing.runs.shared';
 import type { UnitDto } from '../society-setup/society-setup.types';
 import { AUDIT, ENTITY, ERR, APPROVAL_TYPES, NOTIFY } from './payments.constants';
 import { paymentsPorts } from './payments.ports';
+import { approvalOf } from '../billing/billing.ports';
 import { collectionDetail, lockCollection } from './payments.collections.service';
 import {
   billToOf,
@@ -56,8 +57,10 @@ export async function onCollectionApproved(ctx: Ctx, id: number, t: Transaction)
   const c = await lockCollection(societyId, id, t);
   if (c.status === 'APPROVED') return;
   if (c.status !== 'PENDING_APPROVAL') throw invalidState('This collection is not waiting for approval');
-  const approver = userIdOf(ctx);
-  if (approver !== null && Number(c.createdBy) === approver)
+  const a = approvalOf(ctx);
+  // module 14 enforces maker-checker (BR-14-7); on auto-approval (no decider) the creator's context runs this
+  const approver = a ? (a.actorUserId ?? userIdOf(ctx)) : userIdOf(ctx);
+  if (!a && approver !== null && Number(c.createdBy) === approver)
     throw new ConflictError(ERR.makerChecker, 'The person who created this collection cannot approve it');
   await c.update(
     {
@@ -182,17 +185,22 @@ export async function submitCollection(ctx: Ctx, id: number, version: number) {
     const uid = userIdOf(ctx);
     const payload = { categoryKey: c.kind, kind: c.kind, isMandatory: Boolean(c.isMandatory) };
     const title = `${c.title} (${formatRupees(Number(c.targetPaise))})`;
+    const resubmitting = c.status === 'CHANGES_REQUESTED' && Boolean(c.approvalRequestId);
+    // PENDING_APPROVAL first: when module 14 auto-approves, `onCollectionApproved` runs inside `request` (BR-14-4)
+    await c.update(
+      {
+        status: 'PENDING_APPROVAL',
+        submittedAt: now(),
+        rejectedReason: null,
+        updatedBy: uid,
+        version: Number(c.version) + 1,
+      },
+      { transaction: t },
+    );
     let requestId: number;
-    let status: 'PENDING' | 'APPROVED';
-    if (c.status === 'CHANGES_REQUESTED' && c.approvalRequestId) {
-      await approvals.resubmit(
-        ctx,
-        Number(c.approvalRequestId),
-        { title, amountPaise: Number(c.targetPaise), payload },
-        t,
-      );
+    if (resubmitting) {
       requestId = Number(c.approvalRequestId);
-      status = 'PENDING';
+      await approvals.resubmit(ctx, requestId, { title, amountPaise: Number(c.targetPaise), payload }, t);
     } else {
       const r = await approvals.request(
         ctx,
@@ -209,20 +217,9 @@ export async function submitCollection(ctx: Ctx, id: number, version: number) {
         t,
       );
       requestId = r.id;
-      status = r.status;
     }
-    await c.update(
-      {
-        status: status === 'APPROVED' ? 'APPROVED' : 'PENDING_APPROVAL',
-        approvalRequestId: requestId,
-        submittedAt: now(),
-        rejectedReason: null,
-        ...(status === 'APPROVED' ? { approvedBy: uid, approvedAt: now() } : {}),
-        updatedBy: uid,
-        version: Number(c.version) + 1,
-      },
-      { transaction: t },
-    );
+    await c.reload({ transaction: t });
+    await c.update({ approvalRequestId: requestId }, { transaction: t });
     await audit(
       ctx,
       {

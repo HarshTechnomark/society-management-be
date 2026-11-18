@@ -21,7 +21,7 @@ import {
   startScheduledIssues,
 } from '../../../src/modules/billing/billing.issue.service';
 import { loadBillingSettings } from '../../../src/modules/billing/billing.runs.shared';
-import { approve } from '../../../src/modules/billing/billing.runs.approvals-hook';
+import { approve } from '../../helpers/approvals-decide';
 import { events } from '../../helpers/auth';
 import { as, login, resetLogins } from '../../helpers/access';
 import {

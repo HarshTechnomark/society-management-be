@@ -2,6 +2,9 @@ import type { Transaction } from 'sequelize';
 import { logger } from '../../lib/logger';
 import { notify } from '../../lib/notify';
 import type { Ctx } from '../../types/context';
+import { approvalOf, engineApprovals } from '../billing/billing.ports';
+
+export { approvalOf };
 import type {
   ApprovalRequestInput,
   ApprovalResult,
@@ -16,7 +19,7 @@ export type { ApprovalRequestInput, ApprovalResult, ApprovalTypeHooks, Approvals
  * What module 13 needs from modules 14 (approvals), 16 (notifications), 21 (vendors, vendor bills) and 24 (reports cache). Each port
  * has a placeholder that behaves as the spec describes and records its calls; the owning module replaces it at start-up with
  * `setAccountsPorts({...})` (tests do the same). Same pattern as `payments.ports.ts`. In production `assertAccountsPortsReady()`
- * refuses to start while approvals or notifications are still placeholders. The journal engine is NOT a port: it is real in
+ * refuses to start while notifications are still a placeholder (approvals is the real module 14, `engineApprovals`). The journal engine is NOT a port: it is real in
  * this module, and `registerAccounts()` installs it behind the module 11 and 12 journal ports.
  */
 
@@ -65,73 +68,8 @@ const record = (fn: string, input: unknown, t?: Transaction) => {
   accountsPortCalls.push({ fn, input, t });
 };
 
-let fakeSeq = 0;
-/** Registered type hooks (placeholder); the real module 14 keeps its own registry. */
-export const placeholderAccountsApprovalTypes = new Map<string, ApprovalTypeHooks>();
-export interface PlaceholderAccountsApproval {
-  id: number;
-  type: string;
-  entityType: string;
-  entityId: number;
-  societyId: number | null;
-  requestedBy: number | null;
-  /** For the development approvals page (title and amount of what is asked). */
-  title?: string;
-  amountPaise?: number;
-  /** The `payload` of the request (13.2 fund transfers read it back on approval; module 14 keeps it on the request row). */
-  payload?: Record<string, unknown>;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
-}
-/** Requests the placeholder `approvals.request` created: the development approvals page (`?source=accounts`) decides them. */
-export const placeholderAccountsApprovals = new Map<number, PlaceholderAccountsApproval>();
-
 export const defaultAccountsPorts: AccountsPorts = {
-  approvals: {
-    registerType: def => {
-      placeholderAccountsApprovalTypes.set(def.type, def);
-    },
-    request: async (ctx, input, t) => {
-      record('approvals.request', input, t);
-      const id = ++fakeSeq;
-      placeholderAccountsApprovals.set(id, {
-        id,
-        payload: input.payload,
-        type: input.type,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        societyId: ctx.society?.id ?? null,
-        requestedBy: ctx.user?.id ?? null,
-        ...(typeof input.title === 'string' ? { title: input.title } : {}),
-        ...(typeof input.amountPaise === 'number' ? { amountPaise: input.amountPaise } : {}),
-        status: 'PENDING',
-      });
-      return { id, status: 'PENDING' };
-    },
-    resubmit: async (_ctx, id, input, t) => {
-      record('approvals.resubmit', { id, ...input }, t);
-      const r = placeholderAccountsApprovals.get(id);
-      if (r) {
-        r.status = 'PENDING';
-        if (typeof input.title === 'string') r.title = input.title;
-        if (typeof input.amountPaise === 'number') r.amountPaise = input.amountPaise;
-      }
-    },
-    cancel: async (_ctx, id, reason, t) => {
-      record('approvals.cancel', { id, reason }, t);
-      const r = placeholderAccountsApprovals.get(id);
-      if (r) r.status = 'CANCELLED';
-    },
-    lockOpenForEntity: async (societyId, entityType, entityId) => {
-      const open = [...placeholderAccountsApprovals.values()].find(
-        r =>
-          r.status === 'PENDING' &&
-          r.societyId === societyId &&
-          r.entityType === entityType &&
-          r.entityId === entityId,
-      );
-      return open ? { id: open.id, type: open.type } : null;
-    },
-  },
+  approvals: engineApprovals, // module 14 is real (billing.ports.ts)
   notifications: {
     send: async (template, userIds, data) => {
       record('notifications.send', { template, userIds, data });
@@ -169,7 +107,6 @@ export function setAccountsPorts(p?: { [K in keyof AccountsPorts]?: Partial<Acco
     current = defaultAccountsPorts;
     replaced.clear();
     accountsPortCalls.length = 0;
-    placeholderAccountsApprovals.clear();
     return;
   }
   const next = { ...current } as Record<string, unknown>;
@@ -181,7 +118,7 @@ export function setAccountsPorts(p?: { [K in keyof AccountsPorts]?: Partial<Acco
 }
 
 /** Ports whose placeholder is not allowed in production. */
-export const PRODUCTION_REQUIRED_PORTS: readonly AccountsPortName[] = ['approvals', 'notifications'];
+export const PRODUCTION_REQUIRED_PORTS: readonly AccountsPortName[] = ['notifications'];
 export const fakePortsInUse = (): AccountsPortName[] =>
   PRODUCTION_REQUIRED_PORTS.filter(n => !replaced.has(n));
 export function assertAccountsPortsReady(nodeEnv: string | undefined = process.env.NODE_ENV): void {

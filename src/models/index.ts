@@ -76,6 +76,10 @@ import { PaymentOrder } from './payment-order.model';
 import { Payment } from './payment.model';
 import { PaymentAllocation } from './payment-allocation.model';
 import { Refund } from './refund.model';
+import { ApprovalRule } from './approval-rule.model';
+import { ApprovalRequest } from './approval-request.model';
+import { ApprovalAction } from './approval-action.model';
+import { ApprovalDelegation } from './approval-delegation.model';
 import { PaymentWebhookEvent } from './payment-webhook-event.model';
 import { AutopayMandate } from './autopay-mandate.model';
 import { UnitAdvance } from './unit-advance.model';
@@ -206,6 +210,10 @@ const models = {
   BankStatementImport,
   BankStatementLine,
   Deposit,
+  ApprovalRule,
+  ApprovalRequest,
+  ApprovalAction,
+  ApprovalDelegation,
 };
 for (const m of Object.values(models)) m.initModel(sequelize);
 
@@ -439,6 +447,16 @@ Collection.belongsTo(User, { as: 'creator', foreignKey: 'createdBy' });
 CollectionRequest.belongsTo(Collection, { foreignKey: 'collectionId' });
 CollectionRequest.belongsTo(Unit, { foreignKey: 'unitId' });
 CollectionRequest.hasMany(PaymentAllocation, { foreignKey: 'collectionRequestId' });
+// Module 14 associations (section 7)
+ApprovalRule.hasMany(ApprovalRequest, { foreignKey: 'ruleId' });
+ApprovalRequest.belongsTo(ApprovalRule, { as: 'rule', foreignKey: 'ruleId' });
+ApprovalRequest.hasMany(ApprovalAction, { as: 'actions', foreignKey: 'requestId' });
+ApprovalRequest.belongsTo(User, { as: 'requester', foreignKey: 'requesterUserId' });
+ApprovalAction.belongsTo(ApprovalRequest, { foreignKey: 'requestId' });
+ApprovalAction.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' });
+ApprovalAction.belongsTo(ApprovalDelegation, { as: 'delegation', foreignKey: 'delegationId' });
+ApprovalDelegation.belongsTo(User, { as: 'delegator', foreignKey: 'delegatorUserId' });
+ApprovalDelegation.belongsTo(User, { as: 'delegate', foreignKey: 'delegateUserId' });
 
 // Module 13 associations (section 7).
 LedgerAccount.belongsTo(LedgerAccount, { as: 'parent', foreignKey: 'parentId' });
@@ -553,6 +571,10 @@ export {
   Payment,
   PaymentAllocation,
   Refund,
+  ApprovalRule,
+  ApprovalRequest,
+  ApprovalAction,
+  ApprovalDelegation,
   PaymentWebhookEvent,
   AutopayMandate,
   UnitAdvance,

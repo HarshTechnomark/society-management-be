@@ -7,7 +7,8 @@ import { ensureBooks } from '../../../src/modules/accounts/accounts.chart';
 import { registerAccounts } from '../../../src/modules/accounts/accounts.public';
 import * as periods from '../../../src/modules/accounts/accounts.periods.service';
 import { registerDepositHooks } from '../../../src/modules/accounts/accounts.periods.jobs';
-import { approve, reject } from '../../../src/modules/accounts/accounts.periods.approvals-hook';
+import { committeeApprove, committeeReject } from '../../helpers/approvals-decide';
+import { ApprovalRequest } from '../../../src/models';
 import { ctxFor } from '../../helpers/billing-invoices';
 import { idemH, type RunSociety } from '../../helpers/billing-runs';
 import { paymentsWorld, resetPayments, sysCtx } from '../../helpers/payments';
@@ -27,7 +28,6 @@ afterAll(async () => {
 
 let w: RunSociety;
 let admin: ReturnType<typeof ctxFor>;
-let decider: ReturnType<typeof ctxFor>;
 const sid = () => w.society.id!;
 const books = async () => (await SocietyBalance.findOne({ where: { societyId: sid() } }))!;
 
@@ -38,7 +38,6 @@ beforeEach(async () => {
   registerDepositHooks();
   w = await paymentsWorld({ flats: 1 });
   admin = ctxFor(w, w.user.id!);
-  decider = ctxFor(w, w.treasurer.user.id!);
   await sequelize.transaction(t => ensureBooks(t, sid()));
   await addBankLedger(sid());
 });
@@ -160,11 +159,14 @@ describe('temporary unlock (BR-13-49)', () => {
     await lock('2026-09-30');
     const r = await ask();
     expect(r.status).toBe('PENDING');
-    expect((accountsPortCalls.find(c => c.fn === 'approvals.request')!.input as any).type).toBe(
+    const req = (await ApprovalRequest.findByPk(r.approvalRequestId))!;
+    expect([req.type, req.entityType, req.payload]).toEqual([
       'PERIOD_UNLOCK',
-    );
+      'society_balance',
+      { fromDate: '2026-09-01', hours: 2, categoryKey: 'PERIOD_UNLOCK' },
+    ]);
     await expect(ask()).rejects.toMatchObject({ status: 409, code: 'UNLOCK_ALREADY_ACTIVE' });
-    await approve(r.approvalRequestId, decider);
+    await committeeApprove(r.approvalRequestId);
     const p = await periods.getPeriods(sid());
     expect(p.unlock).toMatchObject({ fromDate: '2026-09-01', approvalRequestId: r.approvalRequestId });
     await income('2026-09-15', 1000, 5); // allowed inside the window
@@ -185,7 +187,7 @@ describe('temporary unlock (BR-13-49)', () => {
   it('the books can be locked again by hand', async () => {
     await lock('2026-09-30');
     const r = await ask();
-    await approve(r.approvalRequestId, decider);
+    await committeeApprove(r.approvalRequestId);
     const v = (await books()).version;
     await expect(periods.relockPeriod(admin, { version: v + 3 })).rejects.toMatchObject({
       code: 'STALE_VERSION',
@@ -200,7 +202,7 @@ describe('temporary unlock (BR-13-49)', () => {
   it('a rejected request leaves the books locked and lets the next request through', async () => {
     await lock('2026-09-30');
     const r = await ask();
-    await reject(r.approvalRequestId, 'Not needed', decider);
+    await committeeReject(r.approvalRequestId, 'Not needed');
     expect((await periods.getPeriods(sid())).unlock).toBeNull();
     await expect(income('2026-09-15', 1000, 7)).rejects.toMatchObject({ code: 'PERIOD_LOCKED' });
     expect((await ask()).status).toBe('PENDING');
@@ -274,7 +276,7 @@ describe('financial year close (BR-13-50, T13-30)', () => {
       hours: 5,
       reason: 'Fix a March entry',
     });
-    await approve(r.approvalRequestId, decider);
+    await committeeApprove(r.approvalRequestId);
     const err: any = await close().catch(e => e);
     expect(err.errors.map((e: any) => e.message).join(' ')).toMatch(/temporary unlock/);
     await periods.relockPeriod(admin, { version: (await books()).version });

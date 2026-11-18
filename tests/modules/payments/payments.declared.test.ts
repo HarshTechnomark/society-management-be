@@ -1,3 +1,4 @@
+import { approvalRequests } from '../../helpers/approvals-decide';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditLog, Invoice, Payment, Society, closeDb } from '../../../src/models';
 import { drainQueues } from '../../../src/lib/queue';
@@ -54,7 +55,7 @@ describe('POST /me/payments/declared (8.6)', () => {
       'Paid from my SBI account',
     ]);
     expect(p.referenceKey).toMatch(/^BANK:UTR/);
-    const call = paymentsPortCalls.find(c => c.fn === 'approvals.request')!.input as any;
+    const call = (await approvalRequests()).at(-1)! as any;
     expect(call).toMatchObject({ type: 'OFFLINE_PAYMENT', categoryKey: 'NEFT', amountPaise: 250_000 });
     expect(
       await AuditLog.count({ where: { action: 'payments.payment.declared', entityId: String(p.id) } }),

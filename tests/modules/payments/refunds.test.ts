@@ -1,3 +1,5 @@
+import { approvalRequests, approve, reject } from '../../helpers/approvals-decide';
+import { getHandlers } from '../../../src/modules/approvals/approvals.registry';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditLog, Invoice, Payment, Refund, Society, UnitAdvance, closeDb } from '../../../src/models';
 import { advance, now } from '../../../src/lib/clock';
@@ -5,14 +7,9 @@ import { drainQueues } from '../../../src/lib/queue';
 import { listRoutes } from '../../../src/modules/access-control/access-control.registry';
 import { advanceBalance } from '../../../src/modules/payments/payments.advances';
 import { flushAcl } from '../../../src/modules/access-control/access-control.cache';
-import {
-  paymentsPortCalls,
-  placeholderPaymentApprovalTypes,
-  placeholderPaymentApprovals,
-} from '../../../src/modules/payments/payments.ports';
+import { paymentsPortCalls } from '../../../src/modules/payments/payments.ports';
 import { settleInput } from '../../../src/modules/payments/payments.settle';
 import { moneyTx } from '../../../src/modules/payments/payments.shared';
-import { approve, reject } from '../../../src/modules/payments/payments.refunds.approvals-hook';
 import {
   handleRefundEvent,
   pollGatewayRefunds,
@@ -75,7 +72,7 @@ describe('POST /refunds (8.19, BR-12-35, BR-12-36)', () => {
     const hold = await UnitAdvance.findOne({ where: { refundId: r.body.data.id } });
     expect(hold).toMatchObject({ entryType: 'REFUND_HOLD', dedupeKey: `HOLD:refund:${r.body.data.id}` });
     expect(Number(hold!.amountPaise)).toBe(-300_000);
-    const call = paymentsPortCalls.find(c => c.fn === 'approvals.request')!.input as any;
+    const call = (await approvalRequests()).at(-1)! as any;
     expect(call).toMatchObject({
       type: 'PAYMENT_REFUND',
       entityType: 'refund',
@@ -316,8 +313,11 @@ describe('approval and payout (6.3)', () => {
   it('the module 14 withdrawal and expiry callbacks cancel the refund and release the hold', async () => {
     const { w, payment } = await advanceWorld();
     const r = await ask(w, body(Number(payment.id)));
-    const hooks = placeholderPaymentApprovalTypes.get('PAYMENT_REFUND')!;
-    await moneyTx(t => hooks.onCancelled!(ctxFor(w, w.user.id!), r.body.data.id, t));
+    const hooks = getHandlers('PAYMENT_REFUND')!;
+    const view = { entityId: r.body.data.id, decisionReason: null } as never;
+    await moneyTx(t =>
+      hooks.onCancelled!({ ...ctxFor(w, w.user.id!), approval: { reason: null } } as never, view, t),
+    );
     expect((await Refund.findByPk(r.body.data.id))!.status).toBe('CANCELLED');
     expect(await bal(w)).toBe(380_000);
   });
@@ -548,6 +548,5 @@ describe('GET /refunds and /refunds/:id', () => {
     const r = await ask(w, body(Number(payment.id)));
     expect(r.status).toBe(423);
     void memberOf;
-    void placeholderPaymentApprovals;
   });
 });

@@ -19,7 +19,15 @@ import { invoices } from '../../../src/modules/billing/billing.invoices.service'
 import { unitLedger } from '../../../src/modules/billing/billing.ledger.service';
 import { ensureSeeded } from '../../../src/modules/billing/billing.heads.service';
 import { issueDebitNote } from '../../../src/modules/billing/billing.notes.debit';
-import { approve, reject, requestChanges } from '../../../src/modules/billing/billing.notes.approvals-hook';
+import {
+  approvalRequests,
+  approve,
+  autoApproveType,
+  ensureSystemUser,
+  everyRequestNeeds,
+  reject,
+  requestChanges,
+} from '../../helpers/approvals-decide';
 import { listRoutes } from '../../../src/modules/access-control/access-control.registry';
 import { app, makeUser } from '../../helpers/auth';
 import { resetLogins } from '../../helpers/access';
@@ -28,7 +36,7 @@ import { setSetting } from '../../helpers/billing-runs';
 import {
   ctxFor,
   idemH,
-  invoiceWorld,
+  invoiceWorld as baseInvoiceWorld,
   makeInvoice,
   module12ReleasesOnCancel,
   pay,
@@ -47,8 +55,16 @@ beforeEach(async () => {
   resetLogins();
   resetRateLimits();
   await resetInvoices();
+  await ensureSystemUser(); // module 14 raises system-context requests as the system user
 });
 afterEach(() => vi.restoreAllMocks());
+
+/** The 7.5 default auto-approves credit notes up to Rs 10,000: these tests want every note to wait for the treasurer. */
+const invoiceWorld = async (...a: Parameters<typeof baseInvoiceWorld>) => {
+  const w = await baseInvoiceWorld(...a);
+  await everyRequestNeeds(w.society.id!, 'CREDIT_NOTE');
+  return w;
+};
 
 const calls = (fn: string) => billingPortCalls.filter(c => c.fn === fn).map(c => c.input as any);
 const journals = () => calls('journal.post');
@@ -110,7 +126,7 @@ describe('credit notes (8.15, BR-11-41 to BR-11-43)', () => {
         refInvoiceLineId: parking,
       }),
     ]);
-    expect(calls('approvals.request')[0]).toMatchObject({
+    expect((await approvalRequests())[0]).toMatchObject({
       type: 'CREDIT_NOTE',
       entityType: 'billing_note',
       entityId: r.body.data.id,
@@ -242,7 +258,7 @@ describe('credit notes (8.15, BR-11-41 to BR-11-43)', () => {
   it('a module 14 auto-approval issues the note at once inside the request (response has the number)', async () => {
     const w = await invoiceWorld();
     const invoice = await makeInvoice(w);
-    setBillingPorts({ approvals: { request: async () => ({ id: 901, status: 'APPROVED' }) } });
+    await autoApproveType('CREDIT_NOTE', w.society.id!);
     const r = await postCredit(w, invoice.id, creditBody([[lineId(invoice, 'PARKING'), 50_000]]));
     expect(r.status).toBe(201);
     expect(r.body.data).toMatchObject({
@@ -306,10 +322,8 @@ describe('credit notes (8.15, BR-11-41 to BR-11-43)', () => {
   it('PERIOD_LOCKED on an immediate issue; nothing is left behind and the number is not used', async () => {
     const w = await invoiceWorld();
     const invoice = await makeInvoice(w);
-    setBillingPorts({
-      approvals: { request: async () => ({ id: 902, status: 'APPROVED' }) },
-      journal: { isDateLocked: async () => true },
-    });
+    await autoApproveType('CREDIT_NOTE', w.society.id!);
+    setBillingPorts({ journal: { isDateLocked: async () => true } });
     const r = await postCredit(w, invoice.id, creditBody([[lineId(invoice, 'PARKING'), 100]]));
     expect([r.status, r.body.code]).toEqual([422, 'PERIOD_LOCKED']);
     expect(await BillingNote.count()).toBe(0);
@@ -415,7 +429,11 @@ describe('changes requested, edit and withdraw (8.19)', () => {
     });
     expect(ok.body.data.lines).toHaveLength(1);
     expect((await InvoiceLine.findByPk(parking))!.creditedPaise).toBe(20_000);
-    expect(calls('approvals.resubmit')[0]).toMatchObject({ id: note.approvalRequestId, amountPaise: 20_000 });
+    expect((await approvalRequests()).find(x => x.id === note.approvalRequestId)).toMatchObject({
+      status: 'PENDING',
+      round: 2,
+      amountPaise: 20_000,
+    });
     expect(await AuditLog.count({ where: { action: 'billing.credit_note.resubmitted' } })).toBe(1);
     await approve(note.approvalRequestId, treasurerCtx(w));
     expect(await inv(invoice.id)).toMatchObject({ creditedPaise: 20_000, outstandingPaise: 433_000 });
@@ -434,10 +452,7 @@ describe('changes requested, edit and withdraw (8.19)', () => {
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.data).toMatchObject({ status: 'REJECTED', rejectedReason: 'Raised by mistake' });
     expect((await InvoiceLine.findByPk(parking))!.creditedPaise).toBe(0);
-    expect(calls('approvals.cancel')[0]).toMatchObject({
-      id: note.approvalRequestId,
-      reason: 'Raised by mistake',
-    });
+    expect((await approvalRequests()).find(x => x.id === note.approvalRequestId)!.status).toBe('CANCELLED');
     expect(await AuditLog.count({ where: { action: 'billing.credit_note.withdrawn' } })).toBe(1);
     const again = await wd(w.c, { reason: 'Raised by mistake', version: 2 });
     expect([again.status, again.body.code]).toEqual([409, 'INVALID_STATE']);
@@ -560,7 +575,7 @@ describe('debit notes (8.16, BR-11-46)', () => {
     expect(j.lines[0]).toMatchObject({ accountCode: '1300', debitPaise: 20_000 });
     expect(await AuditLog.count({ where: { action: 'billing.debit_note.issued' } })).toBe(1);
     // no approval is involved
-    expect(calls('approvals.request')).toEqual([]);
+    expect(await approvalRequests()).toEqual([]);
     expect((await debit(w, invoice.id)).body.data.noteNo).toBe('DN/2026-27/000002');
     // pay the rest: PAID again
     await pay(w, invoice.id, 40_000);
@@ -727,7 +742,7 @@ describe('cancellation (8.17, BR-11-44)', () => {
     const r = await cancel(w, invoice.id);
     expect(r.status).toBe(202);
     expect(r.body.data).toEqual({ approvalRequestId: expect.any(Number), status: 'PENDING' });
-    expect(calls('approvals.request')[0]).toMatchObject({
+    expect((await approvalRequests())[0]).toMatchObject({
       type: 'INVOICE_CANCEL',
       entityType: 'invoice',
       entityId: invoice.id,
@@ -840,7 +855,7 @@ describe('cancellation (8.17, BR-11-44)', () => {
   it('auto-approval cancels at once and answers 200 with the cancelled invoice', async () => {
     const w = await invoiceWorld();
     const invoice = await makeInvoice(w);
-    setBillingPorts({ approvals: { request: async () => ({ id: 903, status: 'APPROVED' }) } });
+    await autoApproveType('INVOICE_CANCEL', w.society.id!);
     const r = await cancel(w, invoice.id);
     expect(r.status).toBe(200);
     expect(r.body.data).toMatchObject({ id: invoice.id, status: 'CANCELLED', outstandingPaise: 0 });
@@ -916,7 +931,7 @@ describe('write-off (8.17, BR-11-45)', () => {
     expect(r.body.data.lines).toEqual([
       expect.objectContaining({ lineKind: 'WRITE_OFF', amountPaise: 30_000, refInvoiceLineId: null }),
     ]);
-    expect(calls('approvals.request')[0]).toMatchObject({
+    expect((await approvalRequests())[0]).toMatchObject({
       type: 'WRITE_OFF',
       entityType: 'billing_note',
       amountPaise: 30_000,
@@ -1022,7 +1037,7 @@ describe('credit and cancel by source for other modules (BR-11-50a, BR-11-50b, T
     billingPortCalls.length = 0;
     const r = await credit(w, id);
     expect(r).toEqual({ noteId: expect.any(Number), noteNo: 'CN/2026-27/000001', totalPaise: 50_000 });
-    expect(calls('approvals.request')).toEqual([]);
+    expect(await approvalRequests()).toEqual([]);
     expect(m12.calls).toEqual([id]);
     const note = (await BillingNote.findByPk(r.noteId))!;
     expect(note).toMatchObject({
@@ -1099,7 +1114,7 @@ describe('credit and cancel by source for other modules (BR-11-50a, BR-11-50b, T
     billingPortCalls.length = 0;
     const r = await cancelSrc(w, id);
     expect(r).toEqual({ noteId: expect.any(Number), noteNo: 'CN/2026-27/000001' });
-    expect(calls('approvals.request')).toEqual([]);
+    expect(await approvalRequests()).toEqual([]);
     expect(await inv(id)).toMatchObject({ status: 'CANCELLED', outstandingPaise: 0, creditedPaise: 100_000 });
     expect(await BillingNote.findByPk(r.noteId)).toMatchObject({
       reasonCode: 'CANCELLATION',

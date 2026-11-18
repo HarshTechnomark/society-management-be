@@ -24,6 +24,8 @@ import {
 import { registerPlatformOps } from '../src/modules/platform-ops/platform-ops.public';
 import { seedSocietySetup } from '../seeders/society-setup';
 import { registerSocietySetup } from '../src/modules/society-setup/society-setup.public';
+import { wireApprovalsPorts } from '../src/modules/approvals/approvals.wire';
+import { registerApprovals } from '../src/modules/approvals/approvals.public';
 import { registerResidents } from '../src/modules/residents/residents.public';
 import { seedResidents } from '../seeders/residents';
 import { registerCommittee } from '../src/modules/committee/committee.public';
@@ -36,6 +38,7 @@ import { seedBillingOpening } from '../seeders/billing-opening';
 import { seedBillingDues } from '../seeders/billing-dues';
 import { seedPayments } from '../seeders/payments';
 import { seedAccounts } from '../seeders/accounts';
+import { seedApprovalRules } from '../seeders/approvals';
 
 /** `npm run seed` runs `system-user` and the permission catalogue everywhere; demo users, societies and memberships outside production. */
 const out = (s: string) => process.stdout.write(`${s}\n`);
@@ -50,11 +53,13 @@ async function main(): Promise<void> {
   registerSocieties();
   registerPlatformOps();
   registerSocietySetup();
+  wireApprovalsPorts(); // module 14: real approvals engine behind every placeholder port, before the modules register their types
   registerResidents();
   registerCommittee();
   registerAccounts();
   registerBilling();
   registerPayments();
+  registerApprovals(); // module 14: notification templates and the notify job the requests enqueue
   const cat = await seedSubscriptionCatalogue();
   out(
     `subscriptions-catalogue: plans created ${cat.plansCreated}, entitlement rows added ${cat.rowsAdded}, add-ons created ${cat.addonsCreated}`,
@@ -102,6 +107,9 @@ async function main(): Promise<void> {
     );
     const cm = await seedCommittee();
     out(`committee: created ${cm.created.join('; ') || 'none'}, skipped ${cm.skipped.length}`);
+    // module 14: the 7.5 default approval rules of every society (before any module raises a request)
+    const ap = await seedApprovalRules();
+    out(`approvals: default rules ${ap.created.join('; ') || 'none'}, societies skipped ${ap.skipped}`);
     // module 13: chart, bank accounts, funds and opening balances come BEFORE billing and payments (their journals need a collection bank account)
     const accBooks = await seedAccounts('books');
     out(

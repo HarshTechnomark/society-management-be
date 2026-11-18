@@ -1,10 +1,11 @@
+import { approvalRequests, autoApproveType } from '../../helpers/approvals-decide';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditLog, Collection, closeDb, sequelize } from '../../../src/models';
 import { onCollectionCancelled } from '../../../src/modules/payments/payments.collections.workflow';
 import { drainQueues } from '../../../src/lib/queue';
 import { resetRateLimits } from '../../../src/middlewares/rateLimit.middleware';
 import { resetLogins } from '../../helpers/access';
-import { paymentsPortCalls, setPaymentsPorts } from '../../../src/modules/payments/payments.ports';
+import { setPaymentsPorts } from '../../../src/modules/payments/payments.ports';
 import { ctxFor } from '../../helpers/billing-invoices';
 import {
   approvalOf,
@@ -330,14 +331,14 @@ describe('collections edit and delete (8.21)', () => {
     const { w } = await collWorld();
     const a = await create(w);
     await w.c('post', `/collections/${a.id}/submit`, { version: 1 });
-    await reject(approvalOf(a.id).id, 'Too high', ctxFor(w, w.secretary.user.id!));
+    await reject((await approvalOf(a.id)).id, 'Too high', ctxFor(w, w.secretary.user.id!));
     let d = (await w.c('get', `/collections/${a.id}`)).body.data;
     expect(d.status).toBe('REJECTED');
     expect(d.approval.reason).toBe('Too high');
     const e = await w.c('patch', `/collections/${a.id}`, { version: d.version, amountPerUnitPaise: 40_000 });
     expect(e.body.data.status).toBe('DRAFT');
     await w.c('post', `/collections/${a.id}/submit`, { version: e.body.data.version });
-    await requestChanges(approvalOf(a.id).id, ctxFor(w, w.secretary.user.id!));
+    await requestChanges((await approvalOf(a.id)).id, ctxFor(w, w.secretary.user.id!));
     d = (await w.c('get', `/collections/${a.id}`)).body.data;
     expect(d.status).toBe('CHANGES_REQUESTED');
     const e2 = await w.c('patch', `/collections/${a.id}`, { version: d.version, amountPerUnitPaise: 30_000 });
@@ -372,20 +373,20 @@ describe('submit and approval (6.4, BR-12-39)', () => {
     const s = await w.c('post', `/collections/${a.id}/submit`, { version: 1 });
     expect(s.status).toBe(200);
     expect(s.body.data).toMatchObject({ status: 'PENDING_APPROVAL', version: 2 });
-    expect(s.body.data.approval.requestId).toBe(approvalOf(a.id).id);
-    const call = paymentsPortCalls.find(c => c.fn === 'approvals.request')!;
-    expect(call.input).toMatchObject({
+    expect(s.body.data.approval.requestId).toBe((await approvalOf(a.id)).id);
+    const call = (await approvalRequests()).at(-1)!;
+    expect(call).toMatchObject({
       type: 'COLLECTION_PUBLISH',
       entityType: 'collection',
       entityId: a.id,
       amountPaise: 150_000,
       categoryKey: 'FESTIVAL',
     });
-    await expect(approve(approvalOf(a.id).id, ctxFor(w, w.user.id!))).rejects.toMatchObject({
+    await expect(approve((await approvalOf(a.id)).id, ctxFor(w, w.user.id!))).rejects.toMatchObject({
       code: 'MAKER_CHECKER_VIOLATION',
     });
     expect((await Collection.findByPk(a.id))!.status).toBe('PENDING_APPROVAL');
-    await approve(approvalOf(a.id).id, ctxFor(w, w.secretary.user.id!));
+    await approve((await approvalOf(a.id)).id, ctxFor(w, w.secretary.user.id!));
     const d = (await w.c('get', `/collections/${a.id}`)).body.data;
     expect(d.status).toBe('APPROVED');
     expect(d.approvedByName).toBeTruthy();
@@ -415,14 +416,17 @@ describe('submit and approval (6.4, BR-12-39)', () => {
     const { w } = await collWorld();
     const a = await create(w);
     await w.c('post', `/collections/${a.id}/submit`, { version: 1 });
-    const first = approvalOf(a.id).id;
+    const first = (await approvalOf(a.id)).id;
     await requestChanges(first, ctxFor(w, w.secretary.user.id!));
     const d = (await w.c('get', `/collections/${a.id}`)).body.data;
     const s = await w.c('post', `/collections/${a.id}/submit`, { version: d.version });
     expect(s.status).toBe(200);
     expect(s.body.data.status).toBe('PENDING_APPROVAL');
     expect(s.body.data.approval.requestId).toBe(first);
-    expect(paymentsPortCalls.find(c => c.fn === 'approvals.resubmit')!.input).toMatchObject({ id: first });
+    expect((await approvalRequests()).find(r => r.id === first)).toMatchObject({
+      status: 'PENDING',
+      round: 2,
+    });
   });
 
   it('a withdrawn request (module 14 onCancelled) puts the collection back to DRAFT', async () => {
@@ -435,7 +439,7 @@ describe('submit and approval (6.4, BR-12-39)', () => {
 
   it('auto-approval by module 14 inside submit gives APPROVED at once', async () => {
     const { w } = await collWorld();
-    setPaymentsPorts({ approvals: { request: async () => ({ id: 9001, status: 'APPROVED' }) } });
+    await autoApproveType('COLLECTION_PUBLISH', w.society.id!);
     const a = await create(w);
     const s = await w.c('post', `/collections/${a.id}/submit`, { version: 1 });
     expect(s.body.data.status).toBe('APPROVED');

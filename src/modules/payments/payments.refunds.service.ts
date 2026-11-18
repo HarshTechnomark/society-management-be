@@ -192,7 +192,7 @@ export async function getRefund(societyId: number, id: number): Promise<RefundDt
 
 // ------------------------------------------------------------------ request (BR-12-35, BR-12-36)
 export interface RefundRequestInput {
-  paymentId: number;
+  paymentId: number | string;
   amountPaise: number;
   mode: RefundMode;
   reason: string;
@@ -218,9 +218,23 @@ function assertModeAllowed(p: Payment, mode: RefundMode): void {
     );
 }
 
-export async function requestRefund(ctx: Ctx, input: RefundRequestInput): Promise<RefundDto> {
+/** Internal id (`38`, `"38"`) or receipt number (`RCT/2026-27/000038`) to the payment id of this society. */
+async function resolvePaymentId(societyId: number, ref: number | string, t: Transaction): Promise<number> {
+  if (typeof ref === 'number') return ref;
+  if (/^\d+$/.test(ref)) return Number(ref);
+  const byReceipt = await Payment.findOne({
+    where: { societyId, receiptNo: ref },
+    attributes: ['id'],
+    transaction: t,
+  });
+  if (!byReceipt) throw new NotFoundError(ERR.paymentNotFound, 'Payment not found');
+  return n(byReceipt.id);
+}
+
+export async function requestRefund(ctx: Ctx, raw: RefundRequestInput): Promise<RefundDto> {
   const societyId = ctx.society!.id;
   return moneyTx(async t => {
+    const input = { ...raw, paymentId: await resolvePaymentId(societyId, raw.paymentId, t) };
     const pre = await Payment.findOne({
       where: { id: input.paymentId, societyId },
       attributes: ['id', 'unitId'],
@@ -390,8 +404,7 @@ export async function requestRefund(ctx: Ctx, input: RefundRequestInput): Promis
       t,
     );
     if (freed > 0) t.afterCommit(() => void queueAdvanceApply(societyId, [unitId]));
-    // an auto-approved request runs the approval callback in the same transaction
-    if (approval.status === 'APPROVED') await onRefundApproved(ctx, n(refund.id), t);
+    // an auto-approved request ran `onRefundApproved` inside `request` (BR-14-4)
     await refund.reload({ transaction: t });
     return refundDto(refund, label, p);
   });

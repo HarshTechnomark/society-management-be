@@ -1,12 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { Collection, CollectionRequest } from '../../src/models';
+import { ApprovalRequest, Collection, CollectionRequest } from '../../src/models';
 import { drainQueues } from '../../src/lib/queue';
-import {
-  approve,
-  reject,
-  requestChanges,
-} from '../../src/modules/payments/payments.collections.approvals-hook';
-import { placeholderPaymentApprovals } from '../../src/modules/payments/payments.ports';
+import { approve, reject, requestChanges } from './approvals-decide';
 import { ctxFor } from './billing-invoices';
 import { resetPayments } from './payments';
 import { runSociety, type RunSociety } from './billing-runs';
@@ -44,18 +39,21 @@ export async function create(w: RunSociety, o: Record<string, unknown> = {}) {
   return r.body.data as { id: number; version: number } & Record<string, any>;
 }
 
-/** The latest placeholder approval request of the entity. */
-export const approvalOf = (collectionId: number) =>
-  [...placeholderPaymentApprovals.values()]
-    .filter(a => a.entityId === collectionId && a.type === 'COLLECTION_PUBLISH')
-    .pop()!;
+/** The latest module 14 approval request of the collection (`id` as a number). */
+export const approvalOf = async (collectionId: number) => {
+  const r = (await ApprovalRequest.findOne({
+    where: { entityId: collectionId, type: 'COLLECTION_PUBLISH' },
+    order: [['id', 'DESC']],
+  }))!;
+  return { id: Number(r.id), status: r.status, version: Number(r.version) };
+};
 
 /** Create, submit and approve (by the secretary, a different person). Returns the approved detail. */
 export async function approved(w: RunSociety, o: Record<string, unknown> = {}) {
   const c = await create(w, o);
   const s = await w.c('post', `/collections/${c.id}/submit`, { version: c.version });
   if (s.status !== 200) throw new Error(`submit ${s.status} ${JSON.stringify(s.body)}`);
-  await approve(approvalOf(c.id).id, ctxFor(w, w.secretary.user.id!));
+  await approve((await approvalOf(c.id)).id, ctxFor(w, w.secretary.user.id!));
   return (await w.c('get', `/collections/${c.id}`)).body.data as Record<string, any>;
 }
 
