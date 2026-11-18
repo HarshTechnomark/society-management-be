@@ -47,9 +47,15 @@ const list = z
   .object({
     ...listBase,
     view: z.enum(['FOR_ME', 'ALL_PENDING', 'DECIDED']).default('FOR_ME'),
+    /** Lower-case alias of `view` used by the web app: `scope=all_pending` is `view=ALL_PENDING`. */
+    scope: z.enum(['for_me', 'all_pending', 'decided']).optional(),
     status: z.enum(DECIDED).optional(),
   })
   .strict()
+  .transform(({ scope, ...v }) => ({
+    ...v,
+    view: scope ? (scope.toUpperCase() as 'FOR_ME' | 'ALL_PENDING' | 'DECIDED') : v.view,
+  }))
   .superRefine((v, c) => {
     ranged(v, c);
     if (v.status && v.view !== 'DECIDED')

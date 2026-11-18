@@ -105,8 +105,15 @@ describe('request detail', () => {
     await decideOver(w.treasurer.c as never, requestId, 'reject', 'Not needed now');
     const after = await w.treasurer.c('get', `/approvals/${requestId}`);
     expect(after.body.data.steps.every((x: any) => x.state !== 'UPCOMING')).toBe(true);
-    const all = await w.treasurer.c('get', '/approvals?view=ALL_PENDING');
-    expect(all.status).toBe(200);
+    const all = await w.treasurer.c('get', '/approvals?scope=all_pending');
+    expect(all.status, JSON.stringify(all.body)).toBe(200);
+    const done = await w.treasurer.c('get', '/approvals?scope=decided');
+    expect(done.body.data[0]).toMatchObject({
+      status: 'REJECTED',
+      decidedBy: { userId: w.treasurer.user.id },
+      decisionComment: 'Not needed now',
+    });
+    expect(done.body.data[0].decidedAt).toBeTruthy();
   });
 });
 

@@ -92,6 +92,7 @@ export async function listInbox(ctx: Ctx, q: ListQuery): Promise<Page<ReturnType
   const slice = kept.slice((q.page - 1) * q.limit, q.page * q.limit);
   const names = await namesOf([
     ...slice.map(r => n(r.requesterUserId)),
+    ...slice.flatMap(r => (r.decidedByUserId === null ? [] : [n(r.decidedByUserId)])),
     ...slice.flatMap(r => {
       const e = ev.get(n(r.id));
       return e?.my.onBehalfOf ? [e.my.onBehalfOf.userId] : [];
@@ -157,7 +158,9 @@ async function rowsToPage(
   bulkBelow: number,
 ) {
   const actions = await loadActions(rows.map(r => n(r.id)));
-  const names = await namesOf(rows.map(r => n(r.requesterUserId)));
+  const names = await namesOf(
+    rows.flatMap(r => [n(r.requesterUserId), ...(r.decidedByUserId === null ? [] : [n(r.decidedByUserId)])]),
+  );
   const none: Evaluated = {
     visible: true,
     my: { canAct: false, onBehalfOf: null, options: [], reason: null },

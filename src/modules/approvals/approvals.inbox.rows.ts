@@ -110,6 +110,12 @@ export function listRow(
     bulkEligible,
     hasEligibleApprover: Boolean(req.hasEligibleApprover),
     stuckAt: iso(req.stuckAt),
+    decidedBy:
+      req.decidedAt !== null && req.decidedByUserId !== null
+        ? { userId: n(req.decidedByUserId), name: names.get(n(req.decidedByUserId)) ?? null }
+        : null,
+    decidedAt: iso(req.decidedAt),
+    decisionComment: req.decidedAt !== null ? req.decisionReason : null,
     myAction: {
       canAct: my?.canAct ?? false,
       onBehalfOf: my?.onBehalfOf ?? null,
