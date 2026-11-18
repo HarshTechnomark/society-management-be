@@ -37,7 +37,7 @@ import {
   type CallCtx,
   type NoteDto,
 } from './billing.notes.shared';
-import { billingPorts } from './billing.ports';
+import { approvalOf, billingPorts } from './billing.ports';
 import { societyToday } from './billing.runs.shared';
 import type { Transaction } from './billing.types';
 
@@ -450,6 +450,8 @@ export async function issueCreditNote(
   note.financialYear = financialYearOf(today);
   note.noteDate = today;
   note.status = 'ISSUED';
+  // an auto-approval issues the note inside `approvals.request`, before the caller knows the request id (the row is locked once ISSUED)
+  note.approvalRequestId = approvalOf(ctx as never)?.requestId ?? note.approvalRequestId;
   note.appliedToInvoicePaise = total;
   note.excessToAdvancePaise = excess;
   note.issuedAt = now();
@@ -579,7 +581,8 @@ export async function createCreditNote(
       t,
     );
     await note.reload({ transaction: t }); // an auto-approval (BR-14-4) issued the note inside `request`
-    await note.update({ approvalRequestId: req.id }, { transaction: t });
+    if (Number(note.approvalRequestId) !== req.id)
+      await note.update({ approvalRequestId: req.id }, { transaction: t });
     await audit(
       ctx,
       {

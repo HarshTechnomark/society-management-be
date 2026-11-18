@@ -288,7 +288,8 @@ export async function requestWriteOff(
       t,
     );
     await note.reload({ transaction: t }); // an auto-approval (BR-14-4) issued the note inside `request`
-    await note.update({ approvalRequestId: req.id }, { transaction: t });
+    if (Number(note.approvalRequestId) !== req.id)
+      await note.update({ approvalRequestId: req.id }, { transaction: t });
     await audit(
       ctx,
       {
