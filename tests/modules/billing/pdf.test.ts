@@ -3,7 +3,7 @@ import { AuditLog, BillingNote, Invoice, closeDb } from '../../../src/models';
 import { advance, now } from '../../../src/lib/clock';
 import { drainQueues } from '../../../src/lib/queue';
 import { setSocietyPorts, placeholderFiles } from '../../../src/modules/societies/societies.ports';
-import { approve } from '../../../src/modules/billing/billing.notes.approvals-hook';
+import { approve } from '../../helpers/approvals-decide';
 import {
   renderBillingPdf,
   qrMatrix,

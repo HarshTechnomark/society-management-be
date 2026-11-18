@@ -17,11 +17,10 @@ import { residents } from '../src/modules/residents/residents.public';
 import { moneyTx } from '../src/modules/payments/payments.shared';
 import { settleInput } from '../src/modules/payments/payments.settle';
 import { putPlaceholderFile } from '../src/modules/society-setup/society-setup.ports';
-import { placeholderAccountsApprovals } from '../src/modules/accounts/accounts.ports';
 import { createExpense } from '../src/modules/accounts/accounts.expenses.service';
-import { expenseApprovals } from '../src/modules/accounts/accounts.expenses.approvals-hook';
+import { decideAsCommittee } from '../src/modules/approvals/approvals.public';
 import { createDraft } from '../src/modules/accounts/accounts.journal.service';
-import { requestFundTransfer, withApprovalRequest } from '../src/modules/accounts/accounts.funds.transfer';
+import { requestFundTransfer } from '../src/modules/accounts/accounts.funds.transfer';
 import {
   createDeposit,
   depositSyncJob,
@@ -29,7 +28,6 @@ import {
   markRefundPaid,
   requestDepositRefund,
 } from '../src/modules/accounts/accounts.deposits.service';
-import { approve as approveDepositRefund } from '../src/modules/accounts/accounts.periods.approvals-hook';
 import { importStatement } from '../src/modules/accounts/accounts.statements.service';
 import { sampleStatementCsv } from '../src/modules/accounts/accounts.statements.sample';
 import { systemCtx, type Ctx } from '../src/types/context';
@@ -45,8 +43,8 @@ import type { AccountsSeedReport } from './accounts';
  * predates it: opening = book balance at the start of the period (the opening entry), one line per bank posting with its own reference, signed running balance, closing = opening + credits - debits. Two lines are
  * deliberately not in the books: a bank charge of Rs 23.60 (debit) and an interest credit of Rs 1,042.00. Once every other line is matched the
  * BRS difference is statement minus books = +Rs 1,018.40 (1,042.00 - 23.60); it is 0 after the user creates the two entries.
- * NOTE: the approvals port is the in-memory placeholder, so the pending expense's request vanishes with the seed process; module 14
- * (or a dev approval after a re-submit) decides it in the browser test.
+ * Approvals go through the real module 14: small expenses auto-approve by the default rule (up to Rs 5,000), the others are
+ * approved by the society's committee (`decideAsCommittee`: the treasurer, secretary or another eligible member, never the maker).
  */
 const TAG = '[demo]';
 const ymd = (daysAgo: number) => addDaysYmd(istDate(now()), -daysAgo);
@@ -146,19 +144,13 @@ async function expense(w: World, s: ExpenseSpec, report: AccountsSeedReport): Pr
     vendorId: null,
     vendorBillId: null,
     fileIds: [file],
-    // the demo 'pending' expense stays a DRAFT: the approvals port is an in-memory placeholder, so a request created by the
-    // seed would vanish with the seed process; submitting it in the browser creates the request on the running server
+    // the demo 'pending' expense stays a DRAFT, to submit in the browser (module 14 then routes it to the inbox)
     submit: !s.pending,
   } as never);
   if (!s.pending) {
     const e = await Expense.findByPk(dto.id);
-    const req = [...placeholderAccountsApprovals.values()].find(
-      r => r.entityType === 'expense' && r.entityId === Number(dto.id) && r.status === 'PENDING',
-    );
-    if (e && e.status === 'PENDING_APPROVAL' && req) {
-      await expenseApprovals.approve(req.id, w.ctx);
-      req.status = 'APPROVED';
-    }
+    if (e && e.status === 'PENDING_APPROVAL' && e.approvalRequestId)
+      await decideAsCommittee(Number(e.approvalRequestId));
   }
   report.created.push(
     `${w.slug} expense ${s.tag}${s.pending ? ' (draft, submit it in the browser)' : ' (posted)'}`,
@@ -238,7 +230,7 @@ async function deposit(
   if (refund) {
     let cur = await getDeposit(w.societyId, Number(d.id));
     cur = await requestDepositRefund(w.ctx, Number(d.id), { reason: 'Card returned', version: cur.version });
-    await approveDepositRefund(Number(cur.refundApprovalRequestId), w.ctx);
+    await decideAsCommittee(Number(cur.refundApprovalRequestId));
     cur = await getDeposit(w.societyId, Number(d.id));
     await markRefundPaid(w.ctx, Number(d.id), {
       paidFromLedgerAccountId: w.ledger['1120']!,
@@ -262,11 +254,7 @@ async function transfer(w: World, report: AccountsSeedReport): Promise<void> {
     date: ymd(4),
     reason: `${TAG} Top up repair fund for the lift modernisation`,
   });
-  if (r.status === 'PENDING') {
-    const req = placeholderAccountsApprovals.get(r.approvalRequestId)!;
-    await withApprovalRequest(req.id, () => expenseApprovals.approve(req.id, w.ctx));
-    req.status = 'APPROVED';
-  }
+  if (r.status === 'PENDING') await decideAsCommittee(r.approvalRequestId);
   report.created.push(`${w.slug} fund transfer sinking to repair (Rs 1,00,000)`);
 }
 

@@ -72,6 +72,11 @@ export async function resetAll(): Promise<void> {
   ])
     await sequelize.query(`TRUNCATE TABLE ${t}`);
   for (const t of [
+    // module 14 (children first)
+    'approval_actions',
+    'approval_requests',
+    'approval_delegations',
+    'approval_rules',
     // module 12 (children first)
     'payment_webhook_events',
     'payment_allocations',

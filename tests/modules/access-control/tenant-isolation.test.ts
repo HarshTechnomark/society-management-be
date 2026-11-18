@@ -315,6 +315,11 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /accounts/bank-accounts/:id/set-collection',
       'POST /accounts/bank-accounts/:id/close',
       'GET /accounts/bank-accounts/:id/reveal',
+      // module 14 (14.2b): another society's rule or delegation id is 404 APPROVAL_RULE_NOT_FOUND / DELEGATION_NOT_FOUND (tests/modules/approvals/approvals.rules.test.ts and approvals.delegations.test.ts, T14-36)
+      'GET /approvals/rules/:id',
+      'PATCH /approvals/rules/:id',
+      'DELETE /approvals/rules/:id',
+      'POST /approvals/delegations/:id/revoke',
       // module 11 (11.1): another society's charge head, billing rule or split rule id is 404 CHARGE_HEAD_NOT_FOUND / RULE_NOT_FOUND / SPLIT_RULE_NOT_FOUND on every route (tests/modules/billing/access.test.ts, T11-40)
       'PATCH /billing/charge-heads/:id',
       'DELETE /billing/charge-heads/:id',
@@ -426,6 +431,15 @@ describe('tenant isolation (T03-33, section 13)', () => {
       // :report is a report name, not an id; ledgerAccountId and fundId of another society are 404 (tests/modules/accounts/accounts.reports.test.ts)
       'GET /accounts/reports/:report',
       'GET /accounts/exports/:id', // another society's or another user's export job is 404 EXPORT_NOT_FOUND (accounts.reports.http.test.ts)
+      // module 14 (14.2a): another society's approval request id is 404 APPROVAL_NOT_FOUND on every route (tests/modules/approvals/approvals.inbox.test.ts, T14-36)
+      'GET /approvals/:id',
+      'POST /approvals/:id/approve',
+      'POST /approvals/:id/reject',
+      'POST /approvals/:id/request-changes',
+      'POST /approvals/:id/cancel',
+      'POST /approvals/:id/reassign',
+      'GET /me/approval-requests/:id',
+      'POST /me/approval-requests/:id/cancel',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))

@@ -733,20 +733,27 @@ export async function publishRun(
       exceptionCount: 0,
       totalPaise: totals.totalPaise,
     };
+    const resubmitting = Boolean(run.approvalRequestId && run.publishedBy === uid(ctx));
+    if (run.approvalRequestId && !resubmitting)
+      await approvals.cancel(ctx, run.approvalRequestId, 'Republished by another user', t);
+    // PENDING_APPROVAL first: when module 14 auto-approves, `onRunApproved` runs inside `request` (BR-14-4)
+    await run.update(
+      {
+        ...totals,
+        status: 'PENDING_APPROVAL',
+        approvalRequestId: resubmitting ? run.approvalRequestId : null,
+        publishedBy: uid(ctx),
+        publishedAt: now(),
+        version: run.version + 1,
+        updatedBy: uid(ctx),
+      },
+      { transaction: t },
+    );
     let requestId: number;
-    let status: 'PENDING' | 'APPROVED';
-    if (run.approvalRequestId && run.publishedBy === uid(ctx)) {
-      await approvals.resubmit(
-        ctx,
-        run.approvalRequestId,
-        { title, amountPaise: totals.totalPaise, payload },
-        t,
-      );
-      requestId = run.approvalRequestId;
-      status = 'PENDING';
+    if (resubmitting) {
+      requestId = run.approvalRequestId!;
+      await approvals.resubmit(ctx, requestId, { title, amountPaise: totals.totalPaise, payload }, t);
     } else {
-      if (run.approvalRequestId)
-        await approvals.cancel(ctx, run.approvalRequestId, 'Republished by another user', t);
       const r = await approvals.request(
         ctx,
         {
@@ -761,20 +768,10 @@ export async function publishRun(
         t,
       );
       requestId = r.id;
-      status = r.status;
     }
-    await run.update(
-      {
-        ...totals,
-        status: 'PENDING_APPROVAL',
-        approvalRequestId: requestId,
-        publishedBy: uid(ctx),
-        publishedAt: now(),
-        version: run.version + 1,
-        updatedBy: uid(ctx),
-      },
-      { transaction: t },
-    );
+    await run.reload({ transaction: t });
+    if (run.approvalRequestId !== requestId)
+      await run.update({ approvalRequestId: requestId }, { transaction: t });
     await audit(
       ctx,
       {
@@ -787,8 +784,7 @@ export async function publishRun(
       },
       t,
     );
-    if (status === 'APPROVED') await markApproved(ctx, run, t);
-    else emitRunUpdated(run, t);
+    if ((run.status as string) === 'PENDING_APPROVAL') emitRunUpdated(run, t);
     return run;
   });
   return runDetail(dto);

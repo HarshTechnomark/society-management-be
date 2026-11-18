@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { Fund, JournalEntry } from '../../models';
 import { audit } from '../../utils/audit';
 import { ConflictError, NotFoundError, UnprocessableError, ValidationError } from '../../utils/errors';
@@ -7,7 +6,7 @@ import { moneyTx } from '../payments/payments.shared';
 import { ensureBooks } from './accounts.chart';
 import { isDateLocked, postJournal } from './accounts.engine';
 import { APPROVAL_TYPES, AUDIT, CODE, ENTITY, ERR } from './accounts.constants';
-import { accountsPorts, placeholderAccountsApprovals } from './accounts.ports';
+import { accountsPorts, approvalOf } from './accounts.ports';
 import type { ApprovalTypeHooks } from './accounts.ports';
 import { fundLedger } from './accounts.lookup';
 import { n, societyIdOf, societyToday } from './accounts.shared';
@@ -18,9 +17,8 @@ import type { Transaction } from './accounts.types';
 /**
  * Fund transfer (BR-13-33, section 8.13): `POST /accounts/fund-transfers` makes a module 14 `FUND_TRANSFER` request; on approval the
  * handler posts a `JOURNAL` voucher (Dr source ledger, Cr target ledger; `null` = General, ledger 3100) with `refType 'fund_transfer'`
- * and `refId` = the approval request id. The `FUND_TRANSFER` callbacks get only the entity id (the fund the request names), so the
- * request id and payload come from the deciding code through `withApprovalRequest` (dev hook) and, in the placeholder, from
- * `placeholderAccountsApprovals`. ASSUMPTION: module 14 will pass its request (id and payload) to the callback instead.
+ * and `refId` = the approval request id. The `FUND_TRANSFER` callbacks get only the entity id (the fund the request names); module 14
+ * passes the request id and payload on `ctx.approval` (`approvalOf(ctx)`). On auto-approval the engine posts inside `request`.
  */
 export interface FundTransferPayload {
   fromFundId: number | null;
@@ -28,11 +26,6 @@ export interface FundTransferPayload {
   date: string;
   reason: string;
 }
-
-const current = new AsyncLocalStorage<number>();
-/** Runs `fn` with the id of the approval request being decided (used by the development hook and, later, module 14's adapter). */
-export const withApprovalRequest = <T>(requestId: number, fn: () => Promise<T>): Promise<T> =>
-  current.run(requestId, fn);
 
 const notFound = () => new NotFoundError(ERR.fundNotFound, 'Fund not found');
 
@@ -158,19 +151,18 @@ export async function postFundTransfer(
   return { entryId: r.id, voucherNo: r.voucherNo };
 }
 
-function requestOf(entityId: number) {
-  const id = current.getStore();
-  const req = id ? placeholderAccountsApprovals.get(id) : undefined;
-  if (!id || !req || !req.payload || req.entityId !== entityId)
+function requestOf(ctx: Ctx) {
+  const a = approvalOf(ctx);
+  if (!a?.payload || typeof a.payload.amountPaise !== 'number')
     throw new ConflictError(ERR.invalidState, 'The fund transfer request could not be found');
-  return { id, payload: req.payload as unknown as FundTransferPayload & { amountPaise: number } };
+  return { id: a.requestId, payload: a.payload as unknown as FundTransferPayload & { amountPaise: number } };
 }
 
 /** The `FUND_TRANSFER` type definition registered with module 14 (`registerFundJobs`). */
 export const fundTransferHooks: ApprovalTypeHooks = {
   type: APPROVAL_TYPES.fundTransfer,
-  async onApproved(ctx, entityId, t) {
-    const { id, payload } = requestOf(entityId);
+  async onApproved(ctx, _entityId, t) {
+    const { id, payload } = requestOf(ctx);
     await postFundTransfer(ctx, id, payload, t);
   },
   async onRejected() {

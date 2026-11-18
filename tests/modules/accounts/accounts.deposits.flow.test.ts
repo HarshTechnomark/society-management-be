@@ -1,13 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { Deposit, Invoice, JournalEntry, LedgerAccount, closeDb } from '../../../src/models';
+import { ApprovalRequest, Deposit, Invoice, JournalEntry, LedgerAccount, closeDb } from '../../../src/models';
 import { drainQueues } from '../../../src/lib/queue';
 import { accountsPortCalls, setAccountsPorts } from '../../../src/modules/accounts/accounts.ports';
-import { placeholderApprovalRequests } from '../../../src/modules/billing/billing.ports';
 import { ensureBooks } from '../../../src/modules/accounts/accounts.chart';
 import { sequelize } from '../../../src/models';
 import * as svc from '../../../src/modules/accounts/accounts.deposits.service';
 import { registerDepositHooks } from '../../../src/modules/accounts/accounts.periods.jobs';
-import { approve, reject } from '../../../src/modules/accounts/accounts.periods.approvals-hook';
+import { committeeApprove, committeeReject, ensureSystemUser } from '../../helpers/approvals-decide';
 import { deposits as publicDeposits } from '../../../src/modules/accounts/accounts.public';
 import { settleInput } from '../../../src/modules/payments/payments.settle';
 import { moneyTx } from '../../../src/modules/payments/payments.shared';
@@ -23,7 +22,6 @@ afterAll(async () => {
 
 let w: RunSociety;
 let admin: ReturnType<typeof ctxFor>;
-let decider: ReturnType<typeof ctxFor>;
 let bankId: number;
 const sid = () => w.society.id!;
 
@@ -34,8 +32,8 @@ beforeEach(async () => {
   svc.clearDepositOwners();
   registerDepositHooks();
   w = await paymentsWorld({ flats: 2 });
+  await ensureSystemUser(); // owner modules raise refunds with a system context
   admin = ctxFor(w, w.user.id!);
-  decider = ctxFor(w, w.treasurer.user.id!);
   await sequelize.transaction(t => ensureBooks(t, sid()));
   bankId = Number((await addBankLedger(sid())).id);
   await post(sysCtx(w), {
@@ -97,9 +95,14 @@ describe('deposit lifecycle (T13-26)', () => {
 
     cur = await svc.requestDepositRefund(admin, d.id, { version: cur.version });
     expect(cur).toMatchObject({ status: 'REFUND_PENDING', refundRequestedPaise: 2_200_000 });
-    const req = accountsPortCalls.find(c => c.fn === 'approvals.request')!.input as any;
-    expect(req).toMatchObject({ type: 'DEPOSIT_REFUND', entityType: 'deposit', amountPaise: 2_200_000 });
-    await approve(cur.refundApprovalRequestId!, decider);
+    const req = (await ApprovalRequest.findByPk(cur.refundApprovalRequestId!))!;
+    expect([req.type, req.entityType, Number(req.amountPaise), req.status]).toEqual([
+      'DEPOSIT_REFUND',
+      'deposit',
+      2_200_000,
+      'PENDING',
+    ]);
+    await committeeApprove(cur.refundApprovalRequestId!);
     cur = await svc.getDeposit(sid(), d.id);
     expect(cur.status).toBe('REFUND_APPROVED');
 
@@ -184,7 +187,7 @@ describe('deposit lifecycle (T13-26)', () => {
   it('a rejected refund goes back to HELD and can be requested again', async () => {
     const d = await held({}, 200_000);
     const p = await svc.requestDepositRefund(admin, d.id, { reason: 'Work finished', version: d.version });
-    await reject(p.refundApprovalRequestId!, 'Inspect first', decider);
+    await committeeReject(p.refundApprovalRequestId!, 'Inspect first');
     const back = await svc.getDeposit(sid(), d.id);
     expect(back).toMatchObject({ status: 'HELD', refundRequestedPaise: 0 });
     expect(back.timeline!.find(e => e.action === 'accounts.deposit.refund_rejected')).toMatchObject({
@@ -214,7 +217,7 @@ describe('deposit lifecycle (T13-26)', () => {
   it('refund-paid checks the source, the mode, the reference and the balance (BR-13-47, BR-13-22, BR-13-26)', async () => {
     const d = await held({}, 200_000);
     const p = await svc.requestDepositRefund(admin, d.id, { version: d.version });
-    await approve(p.refundApprovalRequestId!, decider);
+    await committeeApprove(p.refundApprovalRequestId!);
     const cur = await svc.getDeposit(sid(), d.id);
     const base = {
       paidFromLedgerAccountId: bankId,
@@ -254,7 +257,7 @@ describe('deposit lifecycle (T13-26)', () => {
   it('cash refunds go with a cash account', async () => {
     const d = await held({}, 100_000);
     const p = await svc.requestDepositRefund(admin, d.id, { version: d.version });
-    await approve(p.refundApprovalRequestId!, decider);
+    await committeeApprove(p.refundApprovalRequestId!);
     const cashAcc = (await LedgerAccount.findOne({ where: { societyId: sid(), code: '1120' } }))!;
     const cur = await svc.getDeposit(sid(), d.id);
     const r = await svc.markRefundPaid(admin, d.id, {
@@ -298,7 +301,7 @@ describe('create, opening, cancel and sync', () => {
     const d = await make({ unitId: w.units[1]!.id });
     const c = await svc.cancelDeposit(admin, d.id, { reason: 'Raised by mistake', version: d.version });
     expect(c).toMatchObject({ status: 'CANCELLED', cancelReason: 'Raised by mistake' });
-    expect([...placeholderApprovalRequests.values()].some(r => r.type === 'INVOICE_CANCEL')).toBe(true);
+    expect(await ApprovalRequest.count({ where: { type: 'INVOICE_CANCEL' } })).toBe(1);
     await expect(
       svc.cancelDeposit(admin, d.id, { reason: 'Again please', version: c.version }),
     ).rejects.toMatchObject({
@@ -396,7 +399,7 @@ describe('owner modules (BR-13-45a, T13-45, T13-46)', () => {
       deductedPaise: 50_000,
       refundRequestedPaise: 450_000,
     });
-    await approve(cur.refundApprovalRequestId!, decider);
+    await committeeApprove(cur.refundApprovalRequestId!);
     cur = await svc.getDeposit(sid(), r1.depositId);
     await svc.markRefundPaid(admin, r1.depositId, {
       paidFromLedgerAccountId: bankId,
@@ -420,12 +423,12 @@ describe('owner modules (BR-13-45a, T13-45, T13-46)', () => {
     );
     await moneyTx(t => settleInput(sysCtx(w), offline(w, 0, 100_000, { method: 'CASH' }), t));
     await svc.depositSyncJob({ societyId: sid() });
-    const before = accountsPortCalls.filter(c => c.fn === 'approvals.request').length;
+    const before = await ApprovalRequest.count({ where: { type: 'DEPOSIT_REFUND' } });
     await moneyTx(t =>
       publicDeposits.requestRefund(ctx, depositId, { deductionPaise: 100_000, reason: 'All forfeited' }, t),
     );
     expect((await svc.getDeposit(sid(), depositId)).status).toBe('FORFEITED');
-    expect(accountsPortCalls.filter(c => c.fn === 'approvals.request').length).toBe(before);
+    expect(await ApprovalRequest.count({ where: { type: 'DEPOSIT_REFUND' } })).toBe(before);
     expect(calls.find(c => c.fn === 'refunded')!.input.refundedPaise).toBe(0);
   });
 

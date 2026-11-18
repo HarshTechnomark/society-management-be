@@ -1,11 +1,20 @@
 import { Op, type WhereOptions } from 'sequelize';
-import { AuditLog, Expense, Fund, JournalLine, LedgerAccount, User } from '../../models';
+import {
+  ApprovalRequest,
+  ApprovalRule,
+  AuditLog,
+  Expense,
+  Fund,
+  JournalLine,
+  LedgerAccount,
+  User,
+} from '../../models';
 import type { Ctx } from '../../types/context';
 import { audit } from '../../utils/audit';
 import { NotFoundError } from '../../utils/errors';
 import { toCsv } from '../society-setup/society-setup.csv';
 import { AUDIT, ENTITY, ERR, PERM } from './accounts.constants';
-import { placeholderAccountsApprovals } from './accounts.ports';
+import { DEFAULT_RULES } from '../approvals/approvals.catalogue';
 import { n } from './accounts.shared';
 import { billFileInfo, billFiles } from './accounts.expenses.files';
 import { displayId, ledgerLabels } from './accounts.expenses.shared';
@@ -20,15 +29,35 @@ export async function loadExpense(societyId: number, id: number): Promise<Expens
 }
 
 /**
- * Module 14 rule `EXPENSE` (spec 13 BR-13-25, module 14 7.5): up to Rs 5,000 auto-approves, above it a second person decides. The
- * development approvals placeholder does not auto-approve yet, so today `approvalRequired` is true for every submitted expense.
+ * Module 14 rules of type `EXPENSE` (spec 13 BR-13-25, module 14 7.5): the default rule auto-approves up to Rs 5,000 and a second
+ * person decides above it. `approvalThresholdPaise` is the top of the society's live auto-approve band that starts at 0 (no
+ * category or requester filter); the defaults (7.5) apply while the society has no `EXPENSE` rule row yet (BR-14-6). 0 when
+ * every expense needs a decision. `approvalRequired` is `grossAmountPaise > approvalThresholdPaise`.
  */
-export const EXPENSE_AUTO_APPROVE_PAISE = 500_000;
+export async function expenseAutoApprovePaise(societyId: number): Promise<number> {
+  const rows = await ApprovalRule.findAll({ where: { societyId, type: 'EXPENSE' }, paranoid: false });
+  type Band = { action: string; minAmountPaise: number; maxAmountPaise: number | null; priority: number };
+  const bands: Band[] = rows.length
+    ? rows
+        .filter(r => r.isActive && !r.deletedAt && !r.categoryKeys?.length && !r.requesterRoleKeys?.length)
+        .map(r => ({
+          action: r.action,
+          minAmountPaise: n(r.minAmountPaise),
+          maxAmountPaise: r.maxAmountPaise === null ? null : n(r.maxAmountPaise),
+          priority: n(r.priority),
+        }))
+    : (DEFAULT_RULES.EXPENSE ?? []);
+  const first = [...bands].sort((a, b) => a.priority - b.priority).find(b => b.minAmountPaise === 0);
+  if (!first || first.action !== 'AUTO_APPROVE') return 0;
+  return first.maxAmountPaise ?? Number.MAX_SAFE_INTEGER;
+}
 
 type Labels = Awaited<ReturnType<typeof ledgerLabels>>;
 export interface DtoNames {
   makers?: Map<number, string>;
   funds?: Map<number, string>;
+  /** `expenseAutoApprovePaise(societyId)`. */
+  autoApprovePaise?: number;
 }
 export function expenseDto(e: Expense, labels: Labels, names: DtoNames = {}) {
   const makers = names.makers;
@@ -68,8 +97,8 @@ export function expenseDto(e: Expense, labels: Labels, names: DtoNames = {}) {
     approvedBy: e.approvedBy ? n(e.approvedBy) : null,
     approvedByName: e.approvedBy ? (makers?.get(n(e.approvedBy)) ?? null) : null,
     approvedAt: e.approvedBy && e.postedAt ? e.postedAt.toISOString() : null,
-    approvalRequired: true,
-    approvalThresholdPaise: EXPENSE_AUTO_APPROVE_PAISE,
+    approvalRequired: n(e.grossAmountPaise) > (names.autoApprovePaise ?? 0),
+    approvalThresholdPaise: names.autoApprovePaise ?? 0,
     postedAt: e.postedAt ? e.postedAt.toISOString() : null,
     reversedAt: e.reversedAt ? e.reversedAt.toISOString() : null,
     createdBy: n(e.createdBy),
@@ -102,7 +131,11 @@ export async function viewExpense(ctx: Ctx, id: number, detail = false) {
   const e = await loadExpense(ctx.society!.id, id);
   const labels = await ledgerLabels(labelIds([e]));
   const makers = await makerNames([e]);
-  const dto = expenseDto(e, labels, { makers, funds: await fundNames(ctx.society!.id, [e]) });
+  const dto = expenseDto(e, labels, {
+    makers,
+    funds: await fundNames(ctx.society!.id, [e]),
+    autoApprovePaise: await expenseAutoApprovePaise(ctx.society!.id),
+  });
   if (!detail) return dto;
   const log = await AuditLog.findAll({
     where: { societyId: ctx.society!.id, entityType: ENTITY.expense, entityId: String(id) },
@@ -129,7 +162,9 @@ export async function viewExpense(ctx: Ctx, id: number, detail = false) {
       })
     : [];
   const lineLabels = await ledgerLabels(lines.map(l => n(l.ledgerAccountId)));
-  const req = e.approvalRequestId ? placeholderAccountsApprovals.get(n(e.approvalRequestId)) : undefined;
+  const req = e.approvalRequestId
+    ? await ApprovalRequest.findByPk(n(e.approvalRequestId), { attributes: ['status'] })
+    : null;
   const mine = ctx.user?.id === n(e.createdBy);
   const canApprove = e.status === 'PENDING_APPROVAL' && ctx.permissions?.has(PERM.expensesApprove) && !mine;
   const canReverse = e.status === 'POSTED' && ctx.permissions?.has(PERM.expensesApprove) && !mine;
@@ -204,8 +239,9 @@ export async function listExpenses(ctx: Ctx, q: ExpenseListQuery) {
   const labels = await ledgerLabels(labelIds(rows));
   const makers = await makerNames(rows);
   const funds = await fundNames(ctx.society!.id, rows);
+  const autoApprovePaise = await expenseAutoApprovePaise(ctx.society!.id);
   return {
-    data: rows.map(e => expenseDto(e, labels, { makers, funds })),
+    data: rows.map(e => expenseDto(e, labels, { makers, funds, autoApprovePaise })),
     pagination: {
       page: q.page,
       limit: q.limit,

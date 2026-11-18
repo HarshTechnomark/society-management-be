@@ -17,7 +17,7 @@ import { invoices } from '../../../src/modules/billing/billing.invoices.service'
 import { billingPorts } from '../../../src/modules/billing/billing.ports';
 import { events, makeUser } from '../../helpers/auth';
 import { systemCtx } from '../../../src/types/context';
-import { approve } from '../../../src/modules/billing/billing.runs.approvals-hook';
+import { approve } from '../../helpers/approvals-decide';
 import { rawInvoice } from '../../helpers/maint-billing';
 import { featureOff, memberOf } from '../../helpers/society-setup';
 import { resetLogins } from '../../helpers/access';

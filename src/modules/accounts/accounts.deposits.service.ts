@@ -819,10 +819,10 @@ async function raiseRefund(ctx: Ctx, d: Deposit, reason: string | null, t: Trans
     },
     t,
   );
+  await d.reload({ transaction: t }); // an auto-approval (BR-14-4) already moved it to REFUND_APPROVED inside `request`
   await d.update({ refundApprovalRequestId: approval.id }, { transaction: t });
   await auditDeposit(ctx, AUDIT.depositRefundRequested, d, before, t, reason);
   emitDeposit(t, d);
-  if (approval.status === 'APPROVED') await onRefundApproved(ctx, n(d.id), t);
 }
 
 export async function requestDepositRefund(

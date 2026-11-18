@@ -192,3 +192,9 @@ Rules worth knowing:
 - Transfer fee invoices are not stored on the transfer row; the detail reads them through `invoices.listForRef` (module 11), and cancelling an approved transfer calls `invoices.cancelForRef`.
 - The transfer premium is charged for `SALE` and `COURT_ORDER` (a `GIFT` carries one only when given explicitly); it is forced to 0 for the other types.
 - Jobs: the in-process runner is used when `REDIS_URL` is not set (same processors); `runRenovationDaily(societyId)` is tested directly.
+
+## Module 14 (14.3)
+
+Production wires parts 2 and 3 to the engine (`wireApprovalsPorts()`: `realPart2Approvals`, `realPart3Approvals`). The
+placeholders (`approvalStub`, `approvalStore`) and their decide helpers stay only for this module's own tests; the development
+route `/dev/approvals` that used them is gone.

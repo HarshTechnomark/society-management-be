@@ -1,18 +1,15 @@
-import { BillingNote, Invoice, sequelize } from '../../models';
+import { BillingNote, Invoice } from '../../models';
 import { formatRupees } from '../../lib/money';
 import type { Ctx } from '../../types/context';
-import { ConflictError, NotFoundError } from '../../utils/errors';
 import { APPROVAL_TYPES } from './billing.constants';
 import { onCancelApproved } from './billing.notes.cancel';
 import { onNoteApproved, onNoteChangesRequested, onNoteRejected, releaseNote } from './billing.notes.credit';
-import { billingPorts, placeholderApprovalRequests, placeholderApprovalTypes } from './billing.ports';
+import { billingPorts } from './billing.ports';
 
 /**
  * Approval types of sub-module 11.4 (BR-11-43, section 9.2): `CREDIT_NOTE` and `WRITE_OFF` (entity `billing_note`) and
- * `INVOICE_CANCEL` (entity `invoice`). `registerNoteApprovalTypes()` registers them through the approvals port. `approve`,
- * `reject` and `requestChanges` do what module 14's inbox callback will do for a request made through the placeholder: run the
- * type's callback in one transaction. The coordinator can wire a development route to them. The placeholder enforces
- * maker-checker (`409 MAKER_CHECKER_VIOLATION`).
+ * `INVOICE_CANCEL` (entity `invoice`). `registerNoteApprovalTypes()` registers them with module 14 through the approvals port;
+ * decisions come from the module 14 inbox.
  */
 async function describeNote(noteId: number) {
   const n = await BillingNote.findByPk(noteId);
@@ -71,38 +68,3 @@ export function registerNoteApprovalTypes(): void {
     },
   });
 }
-
-async function decide(
-  approvalRequestId: number,
-  ctx: Ctx,
-  action: 'approve' | 'reject' | 'changes',
-  reason: string | null,
-): Promise<{ type: string; entityId: number; status: string }> {
-  const req = placeholderApprovalRequests.get(approvalRequestId);
-  const hooks = req ? placeholderApprovalTypes.get(req.type) : undefined;
-  if (!req || !hooks) throw new NotFoundError('APPROVAL_NOT_FOUND', 'Approval request not found');
-  if (req.status !== 'PENDING') return { type: req.type, entityId: req.entityId, status: req.status };
-  if (action === 'approve' && ctx.user?.id !== undefined && ctx.user.id === req.requestedBy)
-    throw new ConflictError('MAKER_CHECKER_VIOLATION', 'The person who requested this cannot approve it');
-  await sequelize.transaction(async t => {
-    const c: Ctx =
-      req.societyId && !ctx.society
-        ? {
-            ...ctx,
-            society: { id: req.societyId, name: '', status: 'ACTIVE', timezone: 'Asia/Kolkata', planKey: '' },
-          }
-        : ctx;
-    if (action === 'approve') await hooks.onApproved(c, req.entityId, t);
-    else if (action === 'reject') await hooks.onRejected(c, req.entityId, reason ?? '', t);
-    else await hooks.onChangesRequested?.(c, req.entityId, t);
-  });
-  req.status = action === 'approve' ? 'APPROVED' : action === 'reject' ? 'REJECTED' : 'CHANGES_REQUESTED';
-  return { type: req.type, entityId: req.entityId, status: req.status };
-}
-
-export const approve = (approvalRequestId: number, ctx: Ctx) =>
-  decide(approvalRequestId, ctx, 'approve', null);
-export const reject = (approvalRequestId: number, reason: string, ctx: Ctx) =>
-  decide(approvalRequestId, ctx, 'reject', reason);
-export const requestChanges = (approvalRequestId: number, ctx: Ctx) =>
-  decide(approvalRequestId, ctx, 'changes', null);

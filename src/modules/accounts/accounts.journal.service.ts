@@ -18,7 +18,7 @@ import { hashLines, periodLocked, resolveLines, validateLines, type RawLine } fr
 import { postDraft, reverseEntry } from './accounts.engine';
 import { isLocked } from './accounts.engine.lock';
 import { CODE_RE } from './accounts.lookup';
-import { accountsPorts } from './accounts.ports';
+import { accountsPorts, approvalOf } from './accounts.ports';
 import { invalidState, n, societyIdOf, societyToday } from './accounts.shared';
 import { getJournal } from './accounts.journal.read';
 import type { CreateJournalBody, UpdateJournalBody } from './accounts.journal.validation';
@@ -232,10 +232,12 @@ export async function submitDraft(ctx: Ctx, id: number, version: number) {
   const ports = accountsPorts();
   await moneyTx(async t => {
     // lock order (BR-14-14): the open approval request of the entity first, then the books, then the rows
-    if (await ports.approvals.lockOpenForEntity(societyId, ENTITY.journalEntry, id, t))
-      throw invalidState('This journal is already waiting for approval');
+    const open = await ports.approvals.lockOpenForEntity(societyId, ENTITY.journalEntry, id, t);
     const books = await lockBooks(t, societyId);
     const e = await lockEntry(societyId, id, t);
+    // the draft's own request, sent back for changes, is resubmitted below; any other open request blocks
+    if (open && open.id !== n(e.approvalRequestId ?? 0))
+      throw invalidState('This journal is already waiting for approval');
     requireDraft(e, false);
     requireMaker(ctx, e);
     if (n(e.version) !== version) throw stale();
@@ -259,34 +261,29 @@ export async function submitDraft(ctx: Ctx, id: number, version: number) {
       amountPaise: totals.debitPaise,
       payload: { date: e.entryDate },
     };
-    let status: 'PENDING' | 'APPROVED';
-    let requestId: number;
-    if (e.approvalRequestId) {
-      await ports.approvals.resubmit(ctx, n(e.approvalRequestId), input, t);
-      requestId = n(e.approvalRequestId);
-      status = 'PENDING';
-    } else {
+    // PENDING_APPROVAL first: when module 14 auto-approves, `onApproved` posts the draft inside `request` (BR-14-4)
+    await e.update(
+      {
+        totalPaise: totals.debitPaise,
+        version: n(e.version) + 1,
+        updatedBy: userId(ctx),
+        rejectionReason: null,
+        status: 'PENDING_APPROVAL',
+      },
+      { transaction: t },
+    );
+    await auditDraft(ctx, AUDIT.journalSubmitted, e, t);
+    if (e.approvalRequestId) await ports.approvals.resubmit(ctx, n(e.approvalRequestId), input, t);
+    else {
       const r = await ports.approvals.request(
         ctx,
         { type: APPROVAL_TYPES.manualJournal, entityType: ENTITY.journalEntry, entityId: id, ...input },
         t,
       );
-      requestId = r.id;
-      status = r.status;
+      // an auto-approved draft is posted (immutable) and got its request id from `onJournalApproved`
+      if (r.status === 'PENDING')
+        await JournalEntry.update({ approvalRequestId: r.id }, { where: { id }, transaction: t });
     }
-    await e.update(
-      {
-        approvalRequestId: requestId,
-        totalPaise: totals.debitPaise,
-        version: n(e.version) + 1,
-        updatedBy: userId(ctx),
-        rejectionReason: null,
-        ...(status === 'PENDING' ? { status: 'PENDING_APPROVAL' as const } : {}),
-      },
-      { transaction: t },
-    );
-    await auditDraft(ctx, AUDIT.journalSubmitted, e, t);
-    if (status === 'APPROVED') await postDraft(ctx, id, t);
   });
   return getJournal(societyId, id);
 }
@@ -363,8 +360,11 @@ export async function onJournalApproved(ctx: Ctx, entityId: number, t: Transacti
   const societyId = societyIdOf(ctx);
   const e = await JournalEntry.findOne({ where: { id: entityId, societyId }, transaction: t });
   if (!e) throw new NotFoundError(ERR.journalNotFound, 'Journal entry not found');
-  if (ctx.user && e.createdBy && n(e.createdBy) === ctx.user.id)
+  const a = approvalOf(ctx);
+  // module 14 enforces maker-checker (BR-14-7); on auto-approval (no decider) the requester's context runs this
+  if (!a && ctx.user && e.createdBy && n(e.createdBy) === ctx.user.id)
     throw new ConflictError(ERR.makerChecker, 'The person who created this journal cannot approve it');
+  if (a && !e.approvalRequestId) await e.update({ approvalRequestId: a.requestId }, { transaction: t });
   await postDraft(ctx, entityId, t);
 }
 

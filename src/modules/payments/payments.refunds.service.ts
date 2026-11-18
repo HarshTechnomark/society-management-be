@@ -390,8 +390,7 @@ export async function requestRefund(ctx: Ctx, input: RefundRequestInput): Promis
       t,
     );
     if (freed > 0) t.afterCommit(() => void queueAdvanceApply(societyId, [unitId]));
-    // an auto-approved request runs the approval callback in the same transaction
-    if (approval.status === 'APPROVED') await onRefundApproved(ctx, n(refund.id), t);
+    // an auto-approved request ran `onRefundApproved` inside `request` (BR-14-4)
     await refund.reload({ transaction: t });
     return refundDto(refund, label, p);
   });

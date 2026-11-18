@@ -455,9 +455,9 @@ async function insertVersion(
     },
     t,
   );
-  row.approvalRequestId = req.id;
-  await row.save({ transaction: t });
-  if (req.status === 'APPROVED') await activateVersion(ctx, societyId, row, t);
+  // an auto-approval (BR-14-4) activated the version inside `request`
+  await row.reload({ transaction: t });
+  await row.update({ approvalRequestId: req.id }, { transaction: t });
   return row;
 }
 

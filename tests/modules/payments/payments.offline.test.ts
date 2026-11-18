@@ -1,3 +1,5 @@
+import { approvalRequests, autoApproveType, decideOver } from '../../helpers/approvals-decide';
+import { getHandlers } from '../../../src/modules/approvals/approvals.registry';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   AuditLog,
@@ -10,13 +12,8 @@ import {
   closeDb,
 } from '../../../src/models';
 import { drainQueues } from '../../../src/lib/queue';
-import {
-  paymentsPortCalls,
-  placeholderPaymentApprovalTypes,
-  setPaymentsPorts,
-} from '../../../src/modules/payments/payments.ports';
+import { paymentsPortCalls, setPaymentsPorts } from '../../../src/modules/payments/payments.ports';
 import { moneyTx } from '../../../src/modules/payments/payments.shared';
-import { onOfflineApproved } from '../../../src/modules/payments/payments.offline.service';
 import { memberOf } from '../../helpers/society-setup';
 import { mkInvoice, paymentsWorld, resetPayments, sysCtx } from '../../helpers/payments';
 import {
@@ -55,7 +52,7 @@ describe('POST /payments/offline (8.11)', () => {
     expect(p.source).toBe('OFFLINE');
     expect(Number(p.approvalRequestId)).toBe(r.body.data.approval.requestId);
     expect(await PaymentAllocation.count({ where: { paymentId: p.id } })).toBe(0);
-    const call = paymentsPortCalls.find(c => c.fn === 'approvals.request')!.input as any;
+    const call = (await approvalRequests()).at(-1)! as any;
     expect(call).toMatchObject({
       type: 'OFFLINE_PAYMENT',
       entityType: 'payment',
@@ -83,12 +80,7 @@ describe('POST /payments/offline (8.11)', () => {
   it('T12-17: the recorder cannot approve their own entry', async () => {
     const w = await paymentsWorld();
     const r = await recordOffline(w, 0);
-    const d = await w.c(
-      'post',
-      `/dev/approvals/${r.body.data.approval.requestId}/approve`,
-      {},
-      { query: { source: 'payments' } },
-    );
+    const d = await decideOver(w.c as never, r.body.data.approval.requestId);
     expect([d.status, d.body.code]).toEqual([409, 'MAKER_CHECKER_VIOLATION']);
     expect((await Payment.findByPk(r.body.data.id))!.status).toBe('PENDING_APPROVAL');
   });
@@ -116,31 +108,26 @@ describe('POST /payments/offline (8.11)', () => {
 
   it('withdrawal by the recorder and expiry end the payment REJECTED', async () => {
     const w = await paymentsWorld();
-    const hooks = placeholderPaymentApprovalTypes.get('OFFLINE_PAYMENT') as any;
+    const hooks = getHandlers('OFFLINE_PAYMENT')!;
     for (const fn of ['onCancelled', 'onExpired'] as const) {
       const r = await recordOffline(w, 0, { amountPaise: 100_100 + (fn === 'onExpired' ? 1 : 0) });
-      await moneyTx(t => hooks[fn](sysCtx(w), r.body.data.id, t));
+      const view = { entityId: r.body.data.id, decisionReason: null } as never;
+      await moneyTx(t => hooks[fn]!({ ...sysCtx(w), approval: { reason: null } } as never, view, t));
       expect((await Payment.findByPk(r.body.data.id))!.status).toBe('REJECTED');
     }
   });
 
   it('auto-approval: when module 14 approves inside the call, the response is already CONFIRMED with a receipt', async () => {
     const w = await paymentsWorld();
-    const approver = await memberOf(w.society, 'secretary');
-    setPaymentsPorts({
-      approvals: {
-        request: async (ctx, input, t) => {
-          const c = { ...ctx, user: { ...ctx.user!, id: approver.user.id } };
-          await onOfflineApproved(c as never, input.entityId, t);
-          return { id: 777, status: 'APPROVED' };
-        },
-      },
-    });
+    await autoApproveType('OFFLINE_PAYMENT', w.society.id!);
     const r = await recordOffline(w, 0);
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     expect(r.body.data.status).toBe('CONFIRMED');
     expect(r.body.data.receiptNo).toMatch(/^RCT\//);
-    expect(r.body.data.approval).toEqual({ requestId: 777, status: 'APPROVED' });
+    expect(r.body.data.approval).toEqual({
+      requestId: (await approvalRequests()).at(-1)!.id,
+      status: 'APPROVED',
+    });
   });
 
   it('T12-18: cash of 1,50,000 then 60,000 for one flat on one day: the second is CASH_LIMIT_EXCEEDED', async () => {
@@ -377,14 +364,12 @@ describe('POST /payments/offline (8.11)', () => {
     expect([r.status, r.body.code]).toEqual([423, 'SOCIETY_SUSPENDED']);
   });
 
-  it('the development approvals page lists the pending request with source payments', async () => {
+  it('the module 14 inbox lists the pending request for the treasurer', async () => {
     const w = await paymentsWorld();
     const r = await recordOffline(w, 0);
-    const list = await w.c('get', '/dev/approvals');
-    const row = list.body.data.find(
-      (a: any) => a.source === 'payments' && a.id === r.body.data.approval.requestId,
-    );
-    expect(row).toMatchObject({ type: 'OFFLINE_PAYMENT', entityId: r.body.data.id });
+    const list = await w.treasurer.c('get', '/approvals');
+    const row = list.body.data.find((a: any) => a.id === r.body.data.approval.requestId);
+    expect(row).toMatchObject({ type: 'OFFLINE_PAYMENT', status: 'PENDING', amountPaise: 100_000 });
   });
 
   describe('paying for a collection (BR-12-18)', () => {

@@ -3,11 +3,7 @@ import { LedgerAccount, Society, sequelize } from '../../src/models';
 import { setNow } from '../../src/lib/clock';
 import { setRealtimeSink } from '../../src/lib/realtime';
 import { ensureBooks } from '../../src/modules/accounts/accounts.chart';
-import {
-  accountsPortCalls,
-  placeholderAccountsApprovalTypes,
-  setAccountsPorts,
-} from '../../src/modules/accounts/accounts.ports';
+import { setAccountsPorts } from '../../src/modules/accounts/accounts.ports';
 import { registerExpenseJobs } from '../../src/modules/accounts/accounts.expenses.jobs';
 import { setBillFiles } from '../../src/modules/accounts/accounts.expenses.files';
 import { moneyTx } from '../../src/modules/accounts/accounts.expenses.shared';
@@ -15,10 +11,11 @@ import { putPlaceholderFile } from '../../src/modules/society-setup/society-setu
 import { events } from './auth';
 import { addBankLedger, ctxOf, post } from './accounts';
 import { memberOf, resetSetup, setupSociety } from './society-setup';
+import { autoApproveType, decideOver, everyRequestNeeds } from './approvals-decide';
 
 export const idemH = (): Record<string, string> => ({ 'Idempotency-Key': randomUUID() });
 
-/** Fresh state for 13.2a tests: society reset, placeholder ports, the `EXPENSE` approval type registered. Call from `beforeEach`. */
+/** Fresh state for 13.2a tests: society reset, placeholder ports (approvals is the real module 14), the `EXPENSE` type registered. Call from `beforeEach`. */
 export async function resetExpenses(): Promise<void> {
   await resetSetup();
   setAccountsPorts();
@@ -59,12 +56,17 @@ const CODES = [
   '1410',
 ];
 
-/** A society with books, a bank ledger `1110-001` holding `bankPaise` and cash in hand holding `cashPaise` (opening balances). */
+/**
+ * A society with books, a bank ledger `1110-001` holding `bankPaise` and cash in hand holding `cashPaise` (opening balances). Unless
+ * `defaultRules`, a custom module 14 rule makes every expense wait for the Treasurer or Chairman (the 7.5 defaults would
+ * auto-approve the small test expenses); `autoApprove()` turns it into an auto-approval.
+ */
 export async function expWorld(
-  o: { plan?: string; bankPaise?: number; cashPaise?: number } = {},
+  o: { plan?: string; bankPaise?: number; cashPaise?: number; defaultRules?: boolean } = {},
 ): Promise<ExpWorld> {
   const s = await setupSociety({ plan: (o.plan ?? 'PREMIUM') as never });
   const sid = s.society.id!;
+  if (!o.defaultRules) await everyRequestNeeds(sid, 'EXPENSE');
   await sequelize.transaction(t => ensureBooks(t, sid));
   await addBankLedger(sid);
   const sys = ctxOf(s.society, null);
@@ -119,19 +121,7 @@ export const bankBody = (w: ExpWorld, o: Record<string, unknown> = {}) =>
   });
 
 /** Module 14 with an `AUTO_APPROVE` rule: `approvals.request` runs `onApproved` in the caller's transaction and answers APPROVED. */
-export function autoApprove(): void {
-  let seq = 1000;
-  setAccountsPorts({
-    approvals: {
-      request: async (ctx, input, t) => {
-        accountsPortCalls.push({ fn: 'approvals.request', input, t });
-        const id = ++seq;
-        await placeholderAccountsApprovalTypes.get(input.type)!.onApproved(ctx, input.entityId, t);
-        return { id, status: 'APPROVED' };
-      },
-    },
-  });
-}
+export const autoApprove = (): Promise<void> => autoApproveType('EXPENSE');
 
 export const bill = (w: ExpWorld, ownerUserId: number, purpose = 'EXPENSE_BILL'): number =>
   putPlaceholderFile({
@@ -142,14 +132,12 @@ export const bill = (w: ExpWorld, ownerUserId: number, purpose = 'EXPENSE_BILL')
     content: Buffer.from('jpg'),
   });
 
+/** The Treasurer decides over HTTP in the module 14 inbox (`POST /approvals/:id/approve|reject`). */
 export const decide = (
   w: ExpWorld,
   requestId: number,
   decision: 'approve' | 'reject' = 'approve',
   reason = 'No bill attached',
-) =>
-  w.treasurer.c('post', `/dev/approvals/${requestId}/${decision}`, decision === 'reject' ? { reason } : {}, {
-    query: { source: 'accounts' },
-  });
+) => decideOver(w.treasurer.c as never, requestId, decision, reason);
 
 export { moneyTx };

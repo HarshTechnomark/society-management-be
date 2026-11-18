@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect } from 'vitest';
-import { Payment } from '../../src/models';
+import { ApprovalRequest, Payment } from '../../src/models';
 import { putPlaceholderFile } from '../../src/modules/society-setup/society-setup.ports';
-import { placeholderPaymentApprovals } from '../../src/modules/payments/payments.ports';
+import { decideOver } from './approvals-decide';
 import type { RunSociety } from './billing-runs';
 
 export const idemH = (): Record<string, string> => ({ 'Idempotency-Key': randomUUID() });
@@ -30,16 +30,13 @@ export function recordOffline(w: RunSociety, unitIndex: number, body: Record<str
   return w.c('post', '/payments/offline', { ...base, ...body }, { headers: idemH() });
 }
 
-/** The treasurer approves (or rejects) the placeholder approval request of a payment through the development page. */
+/** The treasurer approves (or rejects) the approval request of a payment in the module 14 inbox. */
 export const decide = (
   w: RunSociety,
   requestId: number,
   decision: 'approve' | 'reject' = 'approve',
   reason = 'No match in the bank statement',
-) =>
-  w.treasurer.c('post', `/dev/approvals/${requestId}/${decision}`, decision === 'reject' ? { reason } : {}, {
-    query: { source: 'payments' },
-  });
+) => decideOver(w.treasurer.c as never, requestId, decision, reason);
 
 export async function recordAndApprove(w: RunSociety, unitIndex: number, body: Record<string, unknown> = {}) {
   const r = await recordOffline(w, unitIndex, body);
@@ -52,5 +49,4 @@ export async function recordAndApprove(w: RunSociety, unitIndex: number, body: R
 export const proofFile = (societyId: number, ownerUserId: number, purpose = 'PAYMENT_PROOF'): number =>
   putPlaceholderFile({ societyId, ownerUserId, name: 'proof.png', purpose, content: Buffer.from('png') });
 
-export const pendingRequests = () =>
-  [...placeholderPaymentApprovals.values()].filter(r => r.status === 'PENDING');
+export const pendingRequests = () => ApprovalRequest.findAll({ where: { status: 'PENDING' } });

@@ -10,7 +10,7 @@ import {
   reconcileSociety,
   runReconcileAll,
 } from '../../../src/modules/billing/billing.reconcile.service';
-import { approve } from '../../../src/modules/billing/billing.runs.approvals-hook';
+import { approve } from '../../helpers/approvals-decide';
 import { systemCtx } from '../../../src/types/context';
 import { createAndCompute, idemH, standardRules } from '../../helpers/billing-runs';
 import { duesWorld, makeInvoice, resetDues, type DuesWorld } from '../../helpers/billing-dues';

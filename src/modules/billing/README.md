@@ -324,3 +324,11 @@ matrix reads them from the route table. Run: `npx vitest run tests/modules/billi
   and retries 5 times in the job; `FAILED` notifies `finance.billing.edit` holders, and asking for the URL of a failed PDF re-queues it after 5 minutes. The issue job of 11.3 now enqueues the render job and calls
   `payments.queueAdvanceApply` after each committed batch of 100 items.
 - **Audit and realtime.** As section 9.3 and 9.4; audit keys avoid `code`, `token` and `secret`. Journal vouchers `INVOICE`, `DEBIT_NOTE`, `CREDIT_NOTE`, `WRITE_OFF`, all balanced (module 13 port).
+
+## Module 14 (14.3)
+
+The billing approval types now run on the real engine (`billingPorts().approvals` defaults to `engineApprovals`). The decide
+helpers of the `*.approvals-hook.ts` files, `placeholderApprovalRequests` / `placeholderApprovalTypes` and the development page
+`/dev/approvals` are gone (the notes above about them are history). On auto-approval the engine runs `onApproved` inside
+`request`; publish, rule versions, late fee policies, credit notes, write-offs and invoice cancel no longer apply the action
+themselves. Decisions are taken in the inbox (`POST /approvals/:id/approve`).

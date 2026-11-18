@@ -578,8 +578,8 @@ export async function createCreditNote(
       },
       t,
     );
-    note.approvalRequestId = req.id;
-    await note.save({ transaction: t });
+    await note.reload({ transaction: t }); // an auto-approval (BR-14-4) issued the note inside `request`
+    await note.update({ approvalRequestId: req.id }, { transaction: t });
     await audit(
       ctx,
       {
@@ -591,7 +591,6 @@ export async function createCreditNote(
       },
       t,
     );
-    if (req.status === 'APPROVED') await issueCreditNote(ctx, societyId, invoice, note, t);
     return Number(note.id);
   });
   return loadNoteDto(societyId, noteId);

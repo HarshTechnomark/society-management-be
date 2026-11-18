@@ -27,7 +27,7 @@ const book = (w: Awaited<ReturnType<typeof expWorld>>, q: Record<string, string 
 describe('GET /accounts/cash-book (8.4)', () => {
   it('opening, rows with running balance, closing, over bank and cash', async () => {
     const w = await expWorld({ bankPaise: 5_000_000, cashPaise: 1_000_000 });
-    autoApprove();
+    await autoApprove();
     await w.c('post', '/expenses', expBody(w), { headers: idemH() }); // cash out 180,000 on 30 Oct
     await w.c('post', '/expenses', bankBody(w, { grossAmountPaise: 100_000, expenseDate: '2026-10-31' }), {
       headers: idemH(),
@@ -53,7 +53,7 @@ describe('GET /accounts/cash-book (8.4)', () => {
 
   it('filters by account (CASH, BANK:<id>) and by direction; running balance still counts every line', async () => {
     const w = await expWorld({ bankPaise: 5_000_000, cashPaise: 1_000_000 });
-    autoApprove();
+    await autoApprove();
     await w.c('post', '/expenses', expBody(w), { headers: idemH() });
     const cash = await book(w, { account: 'CASH', from: '2026-10-02' });
     expect(cash.body.data).toMatchObject({ openingPaise: 1_000_000, closingPaise: 820_000 });
