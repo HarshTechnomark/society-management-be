@@ -1,5 +1,6 @@
 import { ApprovalRequest, type ApprovalRule } from '../../models';
 import { Op, fn, col } from 'sequelize';
+import { freshStepName } from './approvals.catalogue';
 import { OPEN_STATUSES } from './approvals.constants';
 
 const n = (v: unknown): number => Number(v);
@@ -19,7 +20,7 @@ export function ruleView(r: ApprovalRule, openRequests = 0) {
     categoryKeys: r.categoryKeys,
     requesterRoleKeys: r.requesterRoleKeys,
     action: r.action,
-    steps: r.steps,
+    steps: r.steps.map(st => ({ ...st, name: freshStepName(st) })),
     fallbackRoleKeys: r.fallbackRoleKeys,
     slaHours: n(r.slaHours),
     reminderEveryHours: n(r.reminderEveryHours),

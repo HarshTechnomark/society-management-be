@@ -4,6 +4,7 @@ import type { Ctx } from '../../types/context';
 import { roleLabel, typeMeta } from './approvals.catalogue';
 import { PERM } from './approvals.constants';
 import { seeRequest } from './approvals.history.service';
+import { humanFacts } from './approvals.facts';
 import { actionLine, actionNameIds, namesOf } from './approvals.inbox.rows';
 import { REASON_TEXT, roundOf } from './approvals.inbox.eval';
 import { slotsOf } from './approvals.match';
@@ -26,7 +27,7 @@ async function describeRequest(ctx: Ctx, req: Parameters<typeof toView>[0]): Pro
   try {
     if (!h) throw new Error('no handlers');
     const d = await h.describe(toView(req), ctx);
-    return { facts: d.facts ?? [], link: d.link ?? null };
+    return { facts: humanFacts(d.facts ?? []), link: d.link ?? null };
   } catch (err) {
     logger.error({ err, requestId: n(req.id) }, 'approvals describe failed; showing the payload');
     const facts = Object.entries(req.payload ?? {})
@@ -47,7 +48,10 @@ export async function requestDetail(ctx: Ctx, id: number) {
   for (const s of snap?.steps ?? []) s.roleKeys.forEach(k => roleKeys.add(k));
   const roles = roleKeys.size ? await Role.findAll({ where: { societyId, key: [...roleKeys] } }) : [];
   const roleName = new Map(roles.map(r => [r.key, r.name]));
-  const userSlotNames = await namesOf((snap?.steps ?? []).flatMap(s => s.userIds));
+  const userSlotNames = await namesOf([
+    ...(snap?.steps ?? []).flatMap(s => s.userIds),
+    ...(req.stepOverrides ?? []).map(o => o.userId),
+  ]);
   const approvals = rows.filter(a => a.action === 'APPROVED' && n(a.round) === n(req.round));
   const open = req.status === 'PENDING';
   const stepEval = open ? evaluateStep(req, await viewer.approvers(req.type), roundOf(req, rows)) : null;
@@ -62,7 +66,9 @@ export async function requestDetail(ctx: Ctx, id: number) {
           ? open || req.status === 'CHANGES_REQUESTED'
             ? 'CURRENT'
             : 'STOPPED'
-          : 'UPCOMING';
+          : req.status === 'REJECTED' || req.status === 'CANCELLED' || req.status === 'EXPIRED'
+            ? 'NOT_NEEDED'
+            : 'UPCOMING';
     return {
       stepNo: step.stepNo,
       name: step.name,

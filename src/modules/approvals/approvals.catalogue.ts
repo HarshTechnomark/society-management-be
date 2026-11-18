@@ -120,6 +120,29 @@ export function stepName(mode: StepMode, roleKeys: string[], requiredCount: numb
   return list(roleKeys, ' or ');
 }
 
+const AUTO_WORDS = [...NUMBER_WORD.filter(Boolean), 'All', 'of', 'or', ...Object.values(ROLE_LABEL)].sort(
+  (x, y) => y.length - x.length,
+);
+/** True when a step name is one `stepName` could have produced for the well-known roles (it follows the roles, not a person's wording). */
+const looksAutomatic = (name: string): boolean => {
+  let rest = name;
+  for (const w of AUTO_WORDS) rest = rest.split(w).join(' ');
+  return /^[\s,]*$/.test(rest);
+};
+/** The step name for the CURRENT roles: an automatic name is rebuilt (a rule whose approvers changed), a typed name is kept. */
+export function freshStepName(step: {
+  name: string;
+  mode: StepMode;
+  roleKeys: string[];
+  userIds: number[];
+  requiredCount: number | null;
+}): string {
+  if (!step.roleKeys.length || step.userIds.length) return step.name;
+  return !step.name || looksAutomatic(step.name)
+    ? stepName(step.mode, step.roleKeys, step.requiredCount)
+    : step.name;
+}
+
 // ------------------------------------------------------------------ 7.5 default rules
 export interface DefaultRule {
   priority: number;

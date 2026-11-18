@@ -187,7 +187,9 @@ export class Viewer {
         acted ||
         my.canAct ||
         member ||
-        Boolean(meta && (this.has(meta.viewPermission) || this.has(meta.approvePermission)));
+        // administrators who manage the rules can find every request (a stuck one included): `GET /approvals?view=ALL_PENDING`
+        this.has('settings.approval_rules.view') ||
+        Boolean(meta && this.has(meta.approvePermission));
       out.set(n(req.id), { visible, my, step: stepInfo(req, rows) });
     }
     return out;

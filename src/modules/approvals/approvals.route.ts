@@ -2,7 +2,7 @@ import type { Transaction } from 'sequelize';
 import { addHours } from '../../lib/clock';
 import type { Ctx } from '../../types/context';
 import { settings } from '../society-setup/society-setup.public';
-import type { TypeMeta } from './approvals.catalogue';
+import { freshStepName, type TypeMeta } from './approvals.catalogue';
 import {
   DEFAULT_BULK_BELOW_PAISE,
   DEFAULT_STEP_UP_ABOVE_PAISE,
@@ -114,7 +114,7 @@ export function snapshotOf(r: {
     maxAmountPaise: r.maxAmountPaise === null ? null : Number(r.maxAmountPaise),
     categoryKeys: r.categoryKeys,
     requesterRoleKeys: r.requesterRoleKeys,
-    steps: r.steps,
+    steps: r.steps.map(st => ({ ...st, name: freshStepName(st) })),
     fallbackRoleKeys: r.fallbackRoleKeys,
     slaHours: Number(r.slaHours),
     reminderEveryHours: Number(r.reminderEveryHours),
