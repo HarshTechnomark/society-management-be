@@ -596,6 +596,7 @@ describe('approval through module 14 (BR-11-35, BR-11-36)', () => {
     const { facts } = await getHandlers('BILLING_RUN_PUBLISH')!.describe({ entityId: run.id } as never);
     expect(facts.map(f => f.label)).toEqual([
       'Period',
+      'Run',
       'Flats',
       'Total billed',
       'Exceptions',
