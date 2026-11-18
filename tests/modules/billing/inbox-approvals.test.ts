@@ -87,10 +87,14 @@ describe('billing approvals in the module 14 inbox (maker-checker and approver)'
     const id = r.body.data.approvalRequestId as number;
     const self = await decideOver(w.c as never, id);
     expect([self.status, self.body.code]).toEqual([409, 'MAKER_CHECKER_VIOLATION']);
-    const ok = await decideOver(w.treasurer.c as never, id);
+    // default rule (14 BR table): 2 of [chairman, treasurer, secretary]; the requester cannot count, so treasurer + secretary
+    const first = await decideOver(w.treasurer.c as never, id);
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect((await LateFeePolicy.findByPk(r.body.data.id))!.status).toBe('PENDING_APPROVAL');
+    const ok = await decideOver(w.secretary.c as never, id);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     const row = (await LateFeePolicy.findByPk(r.body.data.id))!;
     expect(row.status).toBe('ACTIVE');
-    expect(row.approvedBy).toBe(w.treasurer.user.id);
+    expect([w.treasurer.user.id, w.secretary.user.id]).toContain(row.approvedBy);
   });
 });
