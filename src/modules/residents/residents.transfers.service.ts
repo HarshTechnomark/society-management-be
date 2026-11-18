@@ -1,4 +1,5 @@
 import { Op, type Transaction } from 'sequelize';
+import { formatRupees } from '../../lib/money';
 import {
   OwnershipTransfer,
   Resident,
@@ -693,12 +694,18 @@ async function approvalSummary(x: OwnershipTransfer, label: string) {
   const buyers = await buyerDtos(x.societyId, x.buyersJson);
   return [
     { label: 'Flat', value: label },
-    { label: 'Type', value: x.transferType },
+    {
+      label: 'Type',
+      value: x.transferType.charAt(0) + x.transferType.slice(1).toLowerCase().replace(/_/g, ' '),
+    },
     { label: 'Effective date', value: x.effectiveDate },
     { label: 'Buyers', value: buyers.map(b => `${b.name} ${b.sharePercent}%`).join(', ') },
-    { label: 'Fees', value: `${num(x.totalFeesPaise) / 100} rupees` },
-    { label: 'Dues policy', value: x.duesPolicy },
-    { label: 'Balance at submit', value: `${num(x.balanceAtSubmitPaise) / 100} rupees` },
+    { label: 'Fees', value: formatRupees(num(x.totalFeesPaise)) },
+    {
+      label: 'Dues policy',
+      value: x.duesPolicy === 'MUST_CLEAR' ? 'Dues must be cleared' : 'Dues stay with the flat',
+    },
+    { label: 'Balance at submit', value: formatRupees(num(x.balanceAtSubmitPaise)) },
   ];
 }
 

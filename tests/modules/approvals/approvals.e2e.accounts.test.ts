@@ -1,6 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { ApprovalRequest, Expense, JournalEntry, closeDb } from '../../../src/models';
 import { resetLogins } from '../../helpers/access';
+import { memberOf } from '../../helpers/society-setup';
+import { freshStepName } from '../../../src/modules/approvals/approvals.catalogue';
+import { humanFacts } from '../../../src/modules/approvals/approvals.facts';
 import { balanceOf } from '../../helpers/accounts';
 import { decideOver } from '../../helpers/approvals-decide';
 import { bill, expBody, expWorld, idemH, resetExpenses } from '../../helpers/accounts-expenses';
@@ -77,5 +80,62 @@ describe('expenses through the default EXPENSE rules (HTTP)', () => {
       { headers: idemH() },
     );
     expect(sub.body.data.status).toBe('PENDING_APPROVAL');
+  });
+});
+
+describe('request detail', () => {
+  it('is 404 for a member who is neither requester, approver nor rule manager; rejected steps say NOT_NEEDED', async () => {
+    const w = await expWorld({ defaultRules: true });
+    const p = (
+      await w.c(
+        'post',
+        '/expenses',
+        expBody(w, { grossAmountPaise: 3_000_000, fileIds: [bill(w, w.user.id)] }),
+        {
+          headers: idemH(),
+        },
+      )
+    ).body.data;
+    const requestId = Number((await fresh(p.id)).approvalRequestId);
+    const fm = await memberOf(w.society, 'facility_manager');
+    expect((await fm.c('get', `/approvals/${requestId}`)).status).toBe(404);
+    const own = await w.treasurer.c('get', `/approvals/${requestId}`);
+    expect(own.status).toBe(200);
+    expect(own.body.data.steps[0].name).toBe('Two of Chairman, Treasurer, Secretary');
+    await decideOver(w.treasurer.c as never, requestId, 'reject', 'Not needed now');
+    const after = await w.treasurer.c('get', `/approvals/${requestId}`);
+    expect(after.body.data.steps.every((x: any) => x.state !== 'UPCOMING')).toBe(true);
+    const all = await w.treasurer.c('get', '/approvals?view=ALL_PENDING');
+    expect(all.status).toBe(200);
+  });
+});
+
+describe('summary wording', () => {
+  it('humanFacts: rupees in Indian format, dates as dd Mon yyyy, readable codes', () => {
+    const out = humanFacts([
+      { label: 'Fees', value: '25600 rupees', kind: 'text' },
+      { label: 'Deposit', value: '27300000 paise', kind: 'text' },
+      { label: 'Dues', value: 'Rs 0.00', kind: 'text' },
+      { label: 'Total', value: '1234500', kind: 'money' },
+      { label: 'Policy', value: 'MUST_CLEAR', kind: 'text' },
+      { label: 'Dates', value: '2026-11-05 to 2026-11-09', kind: 'text' },
+    ] as never).map(f => f.value);
+    expect(out).toEqual([
+      '₹25,600',
+      '₹2,73,000',
+      '₹0',
+      '₹12,345',
+      'Must clear',
+      '05 Nov 2026 to 09 Nov 2026',
+    ]);
+  });
+  it('freshStepName follows the current roles but keeps a typed name', () => {
+    const base = { mode: 'ANY_OF' as const, userIds: [], requiredCount: null };
+    expect(
+      freshStepName({ ...base, name: 'Treasurer or Chairman', roleKeys: ['treasurer', 'secretary'] }),
+    ).toBe('Treasurer or Secretary');
+    expect(freshStepName({ ...base, name: 'Final sign off', roleKeys: ['treasurer'] })).toBe(
+      'Final sign off',
+    );
   });
 });

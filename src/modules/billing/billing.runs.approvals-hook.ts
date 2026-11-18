@@ -19,7 +19,8 @@ export function registerRunApprovalType(): void {
           ? `${(((Number(run.totalPaise) - Number(run.previousRunTotalPaise)) * 100) / Number(run.previousRunTotalPaise)).toFixed(2)}%`
           : 'No earlier run';
       return [
-        { label: 'Period', value: run.runLabel, kind: 'text' },
+        { label: 'Period', value: `${run.periodStart} to ${run.periodEnd}`, kind: 'text' },
+        { label: 'Run', value: run.runLabel, kind: 'text' },
         { label: 'Flats', value: String(run.readyCount), kind: 'text' },
         { label: 'Total billed', value: formatRupees(Number(run.totalPaise)), kind: 'money' },
         { label: 'Exceptions', value: String(run.exceptionCount), kind: 'text' },

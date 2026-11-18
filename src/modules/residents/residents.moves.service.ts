@@ -1,3 +1,4 @@
+import { formatRupees } from '../../lib/money';
 import { randomInt } from 'node:crypto';
 import { Op, QueryTypes, type Transaction, type WhereOptions } from 'sequelize';
 import {
@@ -725,7 +726,7 @@ export const moveHandlers = {
             { label: 'Date', value: `${m.moveDate} ${HHMM(m.slotStart)}-${HHMM(m.slotEnd)}` },
             {
               label: 'Dues',
-              value: `Rs ${rupees(m.duesBalancePaise)}${m.duesOverrideBy ? ' (overridden)' : ''}`,
+              value: `${formatRupees(Number(m.duesBalancePaise))}${m.duesOverrideBy ? ' (overridden)' : ''}`,
             },
           ]
         : [],
