@@ -50,7 +50,10 @@ import { accountsBankRoutes } from './modules/accounts/accounts.bank.routes';
 import { approvalsHistoryRoutes } from './modules/approvals/approvals.history.routes';
 import { approvalsInboxRoutes } from './modules/approvals/approvals.inbox.routes';
 import { approvalsResidentRoutes } from './modules/approvals/approvals.resident.routes';
+import { helpdeskSetupRoutes } from './modules/helpdesk/helpdesk.setup.routes';
 import { approvalsRulesRoutes } from './modules/approvals/approvals.rules.routes';
+import { helpdeskAdminRoutes } from './modules/helpdesk/helpdesk.admin.routes';
+import { helpdeskMeRoutes } from './modules/helpdesk/helpdesk.me.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -165,6 +168,11 @@ export function createApp(): Express {
   api.use(approvalsHistoryRoutes);
   api.use(approvalsInboxRoutes);
   api.use(approvalsResidentRoutes);
+  // module 15 (15.1): ticket categories, SLA policies, escalation rules and helpdesk settings
+  api.use(helpdeskSetupRoutes);
+  api.use(helpdeskAdminRoutes); // module 15.2: admin tickets, on-behalf create, admin building issues
+  // module 15 (15.3): resident tickets and building issues, guard and staff building-issue reports
+  api.use(helpdeskMeRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

@@ -34,6 +34,7 @@ import { registerResidents } from '../../../src/modules/residents/residents.publ
 import { registerCommittee } from '../../../src/modules/committee/committee.public';
 import { registerBilling } from '../../../src/modules/billing/billing.public';
 import { registerAccounts } from '../../../src/modules/accounts/accounts.public';
+import { registerHelpdesk } from '../../../src/modules/helpdesk/helpdesk.public';
 import { registerApprovals } from '../../../src/modules/approvals/approvals.public';
 import { registerPayments } from '../../../src/modules/payments/payments.public';
 import { readZip } from '../../../src/modules/societies/societies.zip';
@@ -264,6 +265,7 @@ describe('society data export (8.24, 6.6, BR-05-22 to BR-05-24)', () => {
     registerPayments(); // module 12 registers its nine tables at start-up
     registerAccounts(); // module 13 registers its twelve tables at start-up
     registerApprovals(); // module 14 registers its four tables at start-up
+    registerHelpdesk(); // module 15 registers its seven tables at start-up
     const covered = new Set(exportProviders().flatMap(p => p.tables.map(t => t.name)));
     // audit_logs: module 07 audit export; idempotency_keys: request plumbing; society_notes: platform internal (BR-05-34);
     // member_grants, role_permissions: permission plumbing; entitlement_overrides, feature_flag_overrides: platform config;

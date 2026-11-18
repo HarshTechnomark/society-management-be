@@ -287,10 +287,16 @@ r.delete(
 );
 
 // ---- locations (8.19 to 8.21)
+// module 15 (15.3): residents, guards and staff read the tree to pick where a building issue is (QR tokens stay hidden from them, see the controller)
 r.get(
   '/locations',
   society(),
-  can('residents.units.view'),
+  can(
+    'residents.units.view',
+    'resident.helpdesk.create',
+    'gate.building_issues.create',
+    'work.building_issues.create',
+  ),
   feature(F.commonAreas, read),
   validate({ query: s.locationQuery }),
   c.listLocations,
