@@ -34,6 +34,7 @@ import {
   recipientsOf,
   sendEmergency,
   societyIdOf,
+  peopleText,
 } from './communication.emergency.shared';
 import { emitToRoom } from '../../lib/realtime';
 import { members, usersWithPermission } from '../access-control/access-control.public';
@@ -253,6 +254,11 @@ export async function sendUpdate(
 
 export async function realert(ctx: Ctx, id: number, body: { version: number }): Promise<BroadcastDetail> {
   const { b } = await act(ctx, id, body.version, 'realert', (row, at) => {
+    if (!row.collectResponses)
+      throw new UnprocessableError(
+        ERR.emergencyRealertNotAllowed,
+        'Re-alert needs responses: this alert does not collect them',
+      );
     assertCanRealert(row.lastRealertAt, at);
     row.realertCount += 1;
     row.lastRealertAt = at;
@@ -271,6 +277,7 @@ export async function realert(ctx: Ctx, id: number, body: { version: number }): 
   ];
   await sendEmergency(NOTIFY.emergencyRealert, b, [...userIds, ...mobiles.map(mobile => ({ mobile }))], {
     channels: ['PUSH', 'SMS'],
+    skipInbox: true,
     dedupeKey: `emg:${b.id}:realert:${b.realertCount}`,
   });
   emitEmergency(b, RT.emergencyUpdated, userIds, RT.emergencyAlert);
@@ -477,6 +484,7 @@ export async function recordResponse(
           broadcastId,
           unitLabel,
           people: row.peopleCount,
+          peopleText: peopleText(row.peopleCount),
           prefix: b.isDrill ? 'DRILL: ' : '',
           link: emergencyLink(broadcastId),
         },

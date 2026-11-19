@@ -274,7 +274,7 @@ async function planTarget(
   }
 
   // inbox item (IN_APP is the delivery; never switched off)
-  if (target.userId && wantsInApp(b.tpl)) {
+  if (target.userId && wantsInApp(b.tpl) && !b.opts.skipInbox) {
     const msg = renderTemplate(tpl, b.data, { tz: f.tz });
     const inApp = msg.inApp ?? (msg.push ? { title: msg.push.title, body: msg.push.body } : null);
     if (inApp) {

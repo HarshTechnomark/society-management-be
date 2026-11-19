@@ -38,6 +38,8 @@ export interface NotifyOptions {
   sourceId?: number;
   pushSubscriptionId?: number;
   urgent?: boolean;
+  /** No inbox item (push and SMS only, e.g. an emergency re-alert, BR-16-42). */
+  skipInbox?: boolean;
 }
 export interface NotifyResult {
   batchId: string;
@@ -51,6 +53,8 @@ export interface VariableSpec {
   type: VariableType;
   required?: boolean;
   maxLength?: number;
+  /** SMS cut for this value instead of the 30-character DLT default (emergency texts carry their message, BR-16-29 note). */
+  smsMaxLength?: number;
 }
 export type VariablesSchema = Record<string, VariableSpec>;
 

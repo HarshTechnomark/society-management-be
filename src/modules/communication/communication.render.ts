@@ -111,7 +111,9 @@ export function formatValue(
   else if (spec?.type === 'date') s = formatDate(v as Date | string, o.tz);
   else if (spec?.type === 'datetime') s = formatDateTime(v as Date | string, o.tz);
   else s = String(v);
-  if (o.sms && s.length > LIMITS.smsVariableMax) s = s.slice(0, LIMITS.smsVariableMax - 1) + '…';
+  // links are never cut (a cut link is dead); a variable may state its own SMS limit
+  const cap = spec?.type === 'url' ? Infinity : (spec?.smsMaxLength ?? LIMITS.smsVariableMax);
+  if (o.sms && s.length > cap) s = s.slice(0, cap - 1) + '…';
   return s;
 }
 

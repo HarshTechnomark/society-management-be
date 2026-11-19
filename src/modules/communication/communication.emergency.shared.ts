@@ -21,6 +21,7 @@ import {
 } from './communication.constants';
 import { resolveAudience } from './communication.audience';
 import { notify } from './communication.core';
+import { smsWithinLimit } from './communication.render';
 import type { NoticeAudience, Recipient } from './communication.types';
 
 /** Helpers shared by the emergency services (16.3): audience units, recipients, notify and realtime fan-out (8.25 to 8.30, BR-16-39). */
@@ -118,7 +119,18 @@ export const startedByNames = async (ids: (number | null | undefined)[]): Promis
   return new Map(rows.map(u => [u.id!, u.name ?? 'User']));
 };
 
-export const emergencyLink = (id: number): string => appUrl('RESIDENT', `/emergency/${id}`);
+export const emergencyLink = (id: number): string => appUrl('RESIDENT', `/resident/emergency-alert?id=${id}`);
+
+export const peopleText = (n: number): string => (n === 1 ? '1 person' : `${n} people`);
+
+/** The message as it fits the SMS: the whole 2-segment budget minus the fixed text (prefix, head, title, link). */
+export function smsMessageFor(b: EmergencyBroadcast, message: string): string {
+  const fixed = `${b.isDrill ? 'DRILL: ' : ''}FALSE ALARM: ${b.title}.  ${emergencyLink(b.id)}`;
+  let m = message.replace(/\s+/g, ' ').trim();
+  while (m && !smsWithinLimit(`${fixed}${m}`))
+    m = m.length > 1 ? `${m.slice(0, Math.max(0, m.length - 10)).trimEnd()}…` : '';
+  return m.slice(0, 300);
+}
 
 const ALERT_CHANNELS: Channel[] = ['IN_APP', 'PUSH', 'SMS', 'WHATSAPP'];
 const DRILL_CHANNELS: Channel[] = ['IN_APP', 'PUSH'];
@@ -131,7 +143,7 @@ export async function sendEmergency(
   key: string,
   b: EmergencyBroadcast,
   recipients: Recipient[],
-  o: { channels?: Channel[]; dedupeKey: string; message?: string },
+  o: { channels?: Channel[]; dedupeKey: string; message?: string; skipInbox?: boolean },
 ): Promise<void> {
   if (!recipients.length) return;
   const channels = b.isDrill
@@ -145,6 +157,7 @@ export async function sendEmergency(
         broadcastId: b.id,
         title: b.title,
         message: o.message ?? b.message,
+        smsMessage: smsMessageFor(b, o.message ?? b.message),
         prefix: b.isDrill ? 'DRILL: ' : '',
         link: emergencyLink(b.id),
       },
@@ -152,6 +165,7 @@ export async function sendEmergency(
         societyId: b.societyId,
         channels,
         dedupeKey: o.dedupeKey,
+        skipInbox: o.skipInbox,
         sourceType: 'emergency_broadcast',
         sourceId: b.id,
       },

@@ -486,6 +486,7 @@ export const ERR = {
   emergencyAudienceInvalid: 'EMERGENCY_AUDIENCE_INVALID',
   emergencyResponsesDisabled: 'EMERGENCY_RESPONSES_DISABLED',
   emergencyUnitRequired: 'EMERGENCY_UNIT_REQUIRED',
+  emergencyRealertNotAllowed: 'EMERGENCY_REALERT_NOT_ALLOWED',
   emergencyRealertTooSoon: 'EMERGENCY_REALERT_TOO_SOON',
   emergencyCancelWindowPassed: 'EMERGENCY_CANCEL_WINDOW_PASSED',
   surveyQuestionsRequired: 'SURVEY_QUESTIONS_REQUIRED',
