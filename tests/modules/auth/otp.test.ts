@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuditLog, AuthOtp, AuthToken, Session, User, closeDb } from '../../../src/models';
 import { advance, now, setNow } from '../../../src/lib/clock';
 import { listInbox } from '../../../src/lib/inbox';
@@ -364,6 +364,9 @@ describe('public sign-up OTP (BR-02-53)', () => {
     const mine = await inboxFor('9123456789');
     expect(mine).toHaveLength(1);
     expect(mine[0].body).toMatch(/is your SocietyApp login code/);
+    // the notice is sent without waiting (BR-02-12), so with the real engine it lands shortly after the response
+    await vi.waitFor(async () => expect(await inboxFor(u.mobile)).toHaveLength(1), { timeout: 20000 });
+    await new Promise(r => setTimeout(r, 500)); // and the second request must not add a second one
     const theirs = await inboxFor(u.mobile);
     expect(theirs).toHaveLength(1); // twice requested, notified once in 24 h
     expect(theirs[0].body).toBe('You already have a SocietyApp account. Sign in instead.');

@@ -7,6 +7,8 @@ import '../../../src/modules/helpdesk/helpdesk.notify.templates';
 import { adapters } from '../../../src/adapters';
 import * as notifyLib from '../../../src/lib/notify';
 
+// Captures the adapter sends of one notify(). Valid under both engines: the stand-in sends at once; the real module 16 engine (M16_REAL_NOTIFY=1)
+// delivers inline in tests, sends one recipient's mobile and e-mail, and skips (SKIPPED NO_TEMPLATE) a part the template does not render.
 const rendered = async (key: string, data: Record<string, unknown>) => {
   const captured: { sms?: string; email?: { subject: string; text: string } }[] = [];
   const a = adapters();

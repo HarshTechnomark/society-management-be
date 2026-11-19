@@ -48,12 +48,22 @@ describe('route registry (T03-43, section 13)', () => {
     // module 07 adds platform support tickets, settings, organizations, dashboard, providers, incidents, announcements, queues and audit logs
     const m07 =
       /^\/platform\/(tickets(\/:id(\/messages)?)?|settings|organizations(\/:id(\/status)?)?|dashboard(\/activity)?|health\/summary|providers(\/check-all|\/:id(\/(credentials|check|test-send|status))?)?|incidents(\/:id(\/(updates|resolve))?)?|announcements(\/audience-preview|\/:id(\/(publish|cancel))?)?|queues(\/retry-failed|\/:name(\/(pause|resume|jobs(\/:jobId(\/(retry|discard))?)?))?)?|jobs\/failed|audit-logs(\/export|\/archives(\/download-url)?|\/:id)?)$/;
+    // module 16 adds the platform bell (16.2); 16.4 adds the template and delivery routes
+    const m16 =
+      /^\/platform\/(notifications(\/unread-count|\/read-all|\/:id\/read)?|notification-templates(\/:id(\/preview)?)?|notification-deliveries)$/;
     expect(
-      routes.filter(r => r.kind === 'platform' && !m04.test(r.path) && !m06.test(r.path) && !m07.test(r.path))
-        .length,
+      routes.filter(
+        r =>
+          r.kind === 'platform' &&
+          !m04.test(r.path) &&
+          !m06.test(r.path) &&
+          !m07.test(r.path) &&
+          !m16.test(r.path),
+      ).length,
     ).toBe(15);
     expect(routes.filter(r => r.kind === 'platform' && m07.test(r.path)).length).toBe(53); // 12 of part 1 and 41 of part 2
     expect(routes.filter(r => r.kind === 'platform' && m06.test(r.path)).length).toBe(30);
+    expect(routes.filter(r => r.kind === 'platform' && m16.test(r.path)).length).toBe(9); // 4 bell routes and 5 template / delivery routes
   });
 
   it('detects an unmarked route and a society route without a permission', () => {
@@ -151,7 +161,10 @@ describe('permission matrix (T03-35)', () => {
     expect(failures).toEqual([]);
     expect(society_routes.length).toBeGreaterThan(20);
     // routes open to every active member (module 04 `GET /subscription/entitlements`) answer this member
-    for (const r of routes.filter(x => x.kind === 'society' && x.memberOnly))
+    // (module 16: `POST /notifications/:id/read` answers 404 for an id that is not the caller's, and the emergency answer
+    // `POST /emergency-broadcasts/:id/responses` needs a body and an alert: covered in tests/modules/communication/communication.emergency.test.ts)
+    const memberOnlySkip = new Set(['/notifications/:id/read', '/emergency-broadcasts/:id/responses']);
+    for (const r of routes.filter(x => x.kind === 'society' && x.memberOnly && !memberOnlySkip.has(x.path)))
       expect((await call(r.method.toLowerCase() as 'get', concrete(r.path))).status, r.path).toBe(200);
   });
 
@@ -174,7 +187,8 @@ describe('permission matrix (T03-35)', () => {
     const u = await makeUser({ email: 'dash@societyapp.in', mfa: true, platformRoleId: role.id! });
     const call = as(await platformLogin({ ...u, email: 'dash@societyapp.in' }), 'PLATFORM');
     const failures: string[] = [];
-    const platform = routes.filter(r => r.kind === 'platform');
+    // module 16: the platform bell shows the caller's own items and needs a platform user, not a permission key
+    const platform = routes.filter(r => r.kind === 'platform' && !r.memberOnly);
     for (const r of platform) {
       const res = await call(
         r.method.toLowerCase() as 'get',

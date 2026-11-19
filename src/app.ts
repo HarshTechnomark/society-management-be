@@ -1,3 +1,4 @@
+import { communicationPlatformRoutes } from './modules/communication/communication.platform.routes';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -54,6 +55,13 @@ import { helpdeskSetupRoutes } from './modules/helpdesk/helpdesk.setup.routes';
 import { approvalsRulesRoutes } from './modules/approvals/approvals.rules.routes';
 import { helpdeskAdminRoutes } from './modules/helpdesk/helpdesk.admin.routes';
 import { helpdeskMeRoutes } from './modules/helpdesk/helpdesk.me.routes';
+import { noticeRoutes } from './modules/communication/communication.notices.routes';
+import { emergencyRoutes } from './modules/communication/communication.emergency.routes';
+import { surveyRoutes } from './modules/communication/communication.surveys.routes';
+import { communicationMeRoutes } from './modules/communication/communication.me.routes';
+import { communicationInboxRoutes } from './modules/communication/communication.inbox.routes';
+import { communicationPrefsRoutes } from './modules/communication/communication.prefs.routes';
+import { communicationPushRoutes } from './modules/communication/communication.push.routes';
 import { requestMetrics } from './modules/platform-ops/platform-ops.metrics';
 import { platformIpAllowlist } from './modules/platform-ops/platform-ops.ip-allowlist';
 import './modules/auth/auth.templates';
@@ -173,6 +181,17 @@ export function createApp(): Express {
   api.use(helpdeskAdminRoutes); // module 15.2: admin tickets, on-behalf create, admin building issues
   // module 15 (15.3): resident tickets and building issues, guard and staff building-issue reports
   api.use(helpdeskMeRoutes);
+  // module 16 (16.1): notices admin
+  api.use(noticeRoutes);
+  api.use(emergencyRoutes); // module 16.3: emergency broadcasts, gate roll-call
+  api.use(surveyRoutes); // module 16.3: surveys and resident survey routes
+  // module 16 (16.2): resident notices, notification bells, preferences, push subscriptions
+  api.use(communicationMeRoutes);
+  api.use(communicationInboxRoutes);
+  api.use(communicationPrefsRoutes);
+  api.use(communicationPushRoutes);
+  // module 16 (16.4): platform template registry, platform delivery log, messaging webhook
+  api.use(communicationPlatformRoutes);
   // each module mounts its routes here: api.use('/societies', societyRoutes), ...
   app.use('/api/v1', api);
 

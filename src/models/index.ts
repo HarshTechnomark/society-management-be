@@ -104,6 +104,18 @@ import { Ticket } from './ticket.model';
 import { TicketComment } from './ticket-comment.model';
 import { TicketUpvote } from './ticket-upvote.model';
 import { TicketAssignment } from './ticket-assignment.model';
+import { Notice } from './notice.model';
+import { NoticeReceipt } from './notice-receipt.model';
+import { NotificationTemplate } from './notification-template.model';
+import { Notification } from './notification.model';
+import { InboxItem } from './inbox-item.model';
+import { NotificationPreference } from './notification-preference.model';
+import { PushSubscription } from './push-subscription.model';
+import { EmergencyBroadcast } from './emergency-broadcast.model';
+import { EmergencyResponse } from './emergency-response.model';
+import { Survey } from './survey.model';
+import { SurveyQuestion } from './survey-question.model';
+import { SurveyResponse } from './survey-response.model';
 
 /** The one Sequelize connection. Each module adds its model file here and calls its `associate`. */
 const u = new URL(env().DATABASE_URL);
@@ -224,6 +236,18 @@ const models = {
   TicketComment,
   TicketUpvote,
   TicketAssignment,
+  Notice,
+  NoticeReceipt,
+  NotificationTemplate,
+  Notification,
+  InboxItem,
+  NotificationPreference,
+  PushSubscription,
+  EmergencyBroadcast,
+  EmergencyResponse,
+  Survey,
+  SurveyQuestion,
+  SurveyResponse,
   ApprovalRule,
   ApprovalRequest,
   ApprovalAction,
@@ -507,6 +531,27 @@ TicketUpvote.belongsTo(Unit, { foreignKey: 'unitId' });
 TicketAssignment.belongsTo(Ticket, { foreignKey: 'ticketId', constraints: false });
 TicketAssignment.belongsTo(User, { as: 'assignee', foreignKey: 'assigneeUserId' });
 
+// Module 16 associations (section 7)
+Notice.hasMany(NoticeReceipt, { foreignKey: 'noticeId' });
+Notice.belongsTo(ApprovalRequest, { foreignKey: 'approvalRequestId', constraints: false });
+NoticeReceipt.belongsTo(Notice, { foreignKey: 'noticeId' });
+NoticeReceipt.belongsTo(User, { foreignKey: 'userId' });
+NoticeReceipt.belongsTo(Unit, { foreignKey: 'unitId' });
+Notification.belongsTo(User, { foreignKey: 'userId' });
+Notification.belongsTo(Notification, { as: 'fallbackFrom', foreignKey: 'fallbackFromId' });
+InboxItem.belongsTo(User, { foreignKey: 'userId' });
+InboxItem.belongsTo(Society, { foreignKey: 'societyId' });
+NotificationPreference.belongsTo(User, { foreignKey: 'userId' });
+PushSubscription.belongsTo(User, { foreignKey: 'userId' });
+EmergencyBroadcast.hasMany(EmergencyResponse, { foreignKey: 'broadcastId' });
+EmergencyResponse.belongsTo(EmergencyBroadcast, { foreignKey: 'broadcastId' });
+EmergencyResponse.belongsTo(Unit, { foreignKey: 'unitId' });
+Survey.hasMany(SurveyQuestion, { as: 'questions', foreignKey: 'surveyId' });
+Survey.hasMany(SurveyResponse, { foreignKey: 'surveyId' });
+SurveyQuestion.belongsTo(Survey, { foreignKey: 'surveyId' });
+SurveyResponse.belongsTo(Survey, { foreignKey: 'surveyId' });
+SurveyResponse.belongsTo(SurveyQuestion, { foreignKey: 'questionId' });
+
 // Module 13 associations (section 7).
 LedgerAccount.belongsTo(LedgerAccount, { as: 'parent', foreignKey: 'parentId' });
 LedgerAccount.hasMany(LedgerAccount, { as: 'children', foreignKey: 'parentId' });
@@ -648,6 +693,18 @@ export {
   TicketComment,
   TicketUpvote,
   TicketAssignment,
+  Notice,
+  NoticeReceipt,
+  NotificationTemplate,
+  Notification,
+  InboxItem,
+  NotificationPreference,
+  PushSubscription,
+  EmergencyBroadcast,
+  EmergencyResponse,
+  Survey,
+  SurveyQuestion,
+  SurveyResponse,
 };
 
 export async function closeDb(): Promise<void> {

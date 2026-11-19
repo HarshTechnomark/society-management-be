@@ -2,9 +2,12 @@ import { adapters } from '../adapters';
 import { logger } from './logger';
 
 /**
- * Temporary stand-in for module 16 `notify(templateKey, recipients, data, options)` (module 02 section 10).
- * It renders the registered template and sends through the module 01 adapters. It never throws: a failed send is
- * logged, so a notification problem cannot undo the action it reports. Module 16 replaces this file.
+ * Entry point every module uses: `notify(templateKey, recipients, data, options)` (module 02 section 10).
+ * Module 16 installs the REAL engine with `setNotifyEngine()` (`registerCommunication()`): preferences, quiet hours, inbox items, delivery rows,
+ * retries. Without an engine (unit tests of other modules) the original stand-in below renders the registered template and sends through the module 01
+ * adapters. The stand-in never throws: a failed send is logged, so a notification problem cannot undo the action it reports.
+ * The in-code `Template` objects registered here are the LEGACY templates: the real engine keeps their `render()` and mirrors them into
+ * `notification_templates` (see `communication.registry.ts`).
  */
 export type NotifyChannel = 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
 export interface Recipient {
@@ -27,6 +30,8 @@ export interface RenderedMessage {
 export interface Template {
   channels: NotifyChannel[];
   critical: boolean;
+  /** Inbox tone of the stand-in message (default by delivery class). */
+  tone?: 'info' | 'warn' | 'bad';
   render(data: Record<string, any>): RenderedMessage;
 }
 
@@ -36,6 +41,22 @@ export const registerTemplates = (t: Record<string, Template>): void => {
 };
 
 export const hasTemplate = (key: string): boolean => templates.has(key);
+/** Read access for module 16 (legacy bridge). */
+export const getLegacyTemplate = (key: string): Template | undefined => templates.get(key);
+export const legacyTemplateKeys = (): string[] => [...templates.keys()];
+
+export type NotifyEngine = (
+  templateKey: string,
+  recipients: Recipient[],
+  data: Record<string, any>,
+  options: NotifyOptions,
+) => Promise<unknown>;
+let engine: NotifyEngine | undefined;
+/** Installs (or removes with `undefined`) the real notification engine of module 16. */
+export const setNotifyEngine = (e: NotifyEngine | undefined): void => {
+  engine = e;
+};
+export const hasNotifyEngine = (): boolean => engine !== undefined;
 
 type ContactResolver = (userId: number) => Promise<{ mobile: string | null; email: string | null } | null>;
 let resolver: ContactResolver | undefined;
@@ -52,6 +73,14 @@ export async function notify(
   data: Record<string, any> = {},
   options: NotifyOptions = {},
 ): Promise<void> {
+  if (engine) {
+    try {
+      await engine(templateKey, recipients, data, options);
+    } catch (err) {
+      logger.error({ err, templateKey }, 'notify: engine failed');
+    }
+    return;
+  }
   const tpl = templates.get(templateKey);
   if (!tpl) {
     logger.warn({ templateKey }, 'notify: unknown template');

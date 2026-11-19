@@ -17,6 +17,7 @@ import { registerCommittee } from './modules/committee/committee.public';
 import { registerAccounts } from './modules/accounts/accounts.public';
 import { registerBilling } from './modules/billing/billing.public';
 import { registerPayments } from './modules/payments/payments.public';
+import { registerCommunication } from './modules/communication/communication.public';
 import { registerHelpdesk } from './modules/helpdesk/helpdesk.public';
 import { registerApprovals } from './modules/approvals/approvals.public';
 import { assertCatalogueComplete } from './modules/subscriptions/subscriptions.seed';
@@ -40,6 +41,7 @@ async function main(): Promise<void> {
   registerPayments();
   registerApprovals();
   registerHelpdesk(); // module 15: export provider, purge handler, queue, unit guard
+  registerCommunication(); // module 16: the real notify() engine, export provider, purge handler, queue `communication`
   await assertCatalogueComplete(); // every catalogue key has a row in every plan version (module 04)
   await startWorkers();
   logger.info('society-worker started');

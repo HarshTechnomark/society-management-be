@@ -5,9 +5,15 @@ import { registerTemplates, type NotifyChannel, type Template } from '../../lib/
  * In-app and push are not delivered by the stand-in, so only the email part renders. No message body of a ticket is ever
  * put in a notification (only the subject and number).
  */
-const t = (channels: NotifyChannel[], render: Template['render'], critical = false): Template => ({
+const t = (
+  channels: NotifyChannel[],
+  render: Template['render'],
+  critical = false,
+  tone?: Template['tone'],
+): Template => ({
   channels,
   critical,
+  tone,
   render,
 });
 const mail = (subject: string, text: string) => ({ email: { subject, text } });
@@ -56,17 +62,25 @@ registerTemplates({
       `"${d.subject}" (${d.ticketNo}) from ${d.societyName} is now yours.\nOpen it: ${link(d)}`,
     ),
   ),
-  'platform.ticket.sla_warning': t(['EMAIL'], d =>
-    mail(
-      `SLA warning on ${d.ticketNo}`,
-      `${d.ticketNo} (${d.societyName}) has used 80% of its resolution time.\nOpen it: ${link(d)}`,
-    ),
+  'platform.ticket.sla_warning': t(
+    ['EMAIL'],
+    d =>
+      mail(
+        `SLA warning on ${d.ticketNo}`,
+        `${d.ticketNo} (${d.societyName}) has used 80% of its resolution time.\nOpen it: ${link(d)}`,
+      ),
+    false,
+    'warn',
   ),
-  'platform.ticket.sla_breached': t(['EMAIL'], d =>
-    mail(
-      `SLA breached on ${d.ticketNo}`,
-      `${d.ticketNo} (${d.societyName}) missed its ${d.which === 'FIRST_RESPONSE' ? 'first response' : 'resolution'} time.\nOpen it: ${link(d)}`,
-    ),
+  'platform.ticket.sla_breached': t(
+    ['EMAIL'],
+    d =>
+      mail(
+        `SLA breached on ${d.ticketNo}`,
+        `${d.ticketNo} (${d.societyName}) missed its ${d.which === 'FIRST_RESPONSE' ? 'first response' : 'resolution'} time.\nOpen it: ${link(d)}`,
+      ),
+    false,
+    'bad',
   ),
   'platform.provider.status_changed': t(['EMAIL'], d =>
     mail(

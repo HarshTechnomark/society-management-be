@@ -472,6 +472,53 @@ describe('tenant isolation (T03-33, section 13)', () => {
       'POST /me/tickets/:id/estimate-decision',
       'GET /me/approval-requests/:id',
       'POST /me/approval-requests/:id/cancel',
+      // module 16 (16.1): another society's notice id is 404 NOTICE_NOT_FOUND on every notice route (tests/modules/communication/communication.notices.crud.test.ts and receipts.test.ts, T16-31)
+      'GET /notices/:id',
+      'PATCH /notices/:id',
+      'DELETE /notices/:id',
+      'POST /notices/:id/publish',
+      'POST /notices/:id/withdraw',
+      'POST /notices/:id/cancel-schedule',
+      'POST /notices/:id/recall',
+      'POST /notices/:id/pin',
+      'POST /notices/:id/unpin',
+      'POST /notices/:id/archive',
+      'POST /notices/:id/duplicate',
+      'POST /notices/:id/remind',
+      'POST /notices/:id/restored',
+      'GET /notices/:id/receipts',
+      'GET /notices/:id/receipts/export',
+      'GET /notices/:id/attachments/:fileId/download-url',
+      'POST /notices/:id/acknowledge',
+      // module 16 (16.3): another society's survey id is 404 SURVEY_NOT_FOUND and another society's alert id 404 EMERGENCY_NOT_FOUND on every route, the
+      // /me and /gate routes included (tests/modules/communication/communication.isolation.test.ts, communication.surveys.test.ts and communication.emergency.test.ts, T16-31)
+      'GET /surveys/:id',
+      'PATCH /surveys/:id',
+      'DELETE /surveys/:id',
+      'POST /surveys/:id/publish',
+      'POST /surveys/:id/close',
+      'POST /surveys/:id/cancel',
+      'GET /surveys/:id/results',
+      'GET /surveys/:id/results/export',
+      'GET /me/surveys/:id',
+      'POST /me/surveys/:id/responses',
+      'GET /emergency-broadcasts/:id',
+      'GET /emergency-broadcasts/:id/roll-call',
+      'POST /emergency-broadcasts/:id/updates',
+      'POST /emergency-broadcasts/:id/realert',
+      'POST /emergency-broadcasts/:id/resolve',
+      'POST /emergency-broadcasts/:id/cancel',
+      'POST /emergency-broadcasts/:id/responses',
+      'POST /emergency-broadcasts/:id/responses/:responseId/attend',
+      'GET /gate/emergency-broadcasts/:id/roll-call',
+      'POST /gate/emergency-broadcasts/:id/responses',
+      // module 16 (16.2): another society's notice is 404 NOTICE_NOT_FOUND on the resident routes (tests/modules/communication/communication.isolation.test.ts and
+      // me.notices.test.ts) and another user's or another society's bell item is 404 NOTIFICATION_NOT_FOUND (me.bell.test.ts); the /platform/* template and
+      // delivery routes are platform-wide
+      'GET /me/notices/:id',
+      'POST /me/notices/:id/acknowledge',
+      'GET /me/notices/:id/attachments/:fileId/download-url',
+      'POST /notifications/:id/read',
     ]);
     const missing = listRoutes(app)
       .filter(r => (r.kind === 'society' || r.kind === 'platform') && /:[A-Za-z]+/.test(r.path))
