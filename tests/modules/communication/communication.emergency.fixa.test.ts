@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_TITLES } from '../../../src/modules/communication/communication.emergency.shared';
 import { EmergencyBroadcast, InboxItem, closeDb } from '../../../src/models';
 import { clearInbox, listInbox } from '../../../src/lib/inbox';
 import { smsSegments } from '../../../src/modules/communication/communication.render';
@@ -76,9 +77,7 @@ describe('emergency links, texts and plurals (fix A)', () => {
     expect((await EmergencyBroadcast.findByPk(id))!.realertCount).toBe(0);
   }, 120_000);
 
-  it('default titles follow the type labels', async () => {
-    const { DEFAULT_TITLES } =
-      await import('../../../src/modules/communication/communication.emergency.shared');
+  it('default titles follow the type labels', () => {
     expect(DEFAULT_TITLES.WATER).toBe('Water outage');
     expect(DEFAULT_TITLES.LIFT_STUCK).toBe('Lift trapped');
   });
