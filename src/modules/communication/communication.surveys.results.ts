@@ -1,5 +1,5 @@
 import { QueryTypes } from 'sequelize';
-import { Survey, SurveyQuestion, User, sequelize } from '../../models';
+import { Survey, SurveyQuestion, Unit, User, sequelize } from '../../models';
 import { now } from '../../lib/clock';
 import { audit } from '../../utils/audit';
 import { AppError } from '../../utils/errors';
@@ -191,11 +191,20 @@ export async function exportResults(
     const userIds = [...new Set(rows.map(r => r.userId).filter((x): x is number => !!x))];
     if (userIds.length)
       for (const u of await User.findAll({ where: { id: userIds }, paranoid: false }))
-        names.set(u.id!, u.name ?? 'User');
+        names.set(u.id!, u.name?.trim() || 'Resident');
     const unitIds = [...new Set(rows.map(r => r.unitId).filter((x): x is number => !!x))];
-    if (unitIds.length)
+    if (unitIds.length) {
+      for (const u of await Unit.findAll({
+        where: { id: unitIds, societyId },
+        attributes: ['id', 'label'],
+        paranoid: false,
+      }))
+        labels.set(u.id!, u.label);
       for (const u of await units.listActive(societyId, { unitIds })) labels.set(u.id, u.label);
+    }
   }
+  // BR-16-48: anonymous text answers stay hidden below the threshold, in the export as on screen
+  const hideText = s.isAnonymous && s.responseCount < LIMITS.surveyAnonTextMin;
   const hour = (d: Date) => {
     const x = new Date(d);
     x.setUTCMinutes(0, 0, 0);
@@ -232,7 +241,9 @@ export async function exportResults(
               : r.numberValue !== null
                 ? r.numberValue
                 : r.textValue !== null
-                  ? r.textValue
+                  ? hideText
+                    ? '(hidden: fewer than 5 responses)'
+                    : r.textValue
                   : (r.dateValue ?? ''),
           )
           .join('; '),

@@ -76,6 +76,13 @@ describe('emergency links, texts and plurals (fix A)', () => {
     expect((await EmergencyBroadcast.findByPk(id))!.realertCount).toBe(0);
   }, 120_000);
 
+  it('default titles follow the type labels', async () => {
+    const { DEFAULT_TITLES } =
+      await import('../../../src/modules/communication/communication.emergency.shared');
+    expect(DEFAULT_TITLES.WATER).toBe('Water outage');
+    expect(DEFAULT_TITLES.LIFT_STUCK).toBe('Lift trapped');
+  });
+
   it('NEED_HELP carries the people count and the text is pluralised', async () => {
     await clearInbox();
     const r = await start({ type: 'WATER' });

@@ -5,7 +5,7 @@ import { logger } from '../../lib/logger';
 import { audit } from '../../utils/audit';
 import { systemCtx, type Ctx } from '../../types/context';
 import { isJobAllowed } from '../societies/societies.guard';
-import { AUDIT, ENTITY, NOTIFY, SETTING, type Channel } from './communication.constants';
+import { AUDIT, utilityLabel, ENTITY, NOTIFY, SETTING, type Channel } from './communication.constants';
 import { resolveAudience } from './communication.audience';
 import { notify } from './communication.core';
 import { assertNoticeTransition } from './communication.state';
@@ -324,7 +324,7 @@ export async function runUtilityReminders(): Promise<number> {
       {
         noticeId: n(notice.id),
         title: notice.title,
-        utilityType: String(notice.utilityType),
+        utilityType: utilityLabel(notice.utilityType),
         startsAt: notice.outageStartsAt!.toISOString(),
       },
       `util-start:${n(notice.id)}`,

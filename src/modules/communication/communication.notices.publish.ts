@@ -1,3 +1,4 @@
+import { appUrl } from '../auth/auth.apps';
 import { Op, type Transaction } from 'sequelize';
 import { Notice, NoticeReceipt, sequelize } from '../../models';
 import { now } from '../../lib/clock';
@@ -24,6 +25,7 @@ import {
   NOTIFY,
   PERM,
   SETTING,
+  utilityLabel,
 } from './communication.constants';
 import { resolveAudience } from './communication.audience';
 import { notify } from './communication.core';
@@ -59,7 +61,8 @@ type C = Ctx | SystemCtx;
 const uid = (ctx: C): number | null => ctx.user?.id ?? null;
 const can = (ctx: C, key: string): boolean => Boolean(ctx.permissions?.has(key));
 const forbidden = () => new ForbiddenError(ERR.permissionDenied, 'You do not have permission to do this');
-const link = (id: number): string => `/notices/${id}`;
+/** Absolute on the resident app origin: SMS and e-mail links must open from outside the app (in-app deep links stay relative). */
+const link = (id: number): string => appUrl('RESIDENT', `/notices/${id}`);
 
 /** Locks a notice by id inside a transaction without needing a request context (approval handlers, jobs). */
 async function lockById(societyId: number, id: number, t: Transaction): Promise<Notice | null> {
@@ -247,7 +250,7 @@ export async function publishNotice(
               type: 'NOTICE_PUBLISH',
               entityType: 'notice',
               entityId: n(notice.id),
-              title: `Notice: ${notice.title}`.slice(0, 200),
+              title: notice.title.slice(0, 200),
               summary: `${label}, ${resolved.people.length} people`,
               payload,
             },
@@ -703,7 +706,7 @@ export async function markRestored(ctx: Ctx, id: number, input: { version: numbe
         societyId,
         NOTIFY.utilityRestored,
         await receiptUserIds(n(notice.id)),
-        { noticeId: n(notice.id), title: notice.title, utilityType: String(notice.utilityType) },
+        { noticeId: n(notice.id), title: notice.title, utilityType: utilityLabel(notice.utilityType) },
         `util-restored:${n(notice.id)}`,
       );
     });

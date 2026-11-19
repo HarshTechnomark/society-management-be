@@ -99,6 +99,21 @@ const SELECT = `SELECT r.id AS receiptId, r.unitId, u.label AS unitLabel, b.code
   COALESCE(res.name, usr.name) AS name, r.relation, COALESCE(res.mobile, usr.mobile) AS mobile, r.reachedVia,
   r.firstReadAt, r.acknowledgedAt, r.remindersSent`;
 
+const RELATION_LABELS: Record<string, string> = {
+  OWNER: 'Owner',
+  CO_OWNER: 'Co-owner',
+  TENANT: 'Tenant',
+  FAMILY: 'Family member',
+  CARETAKER: 'Caretaker',
+  MEMBER: 'Member',
+};
+const CHANNEL_LABELS: Record<string, string> = {
+  IN_APP: 'App',
+  PUSH: 'Push',
+  SMS: 'SMS',
+  WHATSAPP: 'WhatsApp',
+  EMAIL: 'Email',
+};
 const iso = (d: Date | null): string | null => (d ? new Date(d).toISOString() : null);
 const shape = (ctx: Ctx, r: Row) => ({
   receiptId: n(r.receiptId),
@@ -106,8 +121,10 @@ const shape = (ctx: Ctx, r: Row) => ({
   unitLabel: r.unitLabel,
   name: r.name,
   relation: r.relation,
+  relationLabel: r.relation ? (RELATION_LABELS[r.relation] ?? r.relation) : null,
   mobile: r.mobile ? (ctx.permissions?.has(PERM.contactsView) ? r.mobile : maskMobile(r.mobile)) : null,
   reachedVia: r.reachedVia,
+  channelLabel: r.reachedVia ? (CHANNEL_LABELS[r.reachedVia] ?? r.reachedVia) : null,
   firstReadAt: iso(r.firstReadAt),
   acknowledgedAt: iso(r.acknowledgedAt),
   remindersSent: n(r.remindersSent),
@@ -125,7 +142,8 @@ async function summary(noticeId: number, societyId: number) {
   );
   const byBuilding = await sequelize.query<Record<string, unknown>>(
     `SELECT b.id AS buildingId, b.code AS code, COUNT(DISTINCT r.unitId) AS units,
-       COUNT(DISTINCT CASE WHEN r.firstReadAt IS NOT NULL THEN r.unitId END) AS unitsRead
+       COUNT(DISTINCT CASE WHEN r.firstReadAt IS NOT NULL THEN r.unitId END) AS unitsRead,
+       COUNT(*) AS recipients, SUM(r.firstReadAt IS NOT NULL) AS readN
      FROM notice_receipts r JOIN units u ON u.id = r.unitId JOIN buildings b ON b.id = u.buildingId
      WHERE r.noticeId = :noticeId AND r.societyId = :societyId GROUP BY b.id, b.code ORDER BY b.sortOrder, b.code`,
     { replacements: rep, type: QueryTypes.SELECT },
@@ -150,6 +168,9 @@ async function summary(noticeId: number, societyId: number) {
       code: String(b.code),
       units: n(b.units),
       unitsRead: n(b.unitsRead),
+      // people, the unit of the summary meters (recipients and read)
+      recipients: n(b.recipients),
+      read: n(b.readN),
     })),
     byChannel,
   };

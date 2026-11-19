@@ -1,21 +1,30 @@
+import { appUrl } from '../auth/auth.apps';
 import { Op } from 'sequelize';
 import { Notice, NoticeReceipt, sequelize } from '../../models';
 import { addHours, now } from '../../lib/clock';
-import { env } from '../../lib/env';
 import { enqueueAfterCommit } from '../../lib/queue';
 import { emitToRoom } from '../../lib/realtime';
 import { logger } from '../../lib/logger';
 import { audit } from '../../utils/audit';
 import { isJobAllowed } from '../societies/societies.guard';
 import { settings } from '../society-setup/society-setup.public';
-import { AUDIT, COMMUNICATION_QUEUE, ENTITY, JOBS, NOTIFY, RT, SETTING } from './communication.constants';
+import {
+  AUDIT,
+  utilityLabel,
+  COMMUNICATION_QUEUE,
+  ENTITY,
+  JOBS,
+  NOTIFY,
+  RT,
+  SETTING,
+} from './communication.constants';
 import { notify } from './communication.core';
 import { assertNoticeTransition } from './communication.state';
 import { SYSTEM_ACTOR, jobCtx, jobHooks, localHour, societyStatuses } from './communication.jobs.common';
 
 /** Section 9.1 jobs of notices: scheduler, expiry, automatic and manual acknowledgement reminders, utility start reminders. Notices change status only through `assertNoticeTransition`. */
 const BATCH = 200;
-const noticeLink = (id: number) => `${env().appOrigins[0] ?? ''}/notices/${id}`;
+const noticeLink = (id: number) => appUrl('RESIDENT', `/notices/${id}`);
 
 function emitNotice(n: Notice): void {
   emitToRoom(`society:${n.societyId}:admin`, RT.noticeUpdated, {
@@ -258,7 +267,7 @@ export async function runUtilityReminders(at: Date = now()): Promise<{ sent: num
         {
           noticeId: n.id,
           title: n.title,
-          utilityType: n.utilityType ?? 'UTILITY',
+          utilityType: utilityLabel(n.utilityType),
           startsAt: n.outageStartsAt!,
         },
         {

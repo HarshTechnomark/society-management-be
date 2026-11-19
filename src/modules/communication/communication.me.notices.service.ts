@@ -6,7 +6,7 @@ import { audit } from '../../utils/audit';
 import type { Ctx } from '../../types/context';
 import { AppError, ConflictError, NotFoundError, UnprocessableError } from '../../utils/errors';
 import { placeholderFiles, societyPorts } from '../societies/societies.ports';
-import { AUDIT, ENTITY, ERR, RT, roomAdmin } from './communication.constants';
+import { AUDIT, utilityLabel, ENTITY, ERR, RT, roomAdmin } from './communication.constants';
 import { communicationPorts } from './communication.ports';
 
 /**
@@ -326,6 +326,7 @@ export async function getMyNotice(ctx: Ctx, id: number) {
     utility: notice.utilityType
       ? {
           type: notice.utilityType,
+          label: utilityLabel(notice.utilityType),
           startsAt: notice.outageStartsAt ? notice.outageStartsAt.toISOString() : null,
           endsAt: notice.outageEndsAt ? notice.outageEndsAt.toISOString() : null,
           restoredAt: notice.restoredAt ? notice.restoredAt.toISOString() : null,

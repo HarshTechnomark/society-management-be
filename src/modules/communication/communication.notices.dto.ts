@@ -1,3 +1,4 @@
+import { utilityLabel } from './communication.constants';
 import { Op } from 'sequelize';
 import { Building, Unit, User } from '../../models';
 import type { Notice } from '../../models';
@@ -185,6 +186,7 @@ export async function toDetail(ctx: Ctx | SystemCtx, notice: Notice) {
       r.kind === 'UTILITY_SHUTDOWN'
         ? {
             type: r.utilityType,
+            label: utilityLabel(r.utilityType),
             startsAt: iso(r.outageStartsAt),
             endsAt: iso(r.outageEndsAt),
             restoredAt: iso(r.restoredAt),

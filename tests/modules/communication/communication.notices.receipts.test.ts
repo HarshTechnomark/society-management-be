@@ -101,8 +101,8 @@ describe('GET /notices/:id/receipts (8.15)', () => {
     });
     const bb = r.body.data.summary.byBuilding;
     expect(bb).toEqual([
-      { buildingId: w.buildingId, code: 'A', units: 3, unitsRead: 2 },
-      { buildingId: w.buildingB.id, code: 'B', units: 1, unitsRead: 0 },
+      { buildingId: w.buildingId, code: 'A', units: 3, unitsRead: 2, recipients: 3, read: 2 },
+      { buildingId: w.buildingB.id, code: 'B', units: 1, unitsRead: 0, recipients: 1, read: 0 },
     ]);
     const items = r.body.data.items;
     expect(items.map((i: any) => i.unitLabel)).toEqual(['A-101', 'A-102', 'A-103', 'B-101']);

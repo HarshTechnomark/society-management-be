@@ -37,8 +37,8 @@ export const societyIdOf = (ctx: Ctx): number => {
 export const DEFAULT_TITLES: Record<EmergencyType, string> = {
   FIRE: 'Fire',
   GAS_LEAK: 'Gas leak',
-  WATER: 'Water emergency',
-  LIFT_STUCK: 'Lift stuck',
+  WATER: 'Water outage',
+  LIFT_STUCK: 'Lift trapped',
   SECURITY_THREAT: 'Security threat',
   MEDICAL: 'Medical emergency',
   POWER: 'Power failure',

@@ -141,6 +141,18 @@ export const AUDIENCE_RELATIONS = ['ANY', 'OWNERS', 'TENANTS'] as const;
 export type AudienceRelation = (typeof AUDIENCE_RELATIONS)[number];
 export const UTILITY_TYPES = ['WATER', 'POWER', 'LIFT', 'GAS', 'INTERNET', 'DG_BACKUP', 'OTHER'] as const;
 export type UtilityType = (typeof UTILITY_TYPES)[number];
+/** Human text of a utility type (messages, drawers); at most 12 characters (template variable limit). */
+export const UTILITY_LABELS: Record<UtilityType, string> = {
+  WATER: 'Water supply',
+  POWER: 'Electricity',
+  LIFT: 'Lift',
+  GAS: 'Gas supply',
+  INTERNET: 'Internet',
+  DG_BACKUP: 'DG backup',
+  OTHER: 'Utility',
+};
+export const utilityLabel = (t: string | null | undefined): string =>
+  UTILITY_LABELS[t as UtilityType] ?? 'Utility';
 export const ACTION_TYPES = ['PAY_COLLECTION', 'PAY_DUES', 'RSVP', 'VOTE', 'LINK'] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 export const RECEIPT_RELATIONS = ['OWNER', 'CO_OWNER', 'TENANT', 'FAMILY', 'CARETAKER', 'MEMBER'] as const;
