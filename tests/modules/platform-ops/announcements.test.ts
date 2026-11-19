@@ -52,6 +52,9 @@ async function world() {
 const banners = async (u: any, societyId: number) =>
   (await as(await login(u, { societyId }))('get', '/platform-announcements')).body.data.items as any[];
 
+/** SMS and e-mail rows only: the real engine (module 16) also lists IN_APP and PUSH rows in the dev inbox. */
+const sentInbox = async () => (await listInbox()).filter(m => m.channel === 'SMS' || m.channel === 'EMAIL');
+
 describe('announcement routes (8.7)', () => {
   it('creates a DRAFT with the announcement object and an audit row; CRITICAL is never dismissible', async () => {
     const { admin } = await world();
@@ -452,7 +455,7 @@ describe('scheduler and fan-out (6.3, 6.7, T07-35)', () => {
     expect(await runAnnouncementScheduler()).toEqual({ published: 0, cancelled: 0, expired: 0 }); // idempotent
     resetLogins();
     expect((await banners(pChair, premium.id!)).length).toBe(1);
-    const mails = (await listInbox()).filter(m => m.subject === 'Scheduled maintenance on Sunday');
+    const mails = (await sentInbox()).filter(m => m.subject === 'Scheduled maintenance on Sunday');
     expect(mails.map(m => m.to).sort()).toEqual(['meena@greenpark.in', 'rajesh@skyheights.in']);
     expect(
       (await AuditLog.findOne({ where: { action: 'platform.announcement.published' } }))!.actorRole,
@@ -498,20 +501,20 @@ describe('scheduler and fan-out (6.3, 6.7, T07-35)', () => {
     const first = (await PlatformNotification.findByPk(d.id))!;
     expect(first.recipientCount).toBe(3);
     const stamp = first.fanoutCompletedAt!;
-    const before = (await listInbox()).length;
+    const before = (await sentInbox()).length;
     expect(await runAnnouncementFanout(d.id)).toBeNull(); // fanoutCompletedAt is set: nothing to do
-    expect((await listInbox()).length).toBe(before);
+    expect((await sentInbox()).length).toBe(before);
     // a restart midway: the marker is gone but the per-recipient marks are not, so nobody is notified twice
     await PlatformNotification.update(
       { fanoutCompletedAt: null, recipientCount: null },
       { where: { id: d.id } },
     );
     expect(await runAnnouncementFanout(d.id)).toEqual({ recipients: 3 });
-    expect((await listInbox()).length).toBe(before);
+    expect((await sentInbox()).length).toBe(before);
     const again = (await PlatformNotification.findByPk(d.id))!;
     expect(again.recipientCount).toBe(3);
     expect(again.fanoutCompletedAt!.getTime()).toBeGreaterThanOrEqual(stamp.getTime());
-    const titles = (await listInbox()).filter(m => m.subject === 'Scheduled maintenance on Sunday');
+    const titles = (await sentInbox()).filter(m => m.subject === 'Scheduled maintenance on Sunday');
     expect(titles).toHaveLength(3); // each of the three recipients once
   });
 
@@ -524,12 +527,12 @@ describe('scheduler and fan-out (6.3, 6.7, T07-35)', () => {
     await queueInspector().resume(PLATFORM_OPS_QUEUE);
     await drainQueues();
     expect((await PlatformNotification.findByPk(d.id))!.fanoutCompletedAt).toBeNull();
-    expect((await listInbox()).filter(m => m.subject === 'Scheduled maintenance on Sunday')).toHaveLength(0);
+    expect((await sentInbox()).filter(m => m.subject === 'Scheduled maintenance on Sunday')).toHaveLength(0);
     const e = (await create(admin.c, { title: 'Banner only notice' })).body.data;
     await admin.c('post', `/platform/announcements/${e.id}/publish`, { version: 1 });
     await drainQueues();
     expect((await PlatformNotification.findByPk(e.id))!.recipientCount).toBe(2);
-    expect((await listInbox()).filter(m => m.subject === 'Banner only notice')).toHaveLength(0);
+    expect((await sentInbox()).filter(m => m.subject === 'Banner only notice')).toHaveLength(0);
   });
 
   it('createAnnouncement (section 8.13) validates like the route and can publish at once', async () => {
