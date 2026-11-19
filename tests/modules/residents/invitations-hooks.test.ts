@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AuditLog,
   EmergencyProfile,
@@ -256,8 +256,15 @@ describe('module 02 hooks (BR-09-76, BR-09-77)', () => {
         where: { action: 'residents.resident.mobile_synced', societyId: two.society.id! },
       }),
     ).toBe(0);
-    const mail = await inboxFor((await User.findByPk(two.user.id))!.email ?? '');
-    expect(mail.some(m => /could not be updated/.test(m.subject ?? ''))).toBe(true);
+    // the notice is sent after commit without being awaited, so with the real engine it lands shortly after the hook returns
+    const editorEmail = (await User.findByPk(two.user.id))!.email ?? '';
+    await vi.waitFor(
+      async () =>
+        expect((await inboxFor(editorEmail)).some(m => /could not be updated/.test(m.subject ?? ''))).toBe(
+          true,
+        ),
+      { timeout: 20000 },
+    );
     expect(
       JSON.stringify(await AuditLog.findAll({ where: { action: 'residents.resident.mobile_synced' } })),
     ).not.toContain(newMobile);
