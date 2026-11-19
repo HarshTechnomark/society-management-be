@@ -17,6 +17,9 @@ afterAll(closeDb);
 beforeEach(async () => {
   await resetSocieties();
   await resetCommunication();
+  // the template rows are a platform seed kept by resetAll(): edits of earlier tests (or other files on the same database) leave them at version > 1,
+  // and these tests patch with version 1, so every test starts from freshly seeded rows
+  await NotificationTemplate.destroy({ where: {} });
   await syncTemplates();
   setNow('2026-11-01T04:30:00Z');
 });
@@ -167,7 +170,7 @@ describe('PATCH /platform/notification-templates/:id (8.35)', () => {
   it('401 REAUTH_REQUIRED when the step-up is older than the platform window', async () => {
     const { c } = await sa();
     const t = await row(NOTIFY.noticePublished);
-    advance(30 * 60_000);
+    advance(6 * 60_000); // past the 5-minute platform step-up, inside the access token life (30 minutes ends the token: UNAUTHENTICATED)
     const r = await patch(c, t.id, { version: 1, pushTitle: 'One' });
     expect(r.status).toBe(401);
     expect(r.body.code).toBe('REAUTH_REQUIRED');
