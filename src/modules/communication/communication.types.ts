@@ -19,7 +19,8 @@ export type { Ctx, SystemCtx, Transaction };
 export type Recipient =
   | number
   | { userId: number; mobile?: string | null; email?: string | null }
-  | { mobile: string }
+  /** An external contact; the legacy shape may carry both a mobile and an e-mail (one recipient, e.g. `auth.account_deleted`). */
+  | { mobile: string; email?: string | null }
   | { email: string }
   | { unitId: number; relation?: 'ANY' | 'OWNERS' | 'TENANTS' | 'BILL_TO' }
   | { roleKey: string }

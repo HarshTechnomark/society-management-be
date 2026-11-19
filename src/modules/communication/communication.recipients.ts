@@ -42,7 +42,7 @@ export function validateRecipients(recipients: Recipient[], strict: boolean): vo
       throw new NotifyError(ERR.notifyRecipientsInvalid, 'Invalid recipient');
     else if ('mobile' in r && !('userId' in r) && !MOBILE_RE.test(String(r.mobile)))
       throw new NotifyError(ERR.notifyRecipientsInvalid, 'Mobile must be 10 digits starting 6 to 9');
-    else if ('email' in r && !('userId' in r) && !EMAIL_RE.test(String(r.email)))
+    else if ('email' in r && !('userId' in r) && r.email != null && !EMAIL_RE.test(String(r.email)))
       throw new NotifyError(ERR.notifyRecipientsInvalid, 'Invalid e-mail address');
   }
 }
@@ -77,7 +77,12 @@ export async function resolveTargets(
         r.mobile || r.email ? { mobile: r.mobile ?? null, email: r.email ?? null, explicit: true } : {},
       );
     else if ('mobile' in r)
-      external.set(`m:${r.mobile}`, { userId: null, mobile: r.mobile, email: null, explicit: true });
+      external.set(`m:${r.mobile}`, {
+        userId: null,
+        mobile: r.mobile,
+        email: r.email ?? null,
+        explicit: true,
+      });
     else if ('email' in r)
       external.set(`e:${r.email.toLowerCase()}`, {
         userId: null,

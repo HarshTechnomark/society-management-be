@@ -48,6 +48,10 @@ describe('channel routing (BR-16-21, BR-16-22)', () => {
     expect(routeChannels(base({ requested: ['EMAIL'], hasEmail: false }))[0]).toMatchObject({
       skipReason: 'NO_CONTACT',
     });
+    expect(routeChannels(base({ requested: ['EMAIL'], emailTemplateOk: false }))[0]).toMatchObject({
+      status: 'SKIPPED',
+      skipReason: 'NO_TEMPLATE',
+    });
   });
   it('preferences do not apply to OTP, SAFETY, SECURITY and locked categories', () => {
     for (const deliveryClass of ['OTP', 'SAFETY', 'SECURITY'] as const)

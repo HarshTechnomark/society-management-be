@@ -238,8 +238,13 @@ async function planTarget(
     target.userId ? f.langs.get(target.userId) : undefined,
   );
   const tpl = locale === b.tpl.locale ? b.tpl : await getTemplate(b.tpl.key, locale);
+  // a contact-only target keys each row by the contact of its channel, or by the one contact it has (its rows for the other channels are SKIPPED NO_CONTACT)
   const recipientKeyOf = (ch: ExternalChannel): string =>
-    target.userId ? userKey(target.userId) : ch === 'EMAIL' ? emailKey(email!) : mobileKey(mobile!);
+    target.userId
+      ? userKey(target.userId)
+      : (ch === 'EMAIL' && email) || !mobile
+        ? emailKey(email!)
+        : mobileKey(mobile);
   const window = await effectiveWindow(p, b.society?.id ?? null);
   const at = now();
   const quiet = inQuietHours(window, at, f.tz);
@@ -273,9 +278,13 @@ async function planTarget(
     return;
   }
 
+  // a legacy template renders its SMS, WhatsApp and e-mail parts only for some data (e.g. an escalation level): a part it does not render is
+  // SKIPPED NO_TEMPLATE here instead of being queued, counted against the SMS limit and then FAILED at delivery
+  const legacyMsg = tpl.legacy ? renderTemplate(tpl, b.data, { tz: f.tz }) : null;
+
   // inbox item (IN_APP is the delivery; never switched off)
   if (target.userId && wantsInApp(b.tpl) && !b.opts.skipInbox) {
-    const msg = renderTemplate(tpl, b.data, { tz: f.tz });
+    const msg = legacyMsg ?? renderTemplate(tpl, b.data, { tz: f.tz });
     const inApp = msg.inApp ?? (msg.push ? { title: msg.push.title, body: msg.push.body } : null);
     if (inApp) {
       const item = await insertIgnore(() =>
@@ -315,11 +324,14 @@ async function planTarget(
     pushSubscriptions: target.userId ? (f.subs.get(target.userId) ?? 0) : 0,
     prefOn: ch => isChannelOn(p?.channelMatrix, b.tpl.meta.category, ch),
     smsTemplateOk: Boolean(
-      tpl.legacy ? tpl.row.smsDltTemplateId : tpl.texts.smsBody && tpl.texts.smsDltTemplateId,
+      legacyMsg ? tpl.row.smsDltTemplateId && legacyMsg.sms : tpl.texts.smsBody && tpl.texts.smsDltTemplateId,
     ),
     whatsappTemplateOk: Boolean(
-      tpl.legacy ? true : tpl.texts.whatsappTemplateName && tpl.texts.whatsappStatus === 'APPROVED',
+      legacyMsg
+        ? legacyMsg.whatsapp
+        : tpl.texts.whatsappTemplateName && tpl.texts.whatsappStatus === 'APPROVED',
     ),
+    emailTemplateOk: legacyMsg ? Boolean(legacyMsg.email) : true,
     whatsappOptIn: Boolean(p?.whatsappOptIn),
     whatsappFeatureOn: f.waFeatureOn,
     inQuietHours: quiet,
@@ -529,7 +541,7 @@ export async function legacyEngine(
   for (const r of recipients) {
     if (r.userId !== undefined)
       list.push({ userId: r.userId, mobile: r.mobile ?? null, email: r.email ?? null });
-    else if (r.mobile) list.push({ mobile: r.mobile });
+    else if (r.mobile) list.push(r.email ? { mobile: r.mobile, email: r.email } : { mobile: r.mobile });
     else if (r.email) list.push({ email: r.email });
   }
   await notify(templateKey, list, data, {

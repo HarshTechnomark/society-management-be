@@ -7,6 +7,7 @@ import { legacyEngine } from '../../../src/modules/communication/communication.c
 import { registerCommunication } from '../../../src/modules/communication/communication.public';
 import { app, makeUser, resetAll } from '../../helpers/auth';
 import { clearCommunicationRows, resetCommunication } from '../../helpers/communication';
+import '../../../src/modules/helpdesk/helpdesk.notify.templates';
 
 beforeAll(async () => {
   await resetAll();
@@ -89,6 +90,47 @@ describe('the real engine behind lib/notify (the stand-in swap-in)', () => {
     expect(inapp.body.data).toHaveLength(1);
     expect(to.body.data.map((m: { channel: string }) => m.channel)).toEqual(['IN_APP']);
     await clearInbox();
+  });
+  it('a legacy channel the template does not render for this data is SKIPPED NO_TEMPLATE, never queued or FAILED', async () => {
+    const u = await makeUser({ mobile: '9876500008' });
+    const d = { ticketNo: 'TKT/1', title: 'Lift', ruleName: 'SLA breached', link: '/issues?id=1' };
+    const rowsOf = async () =>
+      Object.fromEntries(
+        (await Notification.findAll({ order: [['id', 'ASC']] })).map(r => [
+          r.channel,
+          `${r.status}${r.skipReason ? ' ' + r.skipReason : ''}`,
+        ]),
+      );
+    const want = {
+      1: { SMS: 'SKIPPED NO_TEMPLATE', EMAIL: 'SKIPPED NO_TEMPLATE' },
+      2: { SMS: 'SKIPPED NO_TEMPLATE', EMAIL: 'SENT' },
+      3: { SMS: 'SENT', EMAIL: 'SENT' },
+    } as const;
+    for (const level of [1, 2, 3] as const) {
+      await clearCommunicationRows();
+      await clearInbox();
+      await libNotify('helpdesk.sla_escalated', [{ userId: u.id }], { ...d, level });
+      expect(await rowsOf()).toMatchObject(want[level]);
+      expect(await Notification.count({ where: { status: 'FAILED' } })).toBe(0);
+      const sent = (await listInbox()).map(m => m.channel).filter(c => c !== 'IN_APP');
+      expect(sent.sort()).toEqual(level === 1 ? [] : level === 2 ? ['EMAIL'] : ['EMAIL', 'SMS']);
+    }
+  });
+  it('a legacy contact-only recipient with a mobile and an e-mail gets both (one recipient, rows keyed per contact)', async () => {
+    await libNotify('auth.account_deleted', [{ mobile: '9876500009', email: 'gone@b.in' }], {});
+    const all = await listInbox();
+    expect(all.find(m => m.channel === 'SMS')?.to).toBe('9876500009');
+    expect(all.find(m => m.channel === 'EMAIL')?.to).toBe('gone@b.in');
+    const rows = await Notification.findAll({ where: { channel: ['SMS', 'EMAIL'] } });
+    expect(rows.map(r => r.status)).toEqual(['SENT', 'SENT']);
+    expect(rows.find(r => r.channel === 'SMS')!.recipientKey).toMatch(/^m:/);
+    expect(rows.find(r => r.channel === 'EMAIL')!.recipientKey).toMatch(/^e:/);
+    await libNotify('helpdesk.sla_escalated', [{ email: 'only@b.in' }], { ticketNo: 'T', level: 3 });
+    const sms = await Notification.findOne({
+      where: { templateKey: 'helpdesk.sla_escalated', channel: 'SMS' },
+    });
+    expect(sms).toMatchObject({ status: 'SKIPPED', skipReason: 'NO_CONTACT' });
+    expect(sms!.recipientKey).toMatch(/^e:/);
   });
   it('without the engine the original stand-in still works (unit tests of other modules)', async () => {
     setNotifyEngine(undefined);

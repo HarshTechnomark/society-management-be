@@ -27,6 +27,8 @@ export interface RouteFacts {
   prefOn(channel: ExternalChannel): boolean;
   smsTemplateOk: boolean;
   whatsappTemplateOk: boolean;
+  /** False when the template renders no e-mail for this data (a legacy template's optional part); default true. */
+  emailTemplateOk?: boolean;
   whatsappOptIn: boolean;
   whatsappFeatureOn: boolean;
   inQuietHours: boolean;
@@ -59,7 +61,7 @@ function skipReasonFor(ch: ExternalChannel, f: RouteFacts): SkipReason | null {
       if (!f.whatsappFeatureOn) return 'FEATURE_OFF';
       return null;
     case 'EMAIL':
-      return f.hasEmail ? null : 'NO_CONTACT';
+      return !f.hasEmail ? 'NO_CONTACT' : f.emailTemplateOk === false ? 'NO_TEMPLATE' : null;
   }
 }
 
