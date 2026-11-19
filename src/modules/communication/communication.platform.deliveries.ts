@@ -1,5 +1,5 @@
 import { Op, type WhereOptions } from 'sequelize';
-import { Notification } from '../../models';
+import { Notification, User } from '../../models';
 import { audit } from '../../utils/audit';
 import { pageMeta } from '../../utils/pagination';
 import type { Ctx } from '../../types/context';
@@ -44,10 +44,20 @@ export async function searchDeliveries(ctx: Ctx, q: DeliveryQuery) {
   if (q.channel) where.push({ channel: q.channel });
   if (q.status) where.push({ status: q.status });
   if (q.templateKey) where.push({ templateKey: q.templateKey });
-  if (q.recipient)
-    where.push({
-      recipientKey: /^\d{10}$/.test(q.recipient) ? mobileKey(q.recipient) : emailKey(q.recipient),
+  if (q.recipient) {
+    // rows of a person with a login are keyed `u:<userId>`; rows of a bare contact `m:`/`e:` hash
+    const isMobile = /^\d{10}$/.test(q.recipient);
+    const users = await User.findAll({
+      where: isMobile ? { mobile: q.recipient } : { email: q.recipient.toLowerCase() },
+      attributes: ['id'],
+      paranoid: false,
     });
+    where.push({
+      recipientKey: {
+        [Op.in]: [isMobile ? mobileKey(q.recipient) : emailKey(q.recipient), ...users.map(u => `u:${u.id}`)],
+      },
+    });
+  }
   if (q.from) where.push({ createdAt: { [Op.gte]: q.from } });
   if (q.to) where.push({ createdAt: { [Op.lt]: q.to } });
   const { rows, count } = await Notification.findAndCountAll({

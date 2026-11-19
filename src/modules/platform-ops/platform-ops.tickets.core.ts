@@ -216,7 +216,7 @@ export async function countOpenTicketsBySociety(societyId: number, t?: Transacti
   return PlatformTicket.count({ where: { societyId, status: { [Op.in]: OPEN_STATUSES } }, transaction: t });
 }
 
-export const platformLink = (id: number) => `/support/${id}`;
+export const platformLink = (id: number) => `/platform/support?open=${id}`;
 export const societyLink = (id: number) => `/settings/support/${id}`;
 
 export async function activeMemberRole(societyId: number, userId: number) {

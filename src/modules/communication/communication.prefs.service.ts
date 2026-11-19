@@ -80,8 +80,10 @@ export interface PreferencesInput {
 
 export async function putPreferences(ctx: Ctx, input: PreferencesInput) {
   const userId = ctx.user!.id;
-  const locked = Object.keys(input.categories).filter(k =>
-    (LOCKED_CATEGORIES as readonly string[]).includes(k),
+  // a locked row sent back as shown (every channel on) is ignored; only an actual change is refused
+  const isLocked = (k: string) => (LOCKED_CATEGORIES as readonly string[]).includes(k);
+  const locked = Object.keys(input.categories).filter(
+    k => isLocked(k) && Object.values(input.categories[k] ?? {}).some(v => v === false),
   );
   if (locked.length)
     throw new UnprocessableError(
@@ -89,6 +91,10 @@ export async function putPreferences(ctx: Ctx, input: PreferencesInput) {
       'Emergency and security messages cannot be switched off',
       locked.map(k => ({ field: `categories.${k}`, message: 'Always on' })),
     );
+  input = {
+    ...input,
+    categories: Object.fromEntries(Object.entries(input.categories).filter(([k]) => !isLocked(k))),
+  };
   const unknown = Object.keys(input.categories).filter(
     k => !(PREFERENCE_CATEGORIES as readonly string[]).includes(k),
   );

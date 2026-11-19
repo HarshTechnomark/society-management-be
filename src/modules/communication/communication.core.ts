@@ -288,7 +288,7 @@ async function planTarget(
             templateKey: b.tpl.key,
             category: b.tpl.meta.category,
             deliveryClass: cls,
-            tone: cls === 'SAFETY' ? 'bad' : cls === 'SECURITY' ? 'warn' : 'info',
+            tone: b.tpl.legacy?.tone ?? (cls === 'SAFETY' ? 'bad' : cls === 'SECURITY' ? 'warn' : 'info'),
             title: inApp.title.slice(0, 150),
             body: inApp.body.slice(0, 1000),
             deepLink: msg.deepLink,

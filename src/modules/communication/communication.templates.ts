@@ -102,7 +102,8 @@ export function renderTemplate(
 ): Rendered {
   if (t.legacy) {
     const msg = t.legacy.render(data);
-    const body = msg.email?.text ?? msg.sms ?? '';
+    // the bare "Open it: /path" line is the e-mail's call to action; the inbox item has the deep link instead
+    const body = (msg.email?.text ?? msg.sms ?? '').replace(/\n?[A-Za-z ]+: \/\S+\s*$/, '');
     const title = msg.email?.subject ?? cut(msg.sms ?? t.key, 60);
     const link = msg.link ?? firstUrl(msg.sms) ?? firstUrl(msg.email?.text);
     return {

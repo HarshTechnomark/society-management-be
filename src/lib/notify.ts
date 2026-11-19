@@ -30,6 +30,8 @@ export interface RenderedMessage {
 export interface Template {
   channels: NotifyChannel[];
   critical: boolean;
+  /** Inbox tone of the stand-in message (default by delivery class). */
+  tone?: 'info' | 'warn' | 'bad';
   render(data: Record<string, any>): RenderedMessage;
 }
 
