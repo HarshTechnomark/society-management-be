@@ -49,7 +49,8 @@ describe('route registry (T03-43, section 13)', () => {
     const m07 =
       /^\/platform\/(tickets(\/:id(\/messages)?)?|settings|organizations(\/:id(\/status)?)?|dashboard(\/activity)?|health\/summary|providers(\/check-all|\/:id(\/(credentials|check|test-send|status))?)?|incidents(\/:id(\/(updates|resolve))?)?|announcements(\/audience-preview|\/:id(\/(publish|cancel))?)?|queues(\/retry-failed|\/:name(\/(pause|resume|jobs(\/:jobId(\/(retry|discard))?)?))?)?|jobs\/failed|audit-logs(\/export|\/archives(\/download-url)?|\/:id)?)$/;
     // module 16 adds the platform bell (16.2); 16.4 adds the template and delivery routes
-    const m16 = /^\/platform\/notifications(\/unread-count|\/read-all|\/:id\/read)?$/;
+    const m16 =
+      /^\/platform\/(notifications(\/unread-count|\/read-all|\/:id\/read)?|notification-templates(\/:id(\/preview)?)?|notification-deliveries)$/;
     expect(
       routes.filter(
         r =>
@@ -62,6 +63,7 @@ describe('route registry (T03-43, section 13)', () => {
     ).toBe(15);
     expect(routes.filter(r => r.kind === 'platform' && m07.test(r.path)).length).toBe(53); // 12 of part 1 and 41 of part 2
     expect(routes.filter(r => r.kind === 'platform' && m06.test(r.path)).length).toBe(30);
+    expect(routes.filter(r => r.kind === 'platform' && m16.test(r.path)).length).toBe(9); // 4 bell routes and 5 template / delivery routes
   });
 
   it('detects an unmarked route and a society route without a permission', () => {
@@ -159,10 +161,10 @@ describe('permission matrix (T03-35)', () => {
     expect(failures).toEqual([]);
     expect(society_routes.length).toBeGreaterThan(20);
     // routes open to every active member (module 04 `GET /subscription/entitlements`) answer this member
-    // (module 16: `POST /notifications/:id/read` answers 404 for an id that is not the caller's)
-    for (const r of routes.filter(
-      x => x.kind === 'society' && x.memberOnly && x.path !== '/notifications/:id/read',
-    ))
+    // (module 16: `POST /notifications/:id/read` answers 404 for an id that is not the caller's, and the emergency answer
+    // `POST /emergency-broadcasts/:id/responses` needs a body and an alert: covered in tests/modules/communication/communication.emergency.test.ts)
+    const memberOnlySkip = new Set(['/notifications/:id/read', '/emergency-broadcasts/:id/responses']);
+    for (const r of routes.filter(x => x.kind === 'society' && x.memberOnly && !memberOnlySkip.has(x.path)))
       expect((await call(r.method.toLowerCase() as 'get', concrete(r.path))).status, r.path).toBe(200);
   });
 
