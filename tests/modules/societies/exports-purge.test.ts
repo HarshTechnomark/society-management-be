@@ -37,6 +37,7 @@ import { registerAccounts } from '../../../src/modules/accounts/accounts.public'
 import { registerHelpdesk } from '../../../src/modules/helpdesk/helpdesk.public';
 import { registerApprovals } from '../../../src/modules/approvals/approvals.public';
 import { registerPayments } from '../../../src/modules/payments/payments.public';
+import { registerCommunication } from '../../../src/modules/communication/communication.public';
 import { readZip } from '../../../src/modules/societies/societies.zip';
 import { systemCtx } from '../../../src/types/context';
 import { as, idem, login, memberUser, resetLogins } from '../../helpers/access';
@@ -266,10 +267,13 @@ describe('society data export (8.24, 6.6, BR-05-22 to BR-05-24)', () => {
     registerAccounts(); // module 13 registers its twelve tables at start-up
     registerApprovals(); // module 14 registers its four tables at start-up
     registerHelpdesk(); // module 15 registers its seven tables at start-up
+    registerCommunication(); // module 16 registers its nine society tables at start-up
     const covered = new Set(exportProviders().flatMap(p => p.tables.map(t => t.name)));
     // audit_logs: module 07 audit export; idempotency_keys: request plumbing; society_notes: platform internal (BR-05-34);
     // member_grants, role_permissions: permission plumbing; entitlement_overrides, feature_flag_overrides: platform config;
-    // number_sequences: platform numbering (society 0 series for module 06), internal and not society data
+    // number_sequences: platform numbering (society 0 series for module 06), internal and not society data;
+    // module 16 notification_templates, notification_preferences and push_subscriptions are platform or user level, have no societyId
+    // and so never reach this list (communication.exports.ts)
     const exempt = new Set([
       'audit_logs',
       'idempotency_keys',
