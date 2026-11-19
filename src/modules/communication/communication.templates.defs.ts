@@ -342,7 +342,9 @@ export const COMMUNICATION_TEMPLATES: TemplateDefinition[] = [
   def(
     NOTIFY.emergencyResolveReminder,
     'EMERGENCY',
-    'STANDARD',
+    // BR-16-43 and the `safety` job tag: the starter is reminded while the alert is ACTIVE, also in a SUSPENDED society
+    // (BR-16-37). STANDARD would be suppressed there (BR-16-20); TRANSACTIONAL goes out and still respects preferences and quiet hours.
+    'TRANSACTIONAL',
     ['IN_APP', 'PUSH'],
     { broadcastId: num(), title: s(120) },
     { broadcastId: 5, title: 'Fire' },
