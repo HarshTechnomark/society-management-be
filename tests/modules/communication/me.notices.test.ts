@@ -200,6 +200,7 @@ describe('T16-2 resident notice board (8.19)', () => {
     const d = (await w.a1.c('get', `/me/notices/${n.id}`)).body.data;
     expect(d.utility).toEqual({
       type: 'LIFT',
+      label: 'Lift', // display label of the type
       startsAt: '2026-11-05T04:00:00.000Z',
       endsAt: '2026-11-05T08:00:00.000Z',
       restoredAt: null,

@@ -150,6 +150,7 @@ describe('POST /notices (8.2)', () => {
     expect(r.status).toBe(201);
     expect(r.body.data.utility).toEqual({
       type: 'WATER',
+      label: 'Water supply', // display label of the type
       startsAt: '2026-11-05T04:30:00.000Z',
       endsAt: '2026-11-05T08:30:00.000Z',
       restoredAt: null,

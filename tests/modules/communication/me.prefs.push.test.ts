@@ -102,7 +102,8 @@ describe('T16-2 preferences (8.23)', () => {
       (
         await put({
           version: 2,
-          categories: { SECURITY: { PUSH: true, SMS: true, WHATSAPP: true, EMAIL: true } },
+          // a locked row sent back all on is ignored (the screen shows it so); switching any channel off is refused
+          categories: { SECURITY: { PUSH: true, SMS: false, WHATSAPP: true, EMAIL: true } },
         })
       ).body.code,
     ).toBe('PREFERENCE_LOCKED');
@@ -212,7 +213,10 @@ describe('T16-2 push subscriptions (8.24, BR-16-35, BR-16-36)', () => {
     const made: PushSubscription[] = [];
     for (let i = 0; i < 10; i += 1) {
       const s = await subscribePush(w.a1.userId);
-      await s.update({ createdAt: new Date(2026, 0, 1 + i) } as never, { silent: true });
+      // raw SQL: Sequelize never writes createdAt on update
+      await sequelize.query('UPDATE push_subscriptions SET createdAt = :at WHERE id = :id', {
+        replacements: { at: new Date(Date.UTC(2026, 0, 1 + i)), id: s.id },
+      });
       made.push(s);
     }
     await made[0]!.update({ lastSuccessAt: new Date(2026, 5, 1) } as never); // recently used: not the oldest
